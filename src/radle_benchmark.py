@@ -9,6 +9,8 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 import anthropic
+from google import genai as google_genai
+from google.genai import types as google_genai_types
 import pandas as pd
 
 
@@ -39,8 +41,9 @@ MODELS = [
     },
     {
         "name": "gemini_3_1_pro",
-        "id": "google/gemini-3.1-pro-preview",
-        "extra": {"reasoning": {"effort": "high"}},
+        "id": "gemini-3.1-pro-preview",
+        "provider": "google",
+        "extra": {"thinking_level": "high"},
     },
     {
         "name": "grok_4_20",
@@ -203,6 +206,30 @@ def _convert_content_for_anthropic(content_array):
     return result
 
 
+def uses_native_google(model):
+    """Return True for models that should use the native Google GenAI API."""
+    return model.get("provider") == "google"
+
+
+def _convert_content_for_gemini(content_array):
+    """Convert OpenAI-style content array to google-genai Parts list."""
+    parts = []
+    for item in content_array:
+        if item["type"] == "text":
+            parts.append(item["text"])
+        elif item["type"] == "image_url":
+            url = item["image_url"]["url"]
+            header, data = url.split(",", 1)
+            mime_type = header.split(":")[1].split(";")[0]
+            parts.append(
+                google_genai_types.Part.from_bytes(
+                    data=base64.b64decode(data),
+                    mime_type=mime_type,
+                )
+            )
+    return parts
+
+
 def build_api_params(model, content_array, max_output_tokens, universal_temperature):
     """Build provider-specific request params for one model request."""
     if uses_native_anthropic(model):
@@ -220,6 +247,23 @@ def build_api_params(model, content_array, max_output_tokens, universal_temperat
         else:
             params["temperature"] = universal_temperature
         return params
+
+    if uses_native_google(model):
+        extra = model.get("extra") or {}
+        thinking_level = extra.get("thinking_level", "high")
+        config = google_genai_types.GenerateContentConfig(
+            max_output_tokens=max_output_tokens,
+            temperature=universal_temperature,
+            thinking_config=google_genai_types.ThinkingConfig(
+                include_thoughts=True,
+                thinking_level=thinking_level,
+            ),
+        )
+        return {
+            "model": model["id"],
+            "contents": _convert_content_for_gemini(content_array),
+            "config": config,
+        }
 
     if uses_native_openai(model):
         api_params = {
@@ -249,12 +293,16 @@ def build_api_params(model, content_array, max_output_tokens, universal_temperat
     return api_params
 
 
-def get_api_client(model, client, openai_client, anthropic_client=None):
+def get_api_client(model, client, openai_client, anthropic_client=None, gemini_client=None):
     """Select the appropriate provider client for the given model."""
     if uses_native_anthropic(model):
         if anthropic_client is None:
             raise ValueError("anthropic_client is required for native Anthropic models.")
         return anthropic_client
+    if uses_native_google(model):
+        if gemini_client is None:
+            raise ValueError("gemini_client is required for native Google models.")
+        return gemini_client
     if uses_native_openai(model):
         if openai_client is None:
             raise ValueError("openai_client is required for native OpenAI models.")
@@ -273,6 +321,7 @@ def run_benchmark(
     universal_temperature=UNIVERSAL_TEMPERATURE,
     openai_client=None,
     anthropic_client=None,
+    gemini_client=None,
 ):
     """Run the RadLE benchmark against images under image_folder and save CSV output."""
     models = models or MODELS
@@ -332,7 +381,7 @@ def run_benchmark(
                     max_output_tokens,
                     universal_temperature,
                 )
-                api_client = get_api_client(model, client, openai_client, anthropic_client)
+                api_client = get_api_client(model, client, openai_client, anthropic_client, gemini_client)
 
                 max_retries = 3
                 response = None
@@ -343,6 +392,8 @@ def run_benchmark(
                         t0 = time.time()
                         if uses_native_anthropic(model):
                             response = api_client.messages.create(**api_params)
+                        elif uses_native_google(model):
+                            response = api_client.models.generate_content(**api_params)
                         else:
                             response = api_client.chat.completions.create(**api_params)
                         latency = round(time.time() - t0, 1)
@@ -397,6 +448,23 @@ def run_benchmark(
                     completion_tokens = getattr(response.usage, "output_tokens", 0) if response.usage else 0
                     prompt_tokens = getattr(response.usage, "input_tokens", 0) if response.usage else 0
                     provider_used = "Anthropic"
+                elif uses_native_google(model):
+                    raw_answer = (response.text or "").strip()
+                    raw_reasoning_text = ""
+                    try:
+                        for part in response.candidates[0].content.parts:
+                            if getattr(part, "thought", False) and part.text:
+                                raw_reasoning_text += part.text
+                        raw_reasoning_text = raw_reasoning_text.strip()
+                    except (AttributeError, IndexError):
+                        pass
+                    thoughts = raw_reasoning_text
+                    reasoning_details_text = ""
+                    usage_meta = response.usage_metadata
+                    prompt_tokens = getattr(usage_meta, "prompt_token_count", 0) if usage_meta else 0
+                    completion_tokens = getattr(usage_meta, "candidates_token_count", 0) if usage_meta else 0
+                    reasoning_tokens = getattr(usage_meta, "thoughts_token_count", 0) if usage_meta else 0
+                    provider_used = "Google"
                 else:
                     msg = response.choices[0].message
                     raw_answer = msg.content.strip() if getattr(msg, "content", None) else ""
@@ -473,11 +541,12 @@ def run_benchmark(
                 row[f"Reasoning_{model['name']}"] = thoughts
                 row[f"Reasoning_Raw_{model['name']}"] = raw_reasoning_text
                 row[f"Reasoning_Details_{model['name']}"] = reasoning_details_text
-                _extra_logged = (
-                    {k: api_params[k] for k in ("thinking", "output_config") if k in api_params}
-                    if uses_native_anthropic(model)
-                    else api_params.get("extra_body", None)
-                )
+                if uses_native_anthropic(model):
+                    _extra_logged = {k: api_params[k] for k in ("thinking", "output_config") if k in api_params}
+                elif uses_native_google(model):
+                    _extra_logged = model.get("extra")
+                else:
+                    _extra_logged = api_params.get("extra_body", None)
                 row[f"Actual_Request_Extra_{model['name']}"] = json.dumps(
                     _extra_logged, ensure_ascii=False
                 )
@@ -515,11 +584,12 @@ def run_benchmark(
                 row[f"Reasoning_Details_{model['name']}"] = ""
                 _extra_logged_err = None
                 if api_params:
-                    _extra_logged_err = (
-                        {k: api_params[k] for k in ("thinking", "output_config") if k in api_params}
-                        if uses_native_anthropic(model)
-                        else api_params.get("extra_body", None)
-                    )
+                    if uses_native_anthropic(model):
+                        _extra_logged_err = {k: api_params[k] for k in ("thinking", "output_config") if k in api_params}
+                    elif uses_native_google(model):
+                        _extra_logged_err = model.get("extra")
+                    else:
+                        _extra_logged_err = api_params.get("extra_body", None)
                 row[f"Actual_Request_Extra_{model['name']}"] = json.dumps(
                     _extra_logged_err, ensure_ascii=False
                 )
