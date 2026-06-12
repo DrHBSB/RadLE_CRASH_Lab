@@ -16,15 +16,16 @@ UNIVERSAL_TEMPERATURE = 0.01
 EXCLUDED_IMAGE_EXTENSIONS = {".txt", ".csv", ".json", ".docx", ".zip"}
 
 NO_TEMPERATURE_MODELS = {
-    "openai/gpt-5.5",
+    "gpt-5.5",
     "anthropic/claude-opus-4.7",
 }
 
 MODELS = [
     {
         "name": "gpt_5_5",
-        "id": "openai/gpt-5.5",
-        "extra": {"reasoning": {"effort": "xhigh"}},
+        "id": "gpt-5.5",
+        "provider": "openai",
+        "extra": {"reasoning_effort": "high"},
     },
     {
         "name": "claude_4_7_opus",
@@ -173,6 +174,50 @@ def is_grok_xhigh_rejection(model, error_text):
     )
 
 
+def uses_native_openai(model):
+    """Return True for models that should bypass OpenRouter."""
+    return model.get("provider") == "openai"
+
+
+def build_api_params(model, content_array, max_output_tokens, universal_temperature):
+    """Build provider-specific Chat Completions params for one model request."""
+    if uses_native_openai(model):
+        api_params = {
+            "model": model["id"],
+            "messages": [{"role": "user", "content": content_array}],
+            "max_completion_tokens": max_output_tokens,
+        }
+
+        extra = model.get("extra") or {}
+        if extra.get("reasoning_effort"):
+            api_params["reasoning_effort"] = extra["reasoning_effort"]
+
+        return api_params
+
+    api_params = {
+        "model": model["id"],
+        "messages": [{"role": "user", "content": content_array}],
+        "max_tokens": max_output_tokens,
+    }
+
+    if model["id"] not in NO_TEMPERATURE_MODELS:
+        api_params["temperature"] = universal_temperature
+
+    if model.get("extra"):
+        api_params["extra_body"] = model.get("extra")
+
+    return api_params
+
+
+def get_api_client(model, client, openai_client):
+    """Select the native OpenAI client only for models explicitly routed there."""
+    if uses_native_openai(model):
+        if openai_client is None:
+            raise ValueError("openai_client is required for native OpenAI models.")
+        return openai_client
+    return client
+
+
 def run_benchmark(
     client,
     image_folder,
@@ -182,6 +227,7 @@ def run_benchmark(
     prompt=PROMPT,
     max_output_tokens=MAX_OUTPUT_TOKENS,
     universal_temperature=UNIVERSAL_TEMPERATURE,
+    openai_client=None,
 ):
     """Run the RadLE benchmark against images under image_folder and save CSV output."""
     models = models or MODELS
@@ -235,17 +281,13 @@ def run_benchmark(
             grok_fallback_used = False
 
             try:
-                api_params = {
-                    "model": model["id"],
-                    "messages": [{"role": "user", "content": content_array}],
-                    "max_tokens": max_output_tokens,
-                }
-
-                if model["id"] not in NO_TEMPERATURE_MODELS:
-                    api_params["temperature"] = universal_temperature
-
-                if model.get("extra"):
-                    api_params["extra_body"] = model.get("extra")
+                api_params = build_api_params(
+                    model,
+                    content_array,
+                    max_output_tokens,
+                    universal_temperature,
+                )
+                api_client = get_api_client(model, client, openai_client)
 
                 max_retries = 3
                 response = None
@@ -254,7 +296,7 @@ def run_benchmark(
                 for attempt in range(max_retries):
                     try:
                         t0 = time.time()
-                        response = client.chat.completions.create(**api_params)
+                        response = api_client.chat.completions.create(**api_params)
                         latency = round(time.time() - t0, 1)
                         break
                     except Exception as exc:
@@ -348,8 +390,12 @@ def run_benchmark(
                         elif hasattr(details, "__dict__"):
                             reasoning_tokens = vars(details).get("reasoning_tokens", 0)
 
-                provider_used = "UNKNOWN"
-                if hasattr(response, "model_extra") and response.model_extra:
+                provider_used = "OpenAI" if uses_native_openai(model) else "UNKNOWN"
+                if (
+                    not uses_native_openai(model)
+                    and hasattr(response, "model_extra")
+                    and response.model_extra
+                ):
                     provider_used = response.model_extra.get("provider", "UNKNOWN")
 
                 row[f"Diagnosis_{model['name']}"] = diag
