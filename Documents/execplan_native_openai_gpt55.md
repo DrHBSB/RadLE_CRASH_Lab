@@ -10,7 +10,7 @@ The benchmark currently sends GPT-5.5 through OpenRouter. After this change, onl
 
 ## Current State
 
-Current state (2026-06-12 17:34 +05:30, Codex/GPT-5): Native OpenAI routing for GPT-5.5 is implemented, local validations passed, and the code commit `97326ea` was pushed to `origin/main`. Next: hand back Colab test instructions for `TEST_LIMIT = 1`, then optional `TEST_LIMIT = 5`.
+Current state (2026-06-12 17:29 +05:30, Codex/GPT-5): User's Colab runtime pulled `1529abd` but hit `TypeError: run_benchmark() got an unexpected keyword argument 'openai_client'` because the old `radle_benchmark` module was still cached in memory. The notebook import cell now explicitly reloads `radle_benchmark` after git pull and asserts the loaded `run_benchmark` supports `openai_client`. Next: user should pull latest in Colab, rerun cells 1 and 2, then run `TEST_LIMIT = 1`.
 
 ## Locked Facts
 
@@ -19,6 +19,7 @@ Current state (2026-06-12 17:34 +05:30, Codex/GPT-5): Native OpenAI routing for 
 - `radle_api_keys.env` is ignored and may be read locally only to load `OPENAI_API_KEY`; secret values must not be printed or committed.
 - Local smoke image exists at `local_smoke/images/55.2.jpg`.
 - Live local GPT-5.5 smoke output validated at `local_smoke/radle_native_openai_live.csv`; scorer view validated at `local_smoke/radle_native_openai_live_SCORER_VIEW.csv`. These CSVs are ignored by `.gitignore`.
+- Colab can keep an old imported Python module in memory after `git pull`; the notebook import cell must explicitly reload `radle_benchmark`.
 
 ## Do Not Revisit
 
@@ -32,16 +33,19 @@ Current state (2026-06-12 17:34 +05:30, Codex/GPT-5): Native OpenAI routing for 
 - [x] (2026-06-12 17:24 +05:30, Codex/GPT-5) Ran syntax, notebook, no-network routing, live GPT-5.5, raw CSV, and scorer-view validations.
 - [x] (2026-06-12 17:34 +05:30, Codex/GPT-5) Committed implementation as `97326ea` and pushed it to `origin/main`.
 - [x] (2026-06-12 17:34 +05:30, Codex/GPT-5) Prepared handback Colab test instructions: run with `TEST_LIMIT = 1`, then optionally `TEST_LIMIT = 5`.
+- [x] (2026-06-12 17:29 +05:30, Codex/GPT-5) Patched notebook import cell to reload `radle_benchmark` and assert `openai_client` support before running.
 
 ## Surprises & Discoveries
 
 - (2026-06-12 17:24 +05:30, Codex/GPT-5) Writing a temporary helper under `C:\tmp` was denied by local permissions, so validation wrote ignored CSV outputs under `local_smoke/` instead.
+- (2026-06-12 17:29 +05:30, Codex/GPT-5) Colab traceback after fast-forward to `1529abd`: `TypeError: run_benchmark() got an unexpected keyword argument 'openai_client'`. Root cause is stale module cache in the running Colab kernel, not a missing source update.
 
 ## Decision Log
 
 - (2026-06-12 17:11 +05:30, Codex/GPT-5) Stay on local `main` and push directly to `origin/main`, matching the user's plan and current repo workflow.
 - (2026-06-12 17:11 +05:30, Codex/GPT-5) Keep `client=` as the existing OpenRouter client and add optional `openai_client=` so current call sites remain understandable and only GPT-5.5 needs new routing.
 - (2026-06-12 17:24 +05:30, Codex/GPT-5) Use `local_smoke/` for local validation outputs because `C:\tmp` rejected helper-file writes; outputs remain uncommitted due existing ignore rules.
+- (2026-06-12 17:29 +05:30, Codex/GPT-5) Make the notebook reload `radle_benchmark` with `importlib.reload()` and assert `openai_client` is present in the loaded `run_benchmark` signature to prevent stale-runtime failures after `git pull`.
 
 ## Revision Notes
 
