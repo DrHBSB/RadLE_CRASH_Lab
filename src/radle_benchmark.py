@@ -13,6 +13,7 @@ import pandas as pd
 
 MAX_OUTPUT_TOKENS = 16384
 UNIVERSAL_TEMPERATURE = 0.01
+EXCLUDED_IMAGE_EXTENSIONS = {".txt", ".csv", ".json", ".docx", ".zip"}
 
 NO_TEMPERATURE_MODELS = {
     "openai/gpt-5.5",
@@ -113,9 +114,13 @@ def encode_image(image_path):
 
 
 def get_mime_type(path):
-    ext = os.path.splitext(path)[1].lower()
-    if ext == ".png":
+    with open(path, "rb") as image_file:
+        header = image_file.read(8)
+
+    if header.startswith(b"\x89PNG\r\n\x1a\n"):
         return "image/png"
+    if header.startswith(b"\xff\xd8"):
+        return "image/jpeg"
     return "image/jpeg"
 
 
@@ -183,7 +188,7 @@ def run_benchmark(
     image_paths = [
         str(p)
         for p in pathlib.Path(image_folder).rglob("*")
-        if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png"}
+        if p.is_file() and p.suffix.lower() not in EXCLUDED_IMAGE_EXTENSIONS
     ]
 
     grouped = defaultdict(list)
