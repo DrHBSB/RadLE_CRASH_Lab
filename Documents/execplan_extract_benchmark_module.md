@@ -4,7 +4,7 @@ This work makes RadLE easier to debug and extend without changing how the benchm
 
 ## Current State
 
-As of 2026-06-12T14:57:33+05:30, implementation is complete and awaiting commit/push. `src/radle_benchmark.py` exists, the notebook has been reduced to 5 Colab runner cells, the original prompt text was verified to match exactly, and syntax/notebook checks passed. The next action is to stage the intended files, commit `Extract RadLE benchmark module`, push to `origin/main`, and confirm the working tree is clean.
+As of 2026-06-12T14:57:33+05:30, implementation is complete and pushed to `origin/main` at commit `f0431ec`. `src/radle_benchmark.py` exists, the notebook has been reduced to 5 Colab runner cells, the original prompt text was verified to match exactly, and syntax/notebook checks passed. The only remaining local items are ignored files: `radle_api_keys.env` and `src/__pycache__/`.
 
 ## Locked Facts
 
@@ -26,7 +26,7 @@ As of 2026-06-12T14:57:33+05:30, implementation is complete and awaiting commit/
 - [x] 2026-06-12T14:57:33+05:30, Codex GPT-5: Add `src/radle_benchmark.py` with the current constants, prompt, helper functions, `run_benchmark`, and scorer-view helper.
 - [x] 2026-06-12T14:57:33+05:30, Codex GPT-5: Rewrite the notebook as a Colab runner that mounts Drive, loads OpenRouter credentials, imports the module, sets Drive paths, runs the benchmark, and displays scorer view.
 - [x] 2026-06-12T14:57:33+05:30, Codex GPT-5: Validate Python syntax, notebook JSON, and expected Drive path usage.
-- [ ] 2026-06-12T14:57:33+05:30, Codex GPT-5: Commit and push the refactor to `main`.
+- [x] 2026-06-12T14:57:33+05:30, Codex GPT-5: Commit and push the refactor to `main`.
 
 ## Surprises & Discoveries
 
@@ -46,7 +46,7 @@ As of 2026-06-12T14:57:33+05:30, implementation is complete and awaiting commit/
 
 ## Outcomes & Retrospective
 
-Implementation complete pending commit and push. Verified `py_compile` succeeds, notebook JSON parses as nbformat 4 with 5 cells, the notebook imports `create_scorer_view` and `run_benchmark`, Drive paths are still present, `TEST_LIMIT = 1` is preserved, and the extracted prompt matches the original notebook prompt.
+Implementation complete and pushed. Verified `py_compile` succeeds, notebook JSON parses as nbformat 4 with 5 cells, the notebook imports `create_scorer_view` and `run_benchmark`, Drive paths are still present, `TEST_LIMIT = 1` is preserved, and the extracted prompt matches the original notebook prompt. `git status --short --branch --ignored` shows local `main...origin/main` and only ignored `radle_api_keys.env` plus `src/__pycache__/`.
 
 ## Suggested Skills By Phase
 
