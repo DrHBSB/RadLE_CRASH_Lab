@@ -1,0 +1,28 @@
+# Python / notebook runtime noise
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Local environments
+.env
+.venv/
+venv/
+
+# RadLE data and generated outputs stay in Google Drive.
+data/
+datasets/
+outputs/
+results/
+artifacts/
+*.csv
+*.xlsx
+*.jsonl
+
+# Medical image exports or local dataset copies should not be committed.
+*.jpg
+*.jpeg
+*.png
+*.dcm
+*.nii
+*.nii.gz
+
