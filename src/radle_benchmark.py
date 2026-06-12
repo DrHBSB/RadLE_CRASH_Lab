@@ -18,7 +18,7 @@ EXCLUDED_IMAGE_EXTENSIONS = {".txt", ".csv", ".json", ".docx", ".zip"}
 
 NO_TEMPERATURE_MODELS = {
     "gpt-5.5",
-    "claude-opus-4-8",
+    "claude-fable-5",
 }
 
 MODELS = [
@@ -29,8 +29,8 @@ MODELS = [
         "extra": {"reasoning_effort": "high"},
     },
     {
-        "name": "claude_4_8_opus",
-        "id": "claude-opus-4-8",
+        "name": "claude_fable_5",
+        "id": "claude-fable-5",
         "provider": "anthropic",
         "extra": {
             "thinking": {"type": "adaptive"},
