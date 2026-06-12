@@ -47,8 +47,12 @@ MODELS = [
     },
     {
         "name": "grok_4_20",
+        # Vision-only: Grok 4.20 silently drops the image whenever any reasoning
+        # parameter is set (effort/enabled, any provider or the -multi-agent slug),
+        # producing blind hallucinated diagnoses. Reasoning must stay OFF for it to
+        # see images. Verified via OpenRouter probe 2026-06-13.
         "id": "x-ai/grok-4.20",
-        "extra": {"reasoning": {"effort": "xhigh"}},
+        "extra": None,
     },
     {
         "name": "qwen_vl_max",
