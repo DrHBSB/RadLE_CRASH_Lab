@@ -8,6 +8,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timezone
 
+import anthropic
 import pandas as pd
 
 
@@ -17,7 +18,7 @@ EXCLUDED_IMAGE_EXTENSIONS = {".txt", ".csv", ".json", ".docx", ".zip"}
 
 NO_TEMPERATURE_MODELS = {
     "gpt-5.5",
-    "anthropic/claude-opus-4.7",
+    "claude-opus-4-8",
 }
 
 MODELS = [
@@ -28,11 +29,12 @@ MODELS = [
         "extra": {"reasoning_effort": "high"},
     },
     {
-        "name": "claude_4_7_opus",
-        "id": "anthropic/claude-opus-4.7",
+        "name": "claude_4_8_opus",
+        "id": "claude-opus-4-8",
+        "provider": "anthropic",
         "extra": {
-            "reasoning": {"enabled": True},
-            "verbosity": "max",
+            "thinking": {"type": "adaptive"},
+            "output_config": {"effort": "high"},
         },
     },
     {
@@ -179,8 +181,46 @@ def uses_native_openai(model):
     return model.get("provider") == "openai"
 
 
+def uses_native_anthropic(model):
+    """Return True for models that should use the native Anthropic Messages API."""
+    return model.get("provider") == "anthropic"
+
+
+def _convert_content_for_anthropic(content_array):
+    """Convert OpenAI-style content array to Anthropic Messages API format."""
+    result = []
+    for item in content_array:
+        if item["type"] == "text":
+            result.append({"type": "text", "text": item["text"]})
+        elif item["type"] == "image_url":
+            url = item["image_url"]["url"]
+            header, data = url.split(",", 1)
+            media_type = header.split(":")[1].split(";")[0]
+            result.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": media_type, "data": data},
+            })
+    return result
+
+
 def build_api_params(model, content_array, max_output_tokens, universal_temperature):
-    """Build provider-specific Chat Completions params for one model request."""
+    """Build provider-specific request params for one model request."""
+    if uses_native_anthropic(model):
+        extra = model.get("extra") or {}
+        params = {
+            "model": model["id"],
+            "max_tokens": max_output_tokens,
+            "messages": [{"role": "user", "content": _convert_content_for_anthropic(content_array)}],
+        }
+        if "thinking" in extra:
+            params["thinking"] = extra["thinking"]
+            if "output_config" in extra:
+                params["output_config"] = extra["output_config"]
+            # temperature is incompatible with extended thinking
+        else:
+            params["temperature"] = universal_temperature
+        return params
+
     if uses_native_openai(model):
         api_params = {
             "model": model["id"],
@@ -209,8 +249,12 @@ def build_api_params(model, content_array, max_output_tokens, universal_temperat
     return api_params
 
 
-def get_api_client(model, client, openai_client):
-    """Select the native OpenAI client only for models explicitly routed there."""
+def get_api_client(model, client, openai_client, anthropic_client=None):
+    """Select the appropriate provider client for the given model."""
+    if uses_native_anthropic(model):
+        if anthropic_client is None:
+            raise ValueError("anthropic_client is required for native Anthropic models.")
+        return anthropic_client
     if uses_native_openai(model):
         if openai_client is None:
             raise ValueError("openai_client is required for native OpenAI models.")
@@ -228,6 +272,7 @@ def run_benchmark(
     max_output_tokens=MAX_OUTPUT_TOKENS,
     universal_temperature=UNIVERSAL_TEMPERATURE,
     openai_client=None,
+    anthropic_client=None,
 ):
     """Run the RadLE benchmark against images under image_folder and save CSV output."""
     models = models or MODELS
@@ -287,7 +332,7 @@ def run_benchmark(
                     max_output_tokens,
                     universal_temperature,
                 )
-                api_client = get_api_client(model, client, openai_client)
+                api_client = get_api_client(model, client, openai_client, anthropic_client)
 
                 max_retries = 3
                 response = None
@@ -296,7 +341,10 @@ def run_benchmark(
                 for attempt in range(max_retries):
                     try:
                         t0 = time.time()
-                        response = api_client.chat.completions.create(**api_params)
+                        if uses_native_anthropic(model):
+                            response = api_client.messages.create(**api_params)
+                        else:
+                            response = api_client.chat.completions.create(**api_params)
                         latency = round(time.time() - t0, 1)
                         break
                     except Exception as exc:
@@ -335,68 +383,84 @@ def run_benchmark(
                 if response is None:
                     raise Exception(last_error)
 
-                msg = response.choices[0].message
-                raw_answer = msg.content.strip() if getattr(msg, "content", None) else ""
-                diag, likert = extract_json_safely(raw_answer)
-
-                raw_reasoning_text = ""
-                raw_reasoning = getattr(msg, "reasoning", None)
-
-                if raw_reasoning is not None:
-                    raw_reasoning_text = str(raw_reasoning).strip()
-                elif hasattr(msg, "model_extra") and msg.model_extra and "reasoning" in msg.model_extra:
-                    ext_reasoning = msg.model_extra["reasoning"]
-                    if ext_reasoning is not None:
-                        raw_reasoning_text = str(ext_reasoning).strip()
-
-                reasoning_details_obj = getattr(msg, "reasoning_details", None)
-
-                if reasoning_details_obj is None and hasattr(msg, "model_extra") and msg.model_extra:
-                    reasoning_details_obj = msg.model_extra.get("reasoning_details")
-
-                reasoning_details_text = ""
-                if reasoning_details_obj:
-                    reasoning_details_text = json.dumps(
-                        make_json_safe(reasoning_details_obj),
-                        ensure_ascii=False,
-                    )
-
-                if raw_reasoning_text and reasoning_details_text:
-                    thoughts = (
-                        raw_reasoning_text
-                        + "\n\n[reasoning_details]\n"
-                        + reasoning_details_text
-                    )
-                elif reasoning_details_text:
-                    thoughts = reasoning_details_text
-                else:
+                if uses_native_anthropic(model):
+                    raw_answer = ""
+                    raw_reasoning_text = ""
+                    for block in response.content:
+                        if block.type == "text":
+                            raw_answer = block.text.strip()
+                        elif block.type == "thinking":
+                            raw_reasoning_text = (raw_reasoning_text + block.thinking).strip()
                     thoughts = raw_reasoning_text
+                    reasoning_details_text = ""
+                    reasoning_tokens = 0
+                    completion_tokens = getattr(response.usage, "output_tokens", 0) if response.usage else 0
+                    prompt_tokens = getattr(response.usage, "input_tokens", 0) if response.usage else 0
+                    provider_used = "Anthropic"
+                else:
+                    msg = response.choices[0].message
+                    raw_answer = msg.content.strip() if getattr(msg, "content", None) else ""
 
-                reasoning_tokens = 0
-                completion_tokens = 0
-                prompt_tokens = 0
+                    raw_reasoning_text = ""
+                    raw_reasoning = getattr(msg, "reasoning", None)
 
-                if hasattr(response, "usage") and response.usage:
-                    usage = response.usage
-                    completion_tokens = getattr(usage, "completion_tokens", 0)
-                    prompt_tokens = getattr(usage, "prompt_tokens", 0)
+                    if raw_reasoning is not None:
+                        raw_reasoning_text = str(raw_reasoning).strip()
+                    elif hasattr(msg, "model_extra") and msg.model_extra and "reasoning" in msg.model_extra:
+                        ext_reasoning = msg.model_extra["reasoning"]
+                        if ext_reasoning is not None:
+                            raw_reasoning_text = str(ext_reasoning).strip()
 
-                    if hasattr(usage, "completion_tokens_details") and usage.completion_tokens_details:
-                        details = usage.completion_tokens_details
-                        if hasattr(details, "reasoning_tokens"):
-                            reasoning_tokens = details.reasoning_tokens
-                        elif isinstance(details, dict):
-                            reasoning_tokens = details.get("reasoning_tokens", 0)
-                        elif hasattr(details, "__dict__"):
-                            reasoning_tokens = vars(details).get("reasoning_tokens", 0)
+                    reasoning_details_obj = getattr(msg, "reasoning_details", None)
 
-                provider_used = "OpenAI" if uses_native_openai(model) else "UNKNOWN"
-                if (
-                    not uses_native_openai(model)
-                    and hasattr(response, "model_extra")
-                    and response.model_extra
-                ):
-                    provider_used = response.model_extra.get("provider", "UNKNOWN")
+                    if reasoning_details_obj is None and hasattr(msg, "model_extra") and msg.model_extra:
+                        reasoning_details_obj = msg.model_extra.get("reasoning_details")
+
+                    reasoning_details_text = ""
+                    if reasoning_details_obj:
+                        reasoning_details_text = json.dumps(
+                            make_json_safe(reasoning_details_obj),
+                            ensure_ascii=False,
+                        )
+
+                    if raw_reasoning_text and reasoning_details_text:
+                        thoughts = (
+                            raw_reasoning_text
+                            + "\n\n[reasoning_details]\n"
+                            + reasoning_details_text
+                        )
+                    elif reasoning_details_text:
+                        thoughts = reasoning_details_text
+                    else:
+                        thoughts = raw_reasoning_text
+
+                    reasoning_tokens = 0
+                    completion_tokens = 0
+                    prompt_tokens = 0
+
+                    if hasattr(response, "usage") and response.usage:
+                        usage = response.usage
+                        completion_tokens = getattr(usage, "completion_tokens", 0)
+                        prompt_tokens = getattr(usage, "prompt_tokens", 0)
+
+                        if hasattr(usage, "completion_tokens_details") and usage.completion_tokens_details:
+                            details = usage.completion_tokens_details
+                            if hasattr(details, "reasoning_tokens"):
+                                reasoning_tokens = details.reasoning_tokens
+                            elif isinstance(details, dict):
+                                reasoning_tokens = details.get("reasoning_tokens", 0)
+                            elif hasattr(details, "__dict__"):
+                                reasoning_tokens = vars(details).get("reasoning_tokens", 0)
+
+                    provider_used = "OpenAI" if uses_native_openai(model) else "UNKNOWN"
+                    if (
+                        not uses_native_openai(model)
+                        and hasattr(response, "model_extra")
+                        and response.model_extra
+                    ):
+                        provider_used = response.model_extra.get("provider", "UNKNOWN")
+
+                diag, likert = extract_json_safely(raw_answer)
 
                 row[f"Diagnosis_{model['name']}"] = diag
                 row[f"Likert_{model['name']}"] = likert
@@ -409,9 +473,13 @@ def run_benchmark(
                 row[f"Reasoning_{model['name']}"] = thoughts
                 row[f"Reasoning_Raw_{model['name']}"] = raw_reasoning_text
                 row[f"Reasoning_Details_{model['name']}"] = reasoning_details_text
+                _extra_logged = (
+                    {k: api_params[k] for k in ("thinking", "output_config") if k in api_params}
+                    if uses_native_anthropic(model)
+                    else api_params.get("extra_body", None)
+                )
                 row[f"Actual_Request_Extra_{model['name']}"] = json.dumps(
-                    api_params.get("extra_body", None),
-                    ensure_ascii=False,
+                    _extra_logged, ensure_ascii=False
                 )
                 row[f"Grok_Fallback_Used_{model['name']}"] = (
                     grok_fallback_used if model["name"] == "grok_4_20" else ""
@@ -445,9 +513,15 @@ def run_benchmark(
                 row[f"Reasoning_{model['name']}"] = full_error
                 row[f"Reasoning_Raw_{model['name']}"] = ""
                 row[f"Reasoning_Details_{model['name']}"] = ""
+                _extra_logged_err = None
+                if api_params:
+                    _extra_logged_err = (
+                        {k: api_params[k] for k in ("thinking", "output_config") if k in api_params}
+                        if uses_native_anthropic(model)
+                        else api_params.get("extra_body", None)
+                    )
                 row[f"Actual_Request_Extra_{model['name']}"] = json.dumps(
-                    api_params.get("extra_body", None) if api_params else None,
-                    ensure_ascii=False,
+                    _extra_logged_err, ensure_ascii=False
                 )
                 row[f"Grok_Fallback_Used_{model['name']}"] = (
                     grok_fallback_used if model["name"] == "grok_4_20" else ""
