@@ -12,10 +12,13 @@ This repository tracks RadLE notebook and code changes. Google Drive remains the
 ## Current Notebook
 
 - `notebooks/RadLE_v1_5_Morning.ipynb`
+- `src/radle_benchmark.py`
 
 The notebook mounts Google Drive and currently reads/writes under:
 
 - `/content/drive/MyDrive/CRASH Lab/RaDLE/CONFIDENTIAL/RadLE v2 Dataset/`
+
+In Colab, the notebook clones or updates this GitHub repo under `/content/RadLE_CRASH_Lab` so it can import `src/radle_benchmark.py`. Because this repo is private, add a Colab secret named `GITHUB_TOKEN` if the clone step needs GitHub authentication.
 
 ## Debug Workflow
 
@@ -24,6 +27,6 @@ The notebook mounts Google Drive and currently reads/writes under:
 3. If something fails, share the traceback, push the updated notebook, or provide a Drive link to the relevant result file.
 4. Keep image-specific debugging limited to the affected case/image when possible.
 
-## RadLE v2 Direction
+## Code Structure
 
-Keep the notebook as the Colab runner. Move reusable benchmark logic into Python modules over time so changes are easier to review, test, and debug.
+Keep the notebook as the Colab runner. The reusable benchmark logic lives in `src/radle_benchmark.py`, which works with Google Drive because Colab exposes mounted Drive as ordinary filesystem paths.

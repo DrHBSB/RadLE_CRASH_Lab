@@ -5,6 +5,7 @@ __pycache__/
 
 # Local environments
 .env
+*.env
 .venv/
 venv/
 
@@ -25,4 +26,3 @@ artifacts/
 *.dcm
 *.nii
 *.nii.gz
-
