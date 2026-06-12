@@ -10,7 +10,7 @@ The benchmark currently sends GPT-5.5 through OpenRouter. After this change, onl
 
 ## Current State
 
-Current state (2026-06-12 17:24 +05:30, Codex/GPT-5): Native OpenAI routing for GPT-5.5 is implemented and local validations passed, including a live one-case GPT-5.5 run and raw/scorer CSV checks. Next: review final diff, commit, push to `origin/main`, then hand back Colab test instructions.
+Current state (2026-06-12 17:34 +05:30, Codex/GPT-5): Native OpenAI routing for GPT-5.5 is implemented, local validations passed, and the code commit `97326ea` was pushed to `origin/main`. Next: hand back Colab test instructions for `TEST_LIMIT = 1`, then optional `TEST_LIMIT = 5`.
 
 ## Locked Facts
 
@@ -30,8 +30,8 @@ Current state (2026-06-12 17:24 +05:30, Codex/GPT-5): Native OpenAI routing for 
 - [x] (2026-06-12 17:11 +05:30, Codex/GPT-5) Read `~/.codex/PLANS.md`, confirmed no repo-local `PLANS.md`, inspected module/notebook/git status.
 - [x] (2026-06-12 17:24 +05:30, Codex/GPT-5) Implemented native OpenAI routing for GPT-5.5 only in module and notebook.
 - [x] (2026-06-12 17:24 +05:30, Codex/GPT-5) Ran syntax, notebook, no-network routing, live GPT-5.5, raw CSV, and scorer-view validations.
-- [ ] (2026-06-12 17:11 +05:30, Codex/GPT-5) Commit and push to `origin/main`.
-- [ ] (2026-06-12 17:11 +05:30, Codex/GPT-5) Hand back Colab test instructions: run with `TEST_LIMIT = 1`, then optionally `TEST_LIMIT = 5`.
+- [x] (2026-06-12 17:34 +05:30, Codex/GPT-5) Committed implementation as `97326ea` and pushed it to `origin/main`.
+- [x] (2026-06-12 17:34 +05:30, Codex/GPT-5) Prepared handback Colab test instructions: run with `TEST_LIMIT = 1`, then optionally `TEST_LIMIT = 5`.
 
 ## Surprises & Discoveries
 
@@ -56,6 +56,7 @@ Current state (2026-06-12 17:24 +05:30, Codex/GPT-5): Native OpenAI routing for 
   - prompt comparison against `HEAD:src/radle_benchmark.py` returned `prompt_unchanged True`
   - no-network fake routing confirmed GPT-5.5 used native OpenAI params and llama kept OpenRouter-style params
   - live GPT-5.5 run returned `OK (21.5s | 539 out / 1592 in | 25.1 tok/sec)` and CSV validation printed `live_csv_ok local_smoke/radle_native_openai_live.csv local_smoke/radle_native_openai_live_SCORER_VIEW.csv`
+- Code commit `97326ea` was pushed to `origin/main`; a follow-up plan-only commit records this final state.
 
 ## Suggested Skills By Phase
 
