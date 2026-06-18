@@ -52,7 +52,7 @@ Run sequence:
 
 1. Attach a GPU custom runtime, preferably starting with an L4/G2 runtime.
 2. Open the experimental Colab link.
-3. Rerun setup/import cells after pull.
+3. Rerun the first code cell to clone or pull the latest GitHub code, then rerun dependency/import cells.
 4. Select one `SELECTED_MODEL_NAME`.
 5. Start with `TEST_LIMIT=1`, then `TEST_LIMIT=3` or `TEST_LIMIT=5`.
 6. Stop the local model server or restart the runtime before switching models.
@@ -61,3 +61,9 @@ The notebook routes Hugging Face, Transformers, vLLM, and pip caches under
 `/content/radle_runtime_cache` so model weights do not fill the custom runtime's
 root disk. If your custom runtime image already includes vLLM or SGLang, set
 `INSTALL_SERVER_PACKAGES = False` in the dependency cell.
+
+Colab Enterprise does not support `google.colab.drive.mount()`. For Enterprise,
+mount or copy the RadLE dataset to a Cloud Storage/local path and set
+`DATASET_ROOT_OVERRIDE` in cell 4, or set `RADLE_DATASET_ROOT`, to the folder
+that contains `RadLE v2 Master Data`. Standard Colab can still use the default
+Drive path.

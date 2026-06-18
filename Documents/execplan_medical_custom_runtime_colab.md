@@ -10,7 +10,7 @@ This work adds a separate experimental Colab path for medical/open vision-langua
 
 ## Current State
 
-Current state (2026-06-18 23:55 +05:30, Codex/GPT-5): Implementation and local validation are complete, and a local commit exists but has not been pushed because sandbox policy blocked GitHub egress. After the user showed a `g2-standard-8` L4 custom runtime with root disk already 65/94 GB used and empty `/content` disk, the notebook/module were patched to route Hugging Face, Transformers, vLLM, and pip caches under `/content/radle_runtime_cache` and to print server log tails if startup fails. Next: rerun validation, amend the local commit, and ask the user to push or explicitly approve push.
+Current state (2026-06-18 23:59 +05:30, Codex/GPT-5): Initial implementation was pushed to `origin/main` as commit `7769c86`. The user then tested in Colab Enterprise and hit `NotImplementedError: google.colab.drive.mount is not supported in Colab Enterprise`, which prevented the import cell from running and caused a later `NameError: name 'medical_runtime' is not defined`. The notebook now keeps the first code cell as GitHub clone/pull/path setup only, moves storage resolution to cell 4, and supports Colab Enterprise via `DATASET_ROOT_OVERRIDE` or `RADLE_DATASET_ROOT`. Local validation passed; next action is commit and push this follow-up.
 
 ## Locked Facts
 
@@ -24,6 +24,9 @@ Current state (2026-06-18 23:55 +05:30, Codex/GPT-5): Implementation and local v
 - The new medical custom runtime notebook has 10 cells, 0 outputs, and 0 executed cells.
 - Local dry-run smoke passed for `medgemma_1_5_4b` using the bundled Codex Python runtime and wrote ignored files under `local_smoke/`.
 - The custom Colab runtime screenshot showed `g2-standard-8`, NVIDIA L4 x1, Python 3.12, about 22.5 GB GPU RAM, and a tight root disk; model/package caches should stay under `/content/radle_runtime_cache`.
+- Initial medical custom runtime implementation was pushed to `origin/main` as `7769c86 Add medical custom runtime Colab`.
+- Colab Enterprise cannot use `google.colab.drive.mount()`; Enterprise runs need a Cloud Storage/local dataset path set in cell 4 or `RADLE_DATASET_ROOT`.
+- The first code cell is now intentionally GitHub clone/pull/path setup only, so the user can rerun it first after each pushed change.
 
 ## Do Not Revisit
 
@@ -40,12 +43,20 @@ Current state (2026-06-18 23:55 +05:30, Codex/GPT-5): Implementation and local v
 - [x] (2026-06-18 22:05 +05:30, Codex/GPT-5) Validated compile, notebook JSON, output clearing, local dry-run smoke, `git diff --check`, and no official source/notebook diff.
 - [x] (2026-06-18 22:05 +05:30, Codex/GPT-5) Created local commit `5bb7b4a Add medical custom runtime Colab`.
 - [x] (2026-06-18 23:55 +05:30, Codex/GPT-5) Revalidated cache-routing and log-diagnostic fixes with compile, notebook JSON parse, clear-output check, `git diff --check`, no official-file diff, and a local dry-run smoke.
-- [ ] (2026-06-18 23:55 +05:30, Codex/GPT-5) Amend the local commit with cache-routing and log-diagnostic fixes.
-- [ ] (2026-06-18 21:45 +05:30, Codex/GPT-5) Push intended source/docs to `origin/main`.
+- [x] (2026-06-18 23:55 +05:30, Codex/GPT-5) Pushed initial medical custom runtime implementation to `origin/main` as `7769c86`.
+- [x] (2026-06-18 23:59 +05:30, Codex/GPT-5) Reproduced the user-facing failure chain from the shared traceback: `drive.mount()` fails first in Colab Enterprise, then `medical_runtime` is undefined because the import cell was not successfully run.
+- [x] (2026-06-18 23:59 +05:30, Codex/GPT-5) Patched the notebook so cell 1 only clones/pulls the repo and adds `src/` to `sys.path`; dataset storage selection and optional standard-Colab Drive mounting happen in cell 4.
+- [x] (2026-06-18 23:59 +05:30, Codex/GPT-5) Validated the Enterprise notebook patch locally with compile checks, notebook JSON parse, clear-output check, a cell-1 no-`drive.mount()` assertion, `git diff --check`, no official-file diff, and a dry-run one-case medical smoke.
+- [ ] (2026-06-18 23:59 +05:30, Codex/GPT-5) Commit and push the Enterprise notebook patch to `origin/main`.
 
 ## Surprises & Discoveries
 
-- None yet.
+- Observation: In Colab Enterprise, `google.colab.drive.mount("/content/drive")` raises `NotImplementedError`, so any later cell that depends on imports from this setup sequence can fail with misleading `NameError`s.
+  Evidence: User traceback showed `NotImplementedError: google.colab.drive.mount is not supported in Colab Enterprise`, then `NameError: name 'medical_runtime' is not defined`.
+  Date/Author: 2026-06-18, Codex/GPT-5.
+- Observation: Google's current docs describe Colab Enterprise storage as different from regular Colab's Google Drive storage, and Cloud Storage mounting is the supported GCP-side data access path.
+  Evidence: Official Colab Enterprise docs list Enterprise storage separately from Colab Google Drive storage; Workbench docs describe mounting Cloud Storage buckets in JupyterLab.
+  Date/Author: 2026-06-18, Codex/GPT-5.
 
 ## Decision Log
 
@@ -61,11 +72,18 @@ Current state (2026-06-18 23:55 +05:30, Codex/GPT-5): Implementation and local v
 - Decision: Route caches to `/content/radle_runtime_cache` in the notebook and helper module.
   Rationale: The user's GCP-backed Colab runtime has a constrained root disk but a separate empty `/content` volume; model downloads and pip caches should not compete with the root filesystem.
   Date/Author: 2026-06-18, Codex/GPT-5.
+- Decision: Keep notebook cell 1 as GitHub clone/pull/path setup only.
+  Rationale: The user needs a top cell that can be rerun immediately after a pushed fix without triggering storage mounts or model setup.
+  Date/Author: 2026-06-18, Codex/GPT-5.
+- Decision: Move dataset root resolution into cell 4 and use `DATASET_ROOT_OVERRIDE`/`RADLE_DATASET_ROOT` for Colab Enterprise.
+  Rationale: Standard Colab can still mount Drive when the default Drive path is used, but Enterprise cannot; the model run should fail with a clear dataset-path instruction instead of blocking the GitHub update/import path.
+  Date/Author: 2026-06-18, Codex/GPT-5.
 
 ## Revision Notes
 
 - v1 (2026-06-18, Codex/GPT-5): Initial plan for the medical custom runtime notebook and module.
 - v2 (2026-06-18, Codex/GPT-5): Recorded cache-routing and server-log diagnostic patch after seeing the user's custom runtime disk layout.
+- v3 (2026-06-18, Codex/GPT-5): Recorded Colab Enterprise storage incompatibility, changed the first notebook cell to GitHub setup only, and documented dataset path overrides.
 
 ## Outcomes & Retrospective
 
@@ -152,6 +170,29 @@ Post-cache-routing validation:
     # no output
 
     C:\Users\thehb\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -c "<cache-routed dry-run one-case medgemma smoke>"
+    MEDICAL_CUSTOM_RUNTIME_DRY_RUN_OK rows=1
+
+Post-Enterprise validation:
+
+    python -m py_compile src\radle_benchmark.py src\radle_medical_custom_runtime.py
+    # exited 0
+
+    python -c "import json, pathlib; json.loads(pathlib.Path('notebooks/RadLE_Medical_Custom_Runtime.ipynb').read_text(encoding='utf-8')); print('medical notebook JSON parse OK')"
+    medical notebook JSON parse OK
+
+    python -c "<notebook output/execution count and cell-1 drive.mount assertion>"
+    cells 10
+    outputs 0
+    executed 0
+    cell1_drive_mount False
+
+    git diff --check
+    # exited 0; line-ending warnings only for README.md and this plan
+
+    git diff -- src\radle_benchmark.py notebooks\RadLE_v1_5_Morning.ipynb
+    # no output
+
+    C:\Users\thehb\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -c "<dry-run one-case medgemma smoke>"
     MEDICAL_CUSTOM_RUNTIME_DRY_RUN_OK rows=1
 
 ## Idempotence And Recovery
