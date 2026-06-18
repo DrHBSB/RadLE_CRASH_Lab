@@ -69,8 +69,8 @@ MODELS = [
         "extra": None,
     },
     {
-        "name": "qwen_vl_max",
-        "id": "qwen/qwen-vl-max",
+        "name": "qwen_3_7_plus",
+        "id": "qwen/qwen3.7-plus",
         "extra": None,
     },
     {
@@ -84,8 +84,8 @@ MODELS = [
         "extra": None,
     },
     {
-        "name": "pixtral_large",
-        "id": "mistralai/pixtral-large-2411",
+        "name": "mistral_large_3_2512",
+        "id": "mistralai/mistral-large-2512",
         "extra": None,
     },
     {
@@ -1487,6 +1487,24 @@ def failed_result(error, model, api_params=None, grok_fallback_used=False):
     }
 
 
+def _ensure_dataframe_columns(df, columns):
+    """Add missing columns in one concat to avoid pandas fragmentation warnings."""
+    missing = [col for col in columns if col not in df.columns]
+    if not missing:
+        return df
+
+    additions = pd.DataFrame(index=df.index, columns=missing, dtype="object")
+    return pd.concat([df, additions], axis=1).astype("object")
+
+
+def _assign_row_values(df, df_idx, values):
+    """Assign a row dictionary after adding any missing columns in batch."""
+    df = _ensure_dataframe_columns(df, values.keys())
+    for key, value in values.items():
+        df.at[df_idx, key] = value
+    return df
+
+
 def assert_schema_stable(df, reference_columns, context=""):
     """Raise if dataframe columns differ from the reference schema."""
     current_columns = list(df.columns)
@@ -2023,8 +2041,7 @@ def run_benchmark(
                 grok_fallback_used_for_error = grok_fallback_used
                 result = extract_result(response, latency, api_params, grok_fallback_used, model)
 
-                for key, value in result.items():
-                    df.at[df_idx, key] = value
+                df = _assign_row_values(df, df_idx, result)
 
                 completion_tokens = result.get(f"Total_Tokens_Out_{model_name}", 0)
                 prompt_tokens = result.get(f"Prompt_Tokens_{model_name}", 0)
@@ -2042,8 +2059,7 @@ def run_benchmark(
                     api_params=api_params_for_error,
                     grok_fallback_used=grok_fallback_used_for_error,
                 )
-                for key, value in result.items():
-                    df.at[df_idx, key] = value
+                df = _assign_row_values(df, df_idx, result)
                 print(f" Failed! API Response: {str(exc)}")
 
             api_calls_this_run += 1
