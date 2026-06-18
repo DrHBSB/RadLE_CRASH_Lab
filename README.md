@@ -31,3 +31,33 @@ In Colab, the notebook clones or updates this GitHub repo under `/content/RadLE_
 ## Code Structure
 
 Keep the notebook as the Colab runner. The reusable benchmark logic lives in `src/radle_benchmark.py`, which works with Google Drive because Colab exposes mounted Drive as ordinary filesystem paths.
+
+## Experimental Medical Custom Runtime
+
+- Notebook: `notebooks/RadLE_Medical_Custom_Runtime.ipynb`
+- Colab: https://colab.research.google.com/github/DrHBSB/RadLE_CRASH_Lab/blob/main/notebooks/RadLE_Medical_Custom_Runtime.ipynb
+- Helper module: `src/radle_medical_custom_runtime.py`
+
+This path is separate from the official benchmark roster. It is for GCP-backed
+custom Colab runtimes that serve one local OpenAI-compatible medical model at a
+time with vLLM or SGLang, then reuse the standard RadLE CSV schema.
+
+Current experimental medical models:
+
+- `medgemma_1_5_4b` -> `google/medgemma-1.5-4b-it`
+- `llava_med_mistral_7b` -> `microsoft/llava-med-v1.5-mistral-7b`
+- `internvl3_5_8b` -> `OpenGVLab/InternVL3_5-8B`
+
+Run sequence:
+
+1. Attach a GPU custom runtime, preferably starting with an L4/G2 runtime.
+2. Open the experimental Colab link.
+3. Rerun setup/import cells after pull.
+4. Select one `SELECTED_MODEL_NAME`.
+5. Start with `TEST_LIMIT=1`, then `TEST_LIMIT=3` or `TEST_LIMIT=5`.
+6. Stop the local model server or restart the runtime before switching models.
+
+The notebook routes Hugging Face, Transformers, vLLM, and pip caches under
+`/content/radle_runtime_cache` so model weights do not fill the custom runtime's
+root disk. If your custom runtime image already includes vLLM or SGLang, set
+`INSTALL_SERVER_PACKAGES = False` in the dependency cell.
