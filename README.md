@@ -12,6 +12,7 @@ This repository tracks RadLE notebook and code changes. Google Drive remains the
 ## Current Notebook
 
 - `notebooks/RadLE_v1_5_Morning.ipynb`
+- Colab: https://colab.research.google.com/github/DrHBSB/RadLE_CRASH_Lab/blob/main/notebooks/RadLE_v1_5_Morning.ipynb
 - `src/radle_benchmark.py`
 
 The notebook mounts Google Drive and currently reads/writes under:
