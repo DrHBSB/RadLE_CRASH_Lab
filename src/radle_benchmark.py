@@ -4,6 +4,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -223,15 +224,78 @@ def _csv_sibling_path(path, suffix):
     return f"{path}{suffix}.csv"
 
 
-def default_latest_backup_path(output_csv):
+def _slugify_label(value):
+    """Return a filesystem-safe run label."""
+    text = safe_str(value).strip().lower()
+    text = re.sub(r"[^a-z0-9]+", "_", text).strip("_")
+    return text or "run"
+
+
+def build_run_paths(dataset_root, run_label="test_1_case", run_id=None, create_dirs=True):
+    """Build intuitive Drive/local paths for one benchmark run.
+
+    No result files are created here. When create_dirs is true, only folders are made.
+    """
+    dataset_root = pathlib.Path(dataset_root)
+    if run_id is None:
+        run_id = f"{datetime.now().strftime('%Y-%m-%d')}_{_slugify_label(run_label)}"
+
+    run_root = dataset_root / "Runs" / run_id
+    raw_dir = run_root / "raw"
+    repair_dir = run_root / "repair"
+    final_dir = run_root / "final"
+    scorer_dir = run_root / "scorer"
+    public_release_dir = run_root / "public_release"
+
+    paths = {
+        "run_id": run_id,
+        "dataset_root": str(dataset_root),
+        "master_images_folder": str(dataset_root / "RadLE v2 Master Data"),
+        "runs_root": str(dataset_root / "Runs"),
+        "run_root": str(run_root),
+        "raw_dir": str(raw_dir),
+        "raw_results_csv": str(raw_dir / "results.csv"),
+        "raw_backup_dir": str(raw_dir / "backups"),
+        "repair_dir": str(repair_dir),
+        "repair_results_csv": str(repair_dir / "repaired_results.csv"),
+        "repair_backup_dir": str(repair_dir / "backups"),
+        "repair_plan_csv": str(repair_dir / "repair_plan.csv"),
+        "repair_call_log_csv": str(repair_dir / "repair_call_log.csv"),
+        "final_dir": str(final_dir),
+        "final_results_csv": str(final_dir / "RadLE_v2_results_final.csv"),
+        "final_manifest_json": str(final_dir / "RadLE_v2_results_final_manifest.json"),
+        "scorer_dir": str(scorer_dir),
+        "scorer_view_csv": str(scorer_dir / "scorer_view.csv"),
+        "public_release_dir": str(public_release_dir),
+    }
+
+    if create_dirs:
+        for key, value in paths.items():
+            if key.endswith("_dir") or key in {"runs_root", "run_root"}:
+                os.makedirs(value, exist_ok=True)
+
+    return paths
+
+
+def _backup_csv_path(output_csv, suffix, backup_dir=None):
+    """Return a backup CSV path, optionally under a dedicated backup directory."""
+    if not backup_dir:
+        return _csv_sibling_path(output_csv, suffix)
+
+    output_path = pathlib.Path(output_csv)
+    backup_path = pathlib.Path(backup_dir) / f"{output_path.stem}{suffix}.csv"
+    return str(backup_path)
+
+
+def default_latest_backup_path(output_csv, backup_dir=None):
     """Return the rolling latest backup path for a benchmark output CSV."""
-    return _csv_sibling_path(output_csv, "_BACKUP")
+    return _backup_csv_path(output_csv, "_BACKUP", backup_dir=backup_dir)
 
 
-def next_numbered_backup_path(output_csv):
+def next_numbered_backup_path(output_csv, backup_dir=None):
     """Return the next available numbered backup path for a benchmark output CSV."""
     for n in range(1, 10000):
-        candidate = _csv_sibling_path(output_csv, f"_BACKUP_{n:04d}")
+        candidate = _backup_csv_path(output_csv, f"_BACKUP_{n:04d}", backup_dir=backup_dir)
         if not os.path.exists(candidate):
             return candidate
     raise RuntimeError(f"Could not find available numbered backup path for {output_csv}")
@@ -248,16 +312,25 @@ def atomic_to_csv(df, path):
     os.replace(temp_path, path)
 
 
-def save_benchmark_progress(df, output_csv, latest_backup_csv=None, numbered=False):
+def save_benchmark_progress(
+    df,
+    output_csv,
+    latest_backup_csv=None,
+    numbered=False,
+    backup_dir=None,
+):
     """Save main output plus rolling/latest backup, optionally with a numbered backup."""
-    latest_backup_csv = latest_backup_csv or default_latest_backup_path(output_csv)
+    latest_backup_csv = latest_backup_csv or default_latest_backup_path(
+        output_csv,
+        backup_dir=backup_dir,
+    )
 
     atomic_to_csv(df, output_csv)
     atomic_to_csv(df, latest_backup_csv)
 
     numbered_path = None
     if numbered:
-        numbered_path = next_numbered_backup_path(output_csv)
+        numbered_path = next_numbered_backup_path(output_csv, backup_dir=backup_dir)
         atomic_to_csv(df, numbered_path)
 
     return numbered_path
@@ -1483,12 +1556,14 @@ def _write_repair_progress(
     repair_log_df,
     repair_call_log_csv,
     numbered=False,
+    backup_dir=None,
 ):
     assert_schema_stable(df, reference_columns, context="before repair save")
     numbered_path = save_benchmark_progress(
         df[reference_columns].copy(),
         output_csv,
         numbered=numbered,
+        backup_dir=backup_dir,
     )
     if repair_call_log_csv:
         atomic_to_csv(repair_log_df, repair_call_log_csv)
@@ -1511,6 +1586,7 @@ def run_targeted_repair(
     anthropic_client=None,
     gemini_client=None,
     repair_backup_interval=CHECKPOINT_CASE_INTERVAL,
+    backup_dir=None,
 ):
     """Run schema-stable targeted repair for invalid or failed case-model cells."""
     if confirmation not in {"NO", "YES_REPAIR_10", "YES_REPAIR_ALL"}:
@@ -1593,6 +1669,7 @@ def run_targeted_repair(
         repair_log_df,
         repair_call_log_csv,
         numbered=False,
+        backup_dir=backup_dir,
     )
 
     api_calls_this_run = 0
@@ -1668,6 +1745,7 @@ def run_targeted_repair(
                 repair_log_df,
                 repair_call_log_csv,
                 numbered=False,
+                backup_dir=backup_dir,
             )
 
             api_params_for_error = None
@@ -1724,6 +1802,7 @@ def run_targeted_repair(
                     repair_log_df,
                     repair_call_log_csv,
                     numbered=True,
+                    backup_dir=backup_dir,
                 )
                 print(" INTERRUPTED. Progress saved.")
                 raise
@@ -1784,6 +1863,7 @@ def run_targeted_repair(
                 repair_log_df,
                 repair_call_log_csv,
                 numbered=make_numbered,
+                backup_dir=backup_dir,
             )
 
             if not post_info.get("needs_api_repair"):
@@ -1796,6 +1876,7 @@ def run_targeted_repair(
         repair_log_df,
         repair_call_log_csv,
         numbered=True,
+        backup_dir=backup_dir,
     )
     remaining_repair_plan = build_repair_plan(
         df_repair,
@@ -1880,6 +1961,7 @@ def run_benchmark(
     anthropic_client=None,
     gemini_client=None,
     resume=True,
+    backup_dir=None,
 ):
     """Run the RadLE benchmark, resuming existing clean cells when possible."""
     models = models or MODELS
@@ -1973,20 +2055,336 @@ def run_benchmark(
                 df,
                 output_csv,
                 numbered=True,
+                backup_dir=backup_dir,
             )
             print(f"  Checkpoint saved after {idx} cases: {numbered_path}")
 
     df = _sort_benchmark_df(df)
-    final_backup = save_benchmark_progress(df, output_csv, numbered=True)
+    final_backup = save_benchmark_progress(
+        df,
+        output_csv,
+        numbered=True,
+        backup_dir=backup_dir,
+    )
     print(f"\nComplete! Data saved to {output_csv}")
     print(f"Final numbered backup: {final_backup}")
     print(f"API calls made this run: {api_calls_this_run}")
     return df
 
 
-def create_scorer_view(raw_csv):
+def file_sha256(path):
+    """Return SHA256 for a file."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def promote_final_results(
+    source_csv,
+    final_csv,
+    manifest_json=None,
+    run_id=None,
+    source_label=None,
+    metadata=None,
+):
+    """Copy the chosen raw/repaired CSV to the private final file and write a manifest."""
+    if not os.path.exists(source_csv):
+        raise FileNotFoundError(f"Final source CSV not found: {source_csv}")
+
+    final_dir = os.path.dirname(final_csv)
+    if final_dir:
+        os.makedirs(final_dir, exist_ok=True)
+    shutil.copy2(source_csv, final_csv)
+
+    df = pd.read_csv(final_csv, dtype={"Master_Case_ID": str})
+    manifest = {
+        "run_id": run_id or "",
+        "source_label": source_label or "",
+        "source_csv": str(source_csv),
+        "final_csv": str(final_csv),
+        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "rows": int(len(df)),
+        "columns": int(len(df.columns)),
+        "case_count": int(df["Master_Case_ID"].nunique()) if "Master_Case_ID" in df.columns else None,
+        "sha256": file_sha256(final_csv),
+    }
+    if metadata:
+        manifest.update(metadata)
+
+    if manifest_json:
+        manifest_dir = os.path.dirname(manifest_json)
+        if manifest_dir:
+            os.makedirs(manifest_dir, exist_ok=True)
+        with open(manifest_json, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, indent=2, ensure_ascii=False)
+
+    return manifest
+
+
+def _case_uid_map(case_ids, prefix="case_"):
+    unique_case_ids = sorted(
+        {normalize_case_id(case_id) for case_id in case_ids},
+        key=numeric_case_sort_key,
+    )
+    width = max(3, len(str(len(unique_case_ids))))
+    return {
+        case_id: f"{prefix}{idx:0{width}d}"
+        for idx, case_id in enumerate(unique_case_ids, 1)
+    }
+
+
+def _first_present_value(row, columns):
+    for col in columns:
+        if col in row.index:
+            value = row.get(col)
+            try:
+                if pd.isna(value):
+                    continue
+            except Exception:
+                pass
+            if safe_str(value).strip() != "":
+                return value
+    return ""
+
+
+def public_error_class_from_reason(reason):
+    """Return a coarse public error class without exposing provider error text."""
+    text = safe_str(reason).lower()
+    if text == "" or text.startswith("accepted"):
+        return ""
+    if "provider_content_block" in text or "content_block" in text:
+        return "PROVIDER_CONTENT_BLOCK"
+    if "no endpoints found" in text or "404" in text or "model unavailable" in text:
+        return "MODEL_UNAVAILABLE"
+    if "400" in text or "bad request" in text:
+        return "BAD_REQUEST"
+    if "quota" in text or "balance" in text or "insufficient" in text:
+        return "QUOTA_OR_BALANCE"
+    if "api_error" in text or "error code" in text or "http" in text:
+        return "API_ERROR"
+    if "parse_failed" in text or "json_missing_key" in text or "malformed" in text:
+        return "MALFORMED_JSON"
+    if "invalid_or_missing_likert" in text or "bad_likert" in text:
+        return "INVALID_LIKERT"
+    if "missing" in text or "empty" in text:
+        return "MISSING_OUTPUT"
+    if "exhausted" in text or "terminal" in text:
+        return "REPAIR_EXHAUSTED"
+    return "OTHER_ERROR"
+
+
+def build_public_case_model_table(
+    results_csv,
+    models=None,
+    run_id=None,
+    case_prefix="case_",
+    case_uid_map=None,
+):
+    """Build a public case-model table without diagnoses, raw responses, or image names."""
+    if not os.path.exists(results_csv):
+        raise FileNotFoundError(f"Results CSV not found: {results_csv}")
+
+    df = pd.read_csv(results_csv, dtype={"Master_Case_ID": str})
+    if "Master_Case_ID" not in df.columns:
+        raise ValueError("Results CSV must contain Master_Case_ID.")
+
+    model_names = model_names_from_models(models)
+    uid_map = case_uid_map or _case_uid_map(df["Master_Case_ID"], prefix=case_prefix)
+    uid_map = {normalize_case_id(k): v for k, v in uid_map.items()}
+    records = []
+
+    for _, row in df.iterrows():
+        case_id = normalize_case_id(row["Master_Case_ID"])
+        for model_name in model_names:
+            info = classify_cell_for_audit(row, model_name, attempts=0)
+            reason = info.get("reason", "")
+            diagnosis = safe_str(row.get(f"Diagnosis_{model_name}", ""))
+            likert = row.get(f"Likert_{model_name}", "")
+            response_valid = info.get("bucket") == "accepted"
+            abstained = is_exact_valid_i_dont_know(diagnosis) or is_abstention_variant(diagnosis)
+
+            records.append({
+                "run_id": run_id or "",
+                "case_uid": uid_map.get(case_id, ""),
+                "model": model_name,
+                "provider": safe_str(row.get(f"Provider_{model_name}", "")),
+                "response_valid": bool(response_valid),
+                "abstained": bool(abstained),
+                "likert_score": normalize_likert_for_output(likert) if is_valid_likert_value(likert) else "",
+                "prompt_tokens": get_token_value(row, model_name, "Prompt_Tokens"),
+                "completion_tokens": get_token_value(row, model_name, "Total_Tokens_Out"),
+                "reasoning_tokens": get_token_value(row, model_name, "Reasoning_Tokens"),
+                "latency_seconds": get_token_value(row, model_name, "Latency"),
+                "score_binary": _first_present_value(row, [
+                    f"Score_Binary_{model_name}",
+                    f"Binary_Score_{model_name}",
+                    f"Correct_{model_name}",
+                    f"Accuracy_{model_name}",
+                ]),
+                "score_likert": _first_present_value(row, [
+                    f"Score_Likert_{model_name}",
+                    f"Human_Score_{model_name}",
+                    f"Scoring_Likert_{model_name}",
+                ]),
+                "error_class": public_error_class_from_reason(reason),
+            })
+
+    return pd.DataFrame(records)
+
+
+def build_public_model_summary(public_case_model_df):
+    """Summarize sanitized public case-model rows by model/provider."""
+    if public_case_model_df.empty:
+        return pd.DataFrame()
+
+    df = public_case_model_df.copy()
+    for col in [
+        "likert_score",
+        "prompt_tokens",
+        "completion_tokens",
+        "reasoning_tokens",
+        "latency_seconds",
+        "score_binary",
+        "score_likert",
+    ]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    summary = df.groupby(["run_id", "model", "provider"], dropna=False).agg(
+        n_cases=("case_uid", "nunique"),
+        valid_response_rate=("response_valid", "mean"),
+        abstention_rate=("abstained", "mean"),
+        mean_likert_score=("likert_score", "mean"),
+        mean_latency_seconds=("latency_seconds", "mean"),
+        mean_prompt_tokens=("prompt_tokens", "mean"),
+        mean_completion_tokens=("completion_tokens", "mean"),
+        mean_reasoning_tokens=("reasoning_tokens", "mean"),
+        mean_score_binary=("score_binary", "mean"),
+        mean_score_likert=("score_likert", "mean"),
+    ).reset_index()
+
+    return summary
+
+
+def build_public_sanitized_call_log(
+    call_log_csv,
+    run_id=None,
+    case_prefix="case_",
+    case_uid_map=None,
+):
+    """Build a public call log without raw provider errors or image identifiers."""
+    if not call_log_csv or not os.path.exists(call_log_csv):
+        return pd.DataFrame()
+
+    call_log_df = _load_call_log(call_log_csv)
+    if call_log_df.empty:
+        return pd.DataFrame()
+
+    if case_uid_map:
+        uid_map = {normalize_case_id(k): v for k, v in case_uid_map.items()}
+    elif "Master_Case_ID" in call_log_df.columns:
+        uid_map = _case_uid_map(call_log_df["Master_Case_ID"], prefix=case_prefix)
+    else:
+        uid_map = {}
+
+    records = []
+    for _, row in call_log_df.iterrows():
+        case_id = normalize_case_id(row.get("Master_Case_ID", ""))
+        error_text = safe_str(row.get("error", ""))
+        reason = safe_str(row.get("reason", ""))
+        records.append({
+            "run_id": run_id or "",
+            "case_uid": uid_map.get(case_id, ""),
+            "model": safe_str(row.get("model", "")),
+            "event": safe_str(row.get("event", "")),
+            "status": safe_str(row.get("status", "")),
+            "repair_reason_class": public_error_class_from_reason(reason),
+            "post_repair_status": safe_str(row.get("post_repair_status", "")),
+            "error_class": public_error_class_from_reason(error_text or reason),
+            "repair_attempt_number": safe_str(row.get("repair_attempt_number", "")),
+            "latency_seconds": safe_str(row.get("latency", "")),
+            "prompt_tokens": safe_str(row.get("prompt_tokens", "")),
+            "completion_tokens": safe_str(row.get("completion_tokens", "")),
+            "timestamp_utc": safe_str(row.get("timestamp_utc", "")),
+        })
+
+    return pd.DataFrame(records)
+
+
+def export_public_release_tables(
+    results_csv,
+    output_dir,
+    models=None,
+    call_log_csv=None,
+    run_id=None,
+    case_prefix="case_",
+):
+    """Write sanitized public release tables without answers or raw model text."""
+    os.makedirs(output_dir, exist_ok=True)
+    source_df = pd.read_csv(results_csv, dtype={"Master_Case_ID": str})
+    if "Master_Case_ID" not in source_df.columns:
+        raise ValueError("Results CSV must contain Master_Case_ID.")
+    case_uid_map = _case_uid_map(source_df["Master_Case_ID"], prefix=case_prefix)
+
+    case_model_df = build_public_case_model_table(
+        results_csv,
+        models=models,
+        run_id=run_id,
+        case_prefix=case_prefix,
+        case_uid_map=case_uid_map,
+    )
+    summary_df = build_public_model_summary(case_model_df)
+    call_log_df = build_public_sanitized_call_log(
+        call_log_csv,
+        run_id=run_id,
+        case_prefix=case_prefix,
+        case_uid_map=case_uid_map,
+    )
+
+    case_model_csv = os.path.join(output_dir, "RadLE_v2_public_model_results.csv")
+    summary_csv = os.path.join(output_dir, "RadLE_v2_public_model_summary.csv")
+    call_log_public_csv = os.path.join(output_dir, "RadLE_v2_public_sanitized_call_log.csv")
+    manifest_json = os.path.join(output_dir, "RadLE_v2_public_manifest.json")
+
+    atomic_to_csv(case_model_df, case_model_csv)
+    atomic_to_csv(summary_df, summary_csv)
+    if not call_log_df.empty:
+        atomic_to_csv(call_log_df, call_log_public_csv)
+
+    manifest = {
+        "run_id": run_id or "",
+        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "source_results_file": os.path.basename(results_csv),
+        "source_call_log_file": os.path.basename(call_log_csv) if call_log_csv else "",
+        "public_files": {
+            "case_model": os.path.basename(case_model_csv),
+            "model_summary": os.path.basename(summary_csv),
+            "sanitized_call_log": os.path.basename(call_log_public_csv) if not call_log_df.empty else "",
+        },
+        "privacy_notes": [
+            "No diagnosis columns are exported.",
+            "No raw responses or reasoning text are exported.",
+            "No image filenames or image hashes are exported.",
+            "Case identifiers are replaced with sequential public case_uid values.",
+            "Provider error and repair reason text are reduced to coarse class values.",
+        ],
+    }
+    with open(manifest_json, "w", encoding="utf-8") as handle:
+        json.dump(manifest, handle, indent=2, ensure_ascii=False)
+
+    return {
+        "case_model_csv": case_model_csv,
+        "summary_csv": summary_csv,
+        "sanitized_call_log_csv": call_log_public_csv if not call_log_df.empty else "",
+        "manifest_json": manifest_json,
+    }
+
+
+def create_scorer_view(raw_csv, scorer_csv=None):
     """Create the human-friendly scorer CSV and transposed display dataframe."""
-    scorer_csv = raw_csv.replace(".csv", "_SCORER_VIEW.csv")
+    scorer_csv = scorer_csv or raw_csv.replace(".csv", "_SCORER_VIEW.csv")
 
     if not os.path.exists(raw_csv):
         raise FileNotFoundError(f"Raw CSV not found: {raw_csv}")
