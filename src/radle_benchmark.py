@@ -34,7 +34,7 @@ PROVIDER_CONTENT_BLOCK_MARKERS = (
 
 NO_TEMPERATURE_MODELS = {
     "gpt-5.5",
-    "claude-fable-5",
+    "claude-opus-4-8",
 }
 
 MODELS = [
@@ -45,8 +45,8 @@ MODELS = [
         "extra": {"reasoning_effort": "high"},
     },
     {
-        "name": "claude_fable_5",
-        "id": "claude-fable-5",
+        "name": "claude_4_8_opus",
+        "id": "claude-opus-4-8",
         "provider": "anthropic",
         "extra": {
             "thinking": {"type": "adaptive"},
