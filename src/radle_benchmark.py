@@ -238,7 +238,7 @@ def build_run_paths(dataset_root, run_label="test_1_case", run_id=None, create_d
     """
     dataset_root = pathlib.Path(dataset_root)
     if run_id is None:
-        run_id = f"{datetime.now().strftime('%Y-%m-%d')}_{_slugify_label(run_label)}"
+        run_id = _slugify_label(run_label)
 
     run_root = dataset_root / "Runs" / run_id
     raw_dir = run_root / "raw"
