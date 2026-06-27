@@ -14,6 +14,8 @@ Current state (2026-06-18 23:59 +05:30, Codex/GPT-5): Initial implementation was
 
 Current state (2026-06-27 09:10 +05:30, Codex/GPT-5): The user ran the Colab dependency cell and saw pip dependency-conflict warnings after forced upgrades replaced Colab-pinned packages such as `pandas`, `google-auth`, and `google-genai`. Cell 2 now installs required packages without `--upgrade`, preserving Colab's pinned stack unless a package is missing. Local validation passed with notebook JSON parse and `git diff --check`.
 
+Current state (2026-06-27 09:28 +05:30, Codex/GPT-5): The user then hit `ImportError: libcudart.so.13` when starting vLLM on free Colab T4, meaning the plain vLLM package resolved to a CUDA-13 wheel while the runtime has CUDA 12. Cell 2 now installs the explicit vLLM `0.23.0+cu129` wheel from the upstream release, and cell 4 defaults the first T4 smoke to `MAX_MODEL_LEN = 4096` with `--dtype float16`.
+
 ## Locked Facts
 
 - Official benchmark logic stays in `src/radle_benchmark.py`.
@@ -30,6 +32,7 @@ Current state (2026-06-27 09:10 +05:30, Codex/GPT-5): The user ran the Colab dep
 - Colab Enterprise cannot use `google.colab.drive.mount()`; Enterprise runs need a Cloud Storage/local dataset path set in cell 4 or `RADLE_DATASET_ROOT`.
 - The first code cell is now intentionally GitHub clone/pull/path setup only, so the user can rerun it first after each pushed change.
 - Notebook dependency setup must not force-upgrade Colab's preinstalled stack; install missing packages without `--upgrade` unless a specific compatibility issue proves a pin is needed.
+- Free Colab T4 should use CUDA-12-compatible vLLM packages and conservative first-smoke settings; the first MedGemma T4 run uses `MAX_MODEL_LEN = 4096` and `--dtype float16`.
 
 ## Do Not Revisit
 
@@ -53,6 +56,8 @@ Current state (2026-06-27 09:10 +05:30, Codex/GPT-5): The user ran the Colab dep
 - [ ] (2026-06-18 23:59 +05:30, Codex/GPT-5) Commit and push the Enterprise notebook patch to `origin/main`.
 - [x] (2026-06-27 09:10 +05:30, Codex/GPT-5) Diagnosed Colab pip dependency-conflict warnings as caused by forced `--upgrade` in notebook cell 2 and patched the cell to preserve already-installed Colab packages.
 - [x] (2026-06-27 09:10 +05:30, Codex/GPT-5) Validated the dependency-cell patch with notebook JSON parse and `git diff --check`.
+- [x] (2026-06-27 09:28 +05:30, Codex/GPT-5) Diagnosed vLLM startup failure `ImportError: libcudart.so.13` as a CUDA wheel mismatch and patched cell 2 to install the explicit `vllm-0.23.0+cu129` wheel.
+- [x] (2026-06-27 09:28 +05:30, Codex/GPT-5) Adjusted cell 4 first-smoke defaults for free Colab T4: `MAX_MODEL_LEN = 4096` and `EXTRA_SERVER_ARGS = ["--dtype", "float16"]`.
 
 ## Surprises & Discoveries
 
@@ -64,6 +69,9 @@ Current state (2026-06-27 09:10 +05:30, Codex/GPT-5): The user ran the Colab dep
   Date/Author: 2026-06-18, Codex/GPT-5.
 - Observation: `pip install --upgrade` in Colab can replace preinstalled packages that other Colab/GCP packages require, producing warnings such as `google-colab` requiring `pandas==2.2.2` while the runtime has `pandas 3.0.3`.
   Evidence: User-shared Colab output showed conflicts for `google-colab`, `cudf-cu12`, `dask-cudf-cu12`, `gradio`, and `google-adk` after the dependency cell ran.
+  Date/Author: 2026-06-27, Codex/GPT-5.
+- Observation: The plain vLLM install path can pick a CUDA-13 wheel in Colab, failing before model load with `ImportError: libcudart.so.13`.
+  Evidence: User-shared vLLM traceback failed during `import vllm._C`; vLLM release metadata confirms a separate `vllm-0.23.0+cu129-cp38-abi3-manylinux_2_28_x86_64.whl` asset is available.
   Date/Author: 2026-06-27, Codex/GPT-5.
 
 ## Decision Log
@@ -89,6 +97,12 @@ Current state (2026-06-27 09:10 +05:30, Codex/GPT-5): The user ran the Colab dep
 - Decision: Remove forced `--upgrade` from the medical notebook dependency cell.
   Rationale: The experimental runner only needs required packages present; upgrading Colab's pinned packages creates avoidable conflicts before the local model server starts.
   Date/Author: 2026-06-27, Codex/GPT-5.
+- Decision: Pin the vLLM notebook install to the explicit CUDA 12.9 wheel URL instead of the plain `vllm` package.
+  Rationale: The observed Colab runtime is CUDA 12/T4; a CUDA-13 vLLM wheel cannot import there.
+  Date/Author: 2026-06-27, Codex/GPT-5.
+- Decision: Lower initial T4 smoke settings to `MAX_MODEL_LEN = 4096` and `--dtype float16`.
+  Rationale: Free Colab T4 has limited VRAM and lacks BF16 support; the first objective is a one-case smoke, not a maximum-context benchmark.
+  Date/Author: 2026-06-27, Codex/GPT-5.
 
 ## Revision Notes
 
@@ -96,6 +110,7 @@ Current state (2026-06-27 09:10 +05:30, Codex/GPT-5): The user ran the Colab dep
 - v2 (2026-06-18, Codex/GPT-5): Recorded cache-routing and server-log diagnostic patch after seeing the user's custom runtime disk layout.
 - v3 (2026-06-18, Codex/GPT-5): Recorded Colab Enterprise storage incompatibility, changed the first notebook cell to GitHub setup only, and documented dataset path overrides.
 - v4 (2026-06-27, Codex/GPT-5): Recorded Colab pip dependency conflicts and removed forced package upgrades from the dependency cell.
+- v5 (2026-06-27, Codex/GPT-5): Recorded vLLM CUDA wheel mismatch and pinned the notebook to explicit CUDA-12.9 vLLM plus T4-safe smoke settings.
 
 ## Outcomes & Retrospective
 
