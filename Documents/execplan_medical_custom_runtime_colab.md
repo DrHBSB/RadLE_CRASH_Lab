@@ -12,6 +12,8 @@ This work adds a separate experimental Colab path for medical/open vision-langua
 
 Current state (2026-06-18 23:59 +05:30, Codex/GPT-5): Initial implementation was pushed to `origin/main` as commit `7769c86`. The user then tested in Colab Enterprise and hit `NotImplementedError: google.colab.drive.mount is not supported in Colab Enterprise`, which prevented the import cell from running and caused a later `NameError: name 'medical_runtime' is not defined`. The notebook now keeps the first code cell as GitHub clone/pull/path setup only, moves storage resolution to cell 4, and supports Colab Enterprise via `DATASET_ROOT_OVERRIDE` or `RADLE_DATASET_ROOT`. Local validation passed; next action is commit and push this follow-up.
 
+Current state (2026-06-27 09:10 +05:30, Codex/GPT-5): The user ran the Colab dependency cell and saw pip dependency-conflict warnings after forced upgrades replaced Colab-pinned packages such as `pandas`, `google-auth`, and `google-genai`. Cell 2 now installs required packages without `--upgrade`, preserving Colab's pinned stack unless a package is missing. Local validation passed with notebook JSON parse and `git diff --check`.
+
 ## Locked Facts
 
 - Official benchmark logic stays in `src/radle_benchmark.py`.
@@ -27,6 +29,7 @@ Current state (2026-06-18 23:59 +05:30, Codex/GPT-5): Initial implementation was
 - Initial medical custom runtime implementation was pushed to `origin/main` as `7769c86 Add medical custom runtime Colab`.
 - Colab Enterprise cannot use `google.colab.drive.mount()`; Enterprise runs need a Cloud Storage/local dataset path set in cell 4 or `RADLE_DATASET_ROOT`.
 - The first code cell is now intentionally GitHub clone/pull/path setup only, so the user can rerun it first after each pushed change.
+- Notebook dependency setup must not force-upgrade Colab's preinstalled stack; install missing packages without `--upgrade` unless a specific compatibility issue proves a pin is needed.
 
 ## Do Not Revisit
 
@@ -48,6 +51,8 @@ Current state (2026-06-18 23:59 +05:30, Codex/GPT-5): Initial implementation was
 - [x] (2026-06-18 23:59 +05:30, Codex/GPT-5) Patched the notebook so cell 1 only clones/pulls the repo and adds `src/` to `sys.path`; dataset storage selection and optional standard-Colab Drive mounting happen in cell 4.
 - [x] (2026-06-18 23:59 +05:30, Codex/GPT-5) Validated the Enterprise notebook patch locally with compile checks, notebook JSON parse, clear-output check, a cell-1 no-`drive.mount()` assertion, `git diff --check`, no official-file diff, and a dry-run one-case medical smoke.
 - [ ] (2026-06-18 23:59 +05:30, Codex/GPT-5) Commit and push the Enterprise notebook patch to `origin/main`.
+- [x] (2026-06-27 09:10 +05:30, Codex/GPT-5) Diagnosed Colab pip dependency-conflict warnings as caused by forced `--upgrade` in notebook cell 2 and patched the cell to preserve already-installed Colab packages.
+- [x] (2026-06-27 09:10 +05:30, Codex/GPT-5) Validated the dependency-cell patch with notebook JSON parse and `git diff --check`.
 
 ## Surprises & Discoveries
 
@@ -57,6 +62,9 @@ Current state (2026-06-18 23:59 +05:30, Codex/GPT-5): Initial implementation was
 - Observation: Google's current docs describe Colab Enterprise storage as different from regular Colab's Google Drive storage, and Cloud Storage mounting is the supported GCP-side data access path.
   Evidence: Official Colab Enterprise docs list Enterprise storage separately from Colab Google Drive storage; Workbench docs describe mounting Cloud Storage buckets in JupyterLab.
   Date/Author: 2026-06-18, Codex/GPT-5.
+- Observation: `pip install --upgrade` in Colab can replace preinstalled packages that other Colab/GCP packages require, producing warnings such as `google-colab` requiring `pandas==2.2.2` while the runtime has `pandas 3.0.3`.
+  Evidence: User-shared Colab output showed conflicts for `google-colab`, `cudf-cu12`, `dask-cudf-cu12`, `gradio`, and `google-adk` after the dependency cell ran.
+  Date/Author: 2026-06-27, Codex/GPT-5.
 
 ## Decision Log
 
@@ -78,12 +86,16 @@ Current state (2026-06-18 23:59 +05:30, Codex/GPT-5): Initial implementation was
 - Decision: Move dataset root resolution into cell 4 and use `DATASET_ROOT_OVERRIDE`/`RADLE_DATASET_ROOT` for Colab Enterprise.
   Rationale: Standard Colab can still mount Drive when the default Drive path is used, but Enterprise cannot; the model run should fail with a clear dataset-path instruction instead of blocking the GitHub update/import path.
   Date/Author: 2026-06-18, Codex/GPT-5.
+- Decision: Remove forced `--upgrade` from the medical notebook dependency cell.
+  Rationale: The experimental runner only needs required packages present; upgrading Colab's pinned packages creates avoidable conflicts before the local model server starts.
+  Date/Author: 2026-06-27, Codex/GPT-5.
 
 ## Revision Notes
 
 - v1 (2026-06-18, Codex/GPT-5): Initial plan for the medical custom runtime notebook and module.
 - v2 (2026-06-18, Codex/GPT-5): Recorded cache-routing and server-log diagnostic patch after seeing the user's custom runtime disk layout.
 - v3 (2026-06-18, Codex/GPT-5): Recorded Colab Enterprise storage incompatibility, changed the first notebook cell to GitHub setup only, and documented dataset path overrides.
+- v4 (2026-06-27, Codex/GPT-5): Recorded Colab pip dependency conflicts and removed forced package upgrades from the dependency cell.
 
 ## Outcomes & Retrospective
 
