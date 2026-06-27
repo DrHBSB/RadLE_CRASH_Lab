@@ -16,6 +16,8 @@ Current state (2026-06-27 09:10 +05:30, Codex/GPT-5): The user ran the Colab dep
 
 Current state (2026-06-27 09:28 +05:30, Codex/GPT-5): The user then hit `ImportError: libcudart.so.13` when starting vLLM on free Colab T4, meaning the plain vLLM package resolved to a CUDA-13 wheel while the runtime has CUDA 12. Cell 2 now installs the explicit vLLM `0.23.0+cu129` wheel from the upstream release, and cell 4 defaults the first T4 smoke to `MAX_MODEL_LEN = 4096` with `--dtype float16`.
 
+Current state (2026-06-27 09:31 +05:30, Codex/GPT-5): The same `libcudart.so.13` traceback persisted, which means Colab still had a preexisting CUDA-13 vLLM package in the environment or did not replace it. Cell 2 now uninstalls any existing `vllm` before installing the explicit CUDA-12.9 wheel, then runs an immediate vLLM platform import check so wheel problems fail in dependency setup instead of server startup.
+
 ## Locked Facts
 
 - Official benchmark logic stays in `src/radle_benchmark.py`.
@@ -33,6 +35,7 @@ Current state (2026-06-27 09:28 +05:30, Codex/GPT-5): The user then hit `ImportE
 - The first code cell is now intentionally GitHub clone/pull/path setup only, so the user can rerun it first after each pushed change.
 - Notebook dependency setup must not force-upgrade Colab's preinstalled stack; install missing packages without `--upgrade` unless a specific compatibility issue proves a pin is needed.
 - Free Colab T4 should use CUDA-12-compatible vLLM packages and conservative first-smoke settings; the first MedGemma T4 run uses `MAX_MODEL_LEN = 4096` and `--dtype float16`.
+- Cell 2 should remove stale vLLM installations before installing the explicit CUDA-12.9 wheel, then verify vLLM imports before proceeding.
 
 ## Do Not Revisit
 
@@ -58,6 +61,7 @@ Current state (2026-06-27 09:28 +05:30, Codex/GPT-5): The user then hit `ImportE
 - [x] (2026-06-27 09:10 +05:30, Codex/GPT-5) Validated the dependency-cell patch with notebook JSON parse and `git diff --check`.
 - [x] (2026-06-27 09:28 +05:30, Codex/GPT-5) Diagnosed vLLM startup failure `ImportError: libcudart.so.13` as a CUDA wheel mismatch and patched cell 2 to install the explicit `vllm-0.23.0+cu129` wheel.
 - [x] (2026-06-27 09:28 +05:30, Codex/GPT-5) Adjusted cell 4 first-smoke defaults for free Colab T4: `MAX_MODEL_LEN = 4096` and `EXTRA_SERVER_ARGS = ["--dtype", "float16"]`.
+- [x] (2026-06-27 09:31 +05:30, Codex/GPT-5) Patched cell 2 to uninstall stale `vllm` before installing the explicit CUDA-12.9 wheel and to run a vLLM platform import check immediately after install.
 
 ## Surprises & Discoveries
 
@@ -72,6 +76,9 @@ Current state (2026-06-27 09:28 +05:30, Codex/GPT-5): The user then hit `ImportE
   Date/Author: 2026-06-27, Codex/GPT-5.
 - Observation: The plain vLLM install path can pick a CUDA-13 wheel in Colab, failing before model load with `ImportError: libcudart.so.13`.
   Evidence: User-shared vLLM traceback failed during `import vllm._C`; vLLM release metadata confirms a separate `vllm-0.23.0+cu129-cp38-abi3-manylinux_2_28_x86_64.whl` asset is available.
+  Date/Author: 2026-06-27, Codex/GPT-5.
+- Observation: Installing the explicit vLLM wheel is not sufficient if a stale CUDA-13 `vllm` package remains installed in the current Colab environment.
+  Evidence: The same `libcudart.so.13` traceback recurred after the first exact-wheel patch.
   Date/Author: 2026-06-27, Codex/GPT-5.
 
 ## Decision Log
@@ -100,6 +107,9 @@ Current state (2026-06-27 09:28 +05:30, Codex/GPT-5): The user then hit `ImportE
 - Decision: Pin the vLLM notebook install to the explicit CUDA 12.9 wheel URL instead of the plain `vllm` package.
   Rationale: The observed Colab runtime is CUDA 12/T4; a CUDA-13 vLLM wheel cannot import there.
   Date/Author: 2026-06-27, Codex/GPT-5.
+- Decision: Uninstall any existing `vllm` before installing the explicit CUDA 12.9 wheel and verify vLLM imports in cell 2.
+  Rationale: The failure should be caught at dependency setup time, and stale CUDA-13 wheels must not survive into server startup.
+  Date/Author: 2026-06-27, Codex/GPT-5.
 - Decision: Lower initial T4 smoke settings to `MAX_MODEL_LEN = 4096` and `--dtype float16`.
   Rationale: Free Colab T4 has limited VRAM and lacks BF16 support; the first objective is a one-case smoke, not a maximum-context benchmark.
   Date/Author: 2026-06-27, Codex/GPT-5.
@@ -111,6 +121,7 @@ Current state (2026-06-27 09:28 +05:30, Codex/GPT-5): The user then hit `ImportE
 - v3 (2026-06-18, Codex/GPT-5): Recorded Colab Enterprise storage incompatibility, changed the first notebook cell to GitHub setup only, and documented dataset path overrides.
 - v4 (2026-06-27, Codex/GPT-5): Recorded Colab pip dependency conflicts and removed forced package upgrades from the dependency cell.
 - v5 (2026-06-27, Codex/GPT-5): Recorded vLLM CUDA wheel mismatch and pinned the notebook to explicit CUDA-12.9 vLLM plus T4-safe smoke settings.
+- v6 (2026-06-27, Codex/GPT-5): Added stale-vLLM uninstall and immediate import verification after the CUDA-12.9 wheel install.
 
 ## Outcomes & Retrospective
 
