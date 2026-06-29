@@ -18,6 +18,8 @@ Current state (2026-06-27 09:28 +05:30, Codex/GPT-5): The user then hit `ImportE
 
 Current state (2026-06-27 09:31 +05:30, Codex/GPT-5): The same `libcudart.so.13` traceback persisted, which means Colab still had a preexisting CUDA-13 vLLM package in the environment or did not replace it. Cell 2 now uninstalls any existing `vllm` before installing the explicit CUDA-12.9 wheel, then runs an immediate vLLM platform import check so wheel problems fail in dependency setup instead of server startup.
 
+Current state (2026-06-29 15:58 +05:30, Codex/GPT-5): After creating the `radle-t4-fallback` Colab Enterprise template, the notebook was audited once more for top-to-bottom T4/Enterprise robustness. Cell 1 now refuses to continue on a stale Git checkout and masks tokenized Git URLs, cell 2 no longer installs unused native Anthropic/Gemini SDKs, cell 3 imports through the medical helper so provider stubs are active, and cell 6 detects a dead vLLM/SGLang server process immediately with log-tail context.
+
 ## Locked Facts
 
 - Official benchmark logic stays in `src/radle_benchmark.py`.
@@ -36,6 +38,8 @@ Current state (2026-06-27 09:31 +05:30, Codex/GPT-5): The same `libcudart.so.13`
 - Notebook dependency setup must not force-upgrade Colab's preinstalled stack; install missing packages without `--upgrade` unless a specific compatibility issue proves a pin is needed.
 - Free Colab T4 should use CUDA-12-compatible vLLM packages and conservative first-smoke settings; the first MedGemma T4 run uses `MAX_MODEL_LEN = 4096` and `--dtype float16`.
 - Cell 2 should remove stale vLLM installations before installing the explicit CUDA-12.9 wheel, then verify vLLM imports before proceeding.
+- Cell 1 must not silently continue with stale code after a failed `git pull`; Colab smoke tests must run against the pushed repo commit.
+- Cell 6 must watch the launched server process and fail immediately with log context if the server exits before `/models` is ready.
 
 ## Do Not Revisit
 
@@ -62,6 +66,9 @@ Current state (2026-06-27 09:31 +05:30, Codex/GPT-5): The same `libcudart.so.13`
 - [x] (2026-06-27 09:28 +05:30, Codex/GPT-5) Diagnosed vLLM startup failure `ImportError: libcudart.so.13` as a CUDA wheel mismatch and patched cell 2 to install the explicit `vllm-0.23.0+cu129` wheel.
 - [x] (2026-06-27 09:28 +05:30, Codex/GPT-5) Adjusted cell 4 first-smoke defaults for free Colab T4: `MAX_MODEL_LEN = 4096` and `EXTRA_SERVER_ARGS = ["--dtype", "float16"]`.
 - [x] (2026-06-27 09:31 +05:30, Codex/GPT-5) Patched cell 2 to uninstall stale `vllm` before installing the explicit CUDA-12.9 wheel and to run a vLLM platform import check immediately after install.
+- [x] (2026-06-29 15:58 +05:30, Codex/GPT-5) Audited the Colab notebook for stale-checkout, dependency-churn, import-order, and server-startup failure modes, then patched cells 1, 2, 3, and 6.
+- [x] (2026-06-29 15:58 +05:30, Codex/GPT-5) Patched `wait_for_openai_server(...)` to accept the launched process and log path, raising immediately with the server log tail when vLLM/SGLang exits before readiness.
+- [x] (2026-06-29 15:58 +05:30, Codex/GPT-5) Validated with notebook JSON checks, `py_compile`, vLLM command-shape check, fake-client one-case CSV smoke, and a dead-server fast-fail test.
 
 ## Surprises & Discoveries
 
@@ -80,6 +87,12 @@ Current state (2026-06-27 09:31 +05:30, Codex/GPT-5): The same `libcudart.so.13`
 - Observation: Installing the explicit vLLM wheel is not sufficient if a stale CUDA-13 `vllm` package remains installed in the current Colab environment.
   Evidence: The same `libcudart.so.13` traceback recurred after the first exact-wheel patch.
   Date/Author: 2026-06-27, Codex/GPT-5.
+- Observation: A failed `git pull --ff-only` in cell 1 was only a warning, so Colab could continue with stale notebook helper code after a pushed fix.
+  Evidence: The audited notebook printed a warning and continued when `git pull` returned non-zero.
+  Date/Author: 2026-06-29, Codex/GPT-5.
+- Observation: Cell 3 imported `radle_benchmark` before `radle_medical_custom_runtime`, bypassing the helper's provider-stub setup for the local medical path.
+  Evidence: The audited cell order was `import radle_benchmark` followed by `import radle_medical_custom_runtime as medical_runtime`.
+  Date/Author: 2026-06-29, Codex/GPT-5.
 
 ## Decision Log
 
@@ -113,6 +126,15 @@ Current state (2026-06-27 09:31 +05:30, Codex/GPT-5): The same `libcudart.so.13`
 - Decision: Lower initial T4 smoke settings to `MAX_MODEL_LEN = 4096` and `--dtype float16`.
   Rationale: Free Colab T4 has limited VRAM and lacks BF16 support; the first objective is a one-case smoke, not a maximum-context benchmark.
   Date/Author: 2026-06-27, Codex/GPT-5.
+- Decision: Treat failed Colab repo update as blocking.
+  Rationale: The user is iterating on runtime fixes from GitHub; continuing with stale code makes repeated Colab failures ambiguous.
+  Date/Author: 2026-06-29, Codex/GPT-5.
+- Decision: Install only the base packages required by the medical local endpoint path and rely on provider stubs for unused native provider SDKs.
+  Rationale: Reduces dependency resolver churn in Colab while preserving imports for the shared benchmark module.
+  Date/Author: 2026-06-29, Codex/GPT-5.
+- Decision: Watch the launched server process while waiting for `/models`.
+  Rationale: Import errors, OOMs, and wheel mismatches should return the server log immediately instead of waiting for the full readiness timeout.
+  Date/Author: 2026-06-29, Codex/GPT-5.
 
 ## Revision Notes
 
@@ -122,6 +144,7 @@ Current state (2026-06-27 09:31 +05:30, Codex/GPT-5): The same `libcudart.so.13`
 - v4 (2026-06-27, Codex/GPT-5): Recorded Colab pip dependency conflicts and removed forced package upgrades from the dependency cell.
 - v5 (2026-06-27, Codex/GPT-5): Recorded vLLM CUDA wheel mismatch and pinned the notebook to explicit CUDA-12.9 vLLM plus T4-safe smoke settings.
 - v6 (2026-06-27, Codex/GPT-5): Added stale-vLLM uninstall and immediate import verification after the CUDA-12.9 wheel install.
+- v7 (2026-06-29, Codex/GPT-5): Audited and hardened the Colab path against stale checkouts, unused provider dependency installs, import-order fragility, and slow server-startup failures.
 
 ## Outcomes & Retrospective
 

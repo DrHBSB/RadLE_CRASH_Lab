@@ -313,6 +313,7 @@ def start_model_server(
         log_path = pathlib.Path(log_path)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_handle = open(log_path, "w", encoding="utf-8")
+        print("$ " + " ".join(command), file=log_handle, flush=True)
         stdout = log_handle
         stderr = subprocess.STDOUT
 
@@ -347,6 +348,9 @@ def wait_for_openai_server(
     base_url: str = DEFAULT_BASE_URL,
     timeout_seconds: float = 900.0,
     poll_seconds: float = 5.0,
+    process=None,
+    log_path: str | os.PathLike | None = None,
+    log_tail_lines: int = 120,
 ) -> dict:
     """Wait until an OpenAI-compatible /models endpoint responds."""
     deadline = time.time() + timeout_seconds
@@ -354,6 +358,13 @@ def wait_for_openai_server(
     last_error = ""
 
     while time.time() < deadline:
+        if process is not None and process.poll() is not None:
+            log_tail = read_log_tail(log_path, lines=log_tail_lines) if log_path else ""
+            raise RuntimeError(
+                "OpenAI-compatible server exited before readiness "
+                f"with code {process.returncode}.\n"
+                f"Last server log lines:\n{log_tail}"
+            )
         try:
             with urllib.request.urlopen(models_url, timeout=10) as response:
                 payload = json.loads(response.read().decode("utf-8"))
