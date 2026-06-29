@@ -20,6 +20,8 @@ Current state (2026-06-27 09:31 +05:30, Codex/GPT-5): The same `libcudart.so.13`
 
 Current state (2026-06-29 15:58 +05:30, Codex/GPT-5): After creating the `radle-t4-fallback` Colab Enterprise template, the notebook was audited once more for top-to-bottom T4/Enterprise robustness. Cell 1 now refuses to continue on a stale Git checkout and masks tokenized Git URLs, cell 2 no longer installs unused native Anthropic/Gemini SDKs, cell 3 imports through the medical helper so provider stubs are active, and cell 6 detects a dead vLLM/SGLang server process immediately with log-tail context.
 
+Current state (2026-06-29 16:09 +05:30, Codex/GPT-5): After the user hit `drive.mount("/content/drive")` directly in Colab Enterprise, the notebook now makes Enterprise storage handling explicit in its opening markdown and cell 4. Standard Colab can still mount Drive, but Enterprise never falls back to `/content/drive`; it checks a local/copied dataset root, honors `DATASET_ROOT_OVERRIDE`/`RADLE_DATASET_ROOT`, and can copy `RadLE v2 Master Data` from a private `RADLE_DATASET_GCS_URI`.
+
 ## Locked Facts
 
 - Official benchmark logic stays in `src/radle_benchmark.py`.
@@ -40,6 +42,7 @@ Current state (2026-06-29 15:58 +05:30, Codex/GPT-5): After creating the `radle-
 - Cell 2 should remove stale vLLM installations before installing the explicit CUDA-12.9 wheel, then verify vLLM imports before proceeding.
 - Cell 1 must not silently continue with stale code after a failed `git pull`; Colab smoke tests must run against the pushed repo commit.
 - Cell 6 must watch the launched server process and fail immediately with log context if the server exits before `/models` is ready.
+- Cell 4 must not append or probe the default `/content/drive` dataset path when `VERTEX_PRODUCT=COLAB_ENTERPRISE`; Enterprise storage must be local, mounted, or copied from a private GCS URI.
 
 ## Do Not Revisit
 
@@ -69,6 +72,7 @@ Current state (2026-06-29 15:58 +05:30, Codex/GPT-5): After creating the `radle-
 - [x] (2026-06-29 15:58 +05:30, Codex/GPT-5) Audited the Colab notebook for stale-checkout, dependency-churn, import-order, and server-startup failure modes, then patched cells 1, 2, 3, and 6.
 - [x] (2026-06-29 15:58 +05:30, Codex/GPT-5) Patched `wait_for_openai_server(...)` to accept the launched process and log path, raising immediately with the server log tail when vLLM/SGLang exits before readiness.
 - [x] (2026-06-29 15:58 +05:30, Codex/GPT-5) Validated with notebook JSON checks, `py_compile`, vLLM command-shape check, fake-client one-case CSV smoke, and a dead-server fast-fail test.
+- [x] (2026-06-29 16:09 +05:30, Codex/GPT-5) Hardened cell 4 against accidental Enterprise Drive use and added optional private-GCS dataset staging through `RADLE_DATASET_GCS_URI`.
 
 ## Surprises & Discoveries
 
@@ -135,6 +139,9 @@ Current state (2026-06-29 15:58 +05:30, Codex/GPT-5): After creating the `radle-
 - Decision: Watch the launched server process while waiting for `/models`.
   Rationale: Import errors, OOMs, and wheel mismatches should return the server log immediately instead of waiting for the full readiness timeout.
   Date/Author: 2026-06-29, Codex/GPT-5.
+- Decision: Keep standard Colab Drive mounting only on non-Enterprise runtimes and treat Enterprise dataset staging as an explicit local/GCS configuration.
+  Rationale: `google.colab.drive.mount()` is unsupported in Colab Enterprise, and probing `/content/drive` there hides the real storage action the user must take.
+  Date/Author: 2026-06-29, Codex/GPT-5.
 
 ## Revision Notes
 
@@ -145,6 +152,7 @@ Current state (2026-06-29 15:58 +05:30, Codex/GPT-5): After creating the `radle-
 - v5 (2026-06-27, Codex/GPT-5): Recorded vLLM CUDA wheel mismatch and pinned the notebook to explicit CUDA-12.9 vLLM plus T4-safe smoke settings.
 - v6 (2026-06-27, Codex/GPT-5): Added stale-vLLM uninstall and immediate import verification after the CUDA-12.9 wheel install.
 - v7 (2026-06-29, Codex/GPT-5): Audited and hardened the Colab path against stale checkouts, unused provider dependency installs, import-order fragility, and slow server-startup failures.
+- v8 (2026-06-29, Codex/GPT-5): Made Enterprise dataset staging explicit, added `RADLE_DATASET_GCS_URI`, and blocked accidental `/content/drive` use on Colab Enterprise.
 
 ## Outcomes & Retrospective
 
