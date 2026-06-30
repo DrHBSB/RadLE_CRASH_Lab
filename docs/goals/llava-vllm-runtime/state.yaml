@@ -87,7 +87,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/llava-vllm-runtime/"
     command: "node C:/Users/thehb/.agents/skills/goalbuddy/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/llava-vllm-runtime"
 
-active_task: T010
+active_task: T012
 
 tasks:
   - id: T001
@@ -423,13 +423,84 @@ tasks:
   - id: T010
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Review the next returned vLLM notebook GUI smoke evidence or first visible error after the T009 direct correction."
     inputs:
       - "T009 Antigravity correction response"
       - "User-pasted or screenshot evidence from notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
       - "Cell 9/#4 config, cell 11/#6 server, and cell 12/#6.5 smoke outputs or the first visible error"
+    constraints:
+      - "Do not implement."
+      - "Reject evidence from the SGLang notebook."
+      - "Reject server readiness alone, token-count growth alone, blank output, one-token output, prompt echo, <image>/image> echo, non-JSON output, missing diagnosis, I don't know, placeholder diagnosis, or invalid likert_score."
+      - "Do not approve the full 200-case run unless the non-writing smoke gate evidence is sufficient."
+      - "If a real code/notebook defect is visible, prepare the next Antigravity edit/push packet with exact error evidence and require commit plus push."
+    expected_output:
+      - "Decision: proceed to full-run GUI instruction, request GUI rerun, request Antigravity edit, or blocked."
+      - "Rationale tied to exact returned vLLM cell outputs or error text."
+      - "Next packet or task if not complete."
+    receipt:
+      result: done
+      decision: request_gui_run
+      full_outcome_complete: false
+      note: "notes/T010-vllm-open-no-output-review.md"
+      rationale: "The correct LLaVA-vLLM notebook is now open, but no runtime evidence is present. The GUI shows Select Kernel and cell 1 of 19; static notebook JSON shows all code cells have empty execution_count and outputs=0."
+      evidence:
+        - "Screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t010-gui-review-20260701-032205.png"
+        - "Screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t010-vllm-open-readonly-20260701-032335.png"
+        - "Visible active notebook after read-only open: RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
+        - "Notebook JSON summary: 19 cells; all code cells execution_count empty and outputs=0."
+      missing_evidence:
+        - "Selected/restarted kernel evidence."
+        - "Section #4 config output."
+        - "Section #6 vLLM server output and /v1/models response."
+        - "Section #6.5 raw smoke response, parsed diagnosis, and valid likert_score."
+        - "Confirmation Section #7 was not run."
+      required_board_updates:
+        - "Activate T011 to restate the exact GUI run instruction for the now-open vLLM notebook."
+
+  - id: T011
+    type: pm
+    assignee: PM
+    status: done
+    reasoning_hint: medium
+    objective: "Restate the exact GUI run instruction now that the correct vLLM notebook is open but has no outputs."
+    inputs:
+      - "T010 vLLM notebook evidence review"
+      - "Screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t010-vllm-open-readonly-20260701-032335.png"
+    constraints:
+      - "Do not claim runtime success."
+      - "Do not ask for or approve the full 200-case run yet."
+      - "Do not request product edits unless a real vLLM notebook/code error is returned."
+      - "Tell the user/GUI path to stop before Section 7."
+    expected_output:
+      - "Exact GUI instruction for the now-open vLLM notebook."
+      - "Evidence fields required for next Judge review."
+      - "Next active evidence-review task."
+    receipt:
+      result: done
+      note: "notes/T011-vllm-gui-run-instruction.md"
+      summary: "Restated the GUI-only instruction for the now-open LLaVA-vLLM notebook: select/restart kernel, clear outputs, run only through Section 6.5, stop before Section 7, and return either the first real error or the Section #4/#6/#6.5 evidence."
+      evidence_requested:
+        - "Active vLLM notebook title/path."
+        - "Kernel identity after selection/restart."
+        - "Section #4 model/server/run config output."
+        - "Section #6 vLLM startup and /v1/models output."
+        - "Section #6.5 raw smoke response plus parsed diagnosis and likert_score."
+        - "Confirmation Section #7 was not run."
+      next_active_task: T012
+
+  - id: T012
+    type: judge
+    assignee: Judge
+    status: active
+    reasoning_hint: high
+    objective: "Review the next returned vLLM GUI outputs or first real error after the now-open notebook is run through Section 6.5."
+    inputs:
+      - "T011 GUI run instruction"
+      - "User-pasted or screenshot evidence from the open notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
+      - "Section #4, #6, and #6.5 outputs or the first visible error"
     constraints:
       - "Do not implement."
       - "Reject evidence from the SGLang notebook."
@@ -469,10 +540,9 @@ checks:
   dirty_fingerprint: unknown
   last_verification:
     result: pass
-    task: T009
+    task: T011
     commands:
-      - "Reviewed screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t008-gui-review-20260701-031418.png"
-      - "Confirmed visible active notebook remains RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb"
-      - "Rejected evidence because no vLLM notebook cell 9/11/12 output or first-error text was visible"
-      - "Sent direct correction to Antigravity Codex panel"
-      - "Reviewed screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t009-extension-response-20260701-031750.png"
+      - "Opened notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb read-only in Antigravity GUI"
+      - "Reviewed screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t010-vllm-open-readonly-20260701-032335.png"
+      - "Summarized notebook JSON outputs: all code cells execution_count empty and outputs=0"
+      - "Prepared GUI-only run instruction notes/T011-vllm-gui-run-instruction.md"
