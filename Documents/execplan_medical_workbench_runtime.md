@@ -12,7 +12,7 @@ This plan exists so a fresh agent can continue the model sequence without relyin
 
 ## Current State
 
-Current state (2026-06-30 18:57 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-case Workbench run is complete, promoted, synced to GCS, and downloaded locally under `results/medgemma_1_5_4b_medical_full_200_cases/`. The Workbench notebook now defaults to `llava_med_mistral_7b` for the next full 200-case run while preserving `RUN_LABEL_BASE = "medical_full_200_cases"`, model-scoped `RUN_ID`, `TEST_LIMIT = None`, `RESUME = True`, `EXPECTED_FULL_CASES = 200`, `EXPECTED_FULL_IMAGES = 263`, and `MAX_OUTPUT_TOKENS = 2048`. Local validation passed: helper modules compile, the notebook parses, all 16 code cells compile, and config extraction prints `llava_med_mistral_7b_medical_full_200_cases`. Next: pull latest `main` on Workbench, restart the kernel, reload the notebook from disk, and run top-to-bottom.
+Current state (2026-06-30 19:41 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-case Workbench run is complete, promoted, synced to GCS, and downloaded locally under `results/medgemma_1_5_4b_medical_full_200_cases/`. The attempted `llava_med_mistral_7b` vLLM run failed the live Workbench server-readiness gate because vLLM 0.23.0 / Transformers did not recognize `model_type=llava_mistral`. Do not pivot to OctoMed without asking the user. The main Workbench notebook remains the normal notebook, and a separate LLaVA-specific copy now exists at `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb`; that copy selects `llava_med_mistral_7b`, uses `SERVER_ENGINE = "sglang"`, probes for SGLang `LlavaMistralForCausalLM` support after install, and keeps `RUN_LABEL_BASE = "medical_full_200_cases"`, model-scoped `RUN_ID`, `TEST_LIMIT = None`, `RESUME = True`, `EXPECTED_FULL_CASES = 200`, `EXPECTED_FULL_IMAGES = 263`, and `MAX_OUTPUT_TOKENS = 2048`. Next: pull latest `main` on Workbench, restart the kernel, reload/open the LLaVA SGLang notebook copy from disk, and run its cells top-to-bottom.
 
 ## Locked Facts
 
@@ -26,7 +26,9 @@ Current state (2026-06-30 18:57 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
 - The full medical benchmark expects 200 grouped cases and 263 image files.
 - Run IDs must be model-scoped: `RUN_ID = f"{SELECTED_MODEL_NAME}_{RUN_LABEL_BASE}"`.
 - For full runs, `RUN_LABEL_BASE = "medical_full_200_cases"`, `TEST_LIMIT = None`, and `RESUME = True`.
-- The next prepared full-run model is `llava_med_mistral_7b`, using run ID `llava_med_mistral_7b_medical_full_200_cases`.
+- `llava_med_mistral_7b` is not a supported Workbench vLLM target in the pinned runtime: vLLM 0.23.0 exited before readiness because Transformers did not recognize `model_type=llava_mistral`.
+- Do not pivot to OctoMed without explicit user approval; the current task is to make LLaVA-Med work.
+- The LLaVA-specific notebook copy is `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb`, using run ID `llava_med_mistral_7b_medical_full_200_cases`.
 - The completed baseline run is `medgemma_1_5_4b_medical_full_200_cases`.
 - The completed baseline provenance commit is `f7204264d120df37767f22b58ffd6c87e11b21a4`.
 - The completed baseline local final CSV is `results/medgemma_1_5_4b_medical_full_200_cases/final/RadLE_v2_results_final.csv`.
@@ -37,7 +39,7 @@ Current state (2026-06-30 18:57 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
 - The local result folder contains 109 downloaded files and 93 raw backups for the completed baseline.
 - The existing image grouping logic groups companion images such as `50.1.png` and `50.2.png`; do not rewrite grouping without concrete failing evidence.
 - `/mnt/disks/models_ssd` was not mounted during the baseline run; the home-disk fallback worked and is acceptable.
-- MedGemma required `MODEL_DTYPE = "bfloat16"`; the notebook currently uses `bfloat16` for MedGemma and `float16` for other roster models.
+- MedGemma required `MODEL_DTYPE = "bfloat16"`; LLaVA-Med stays on `float16`.
 
 ## Do Not Revisit
 
@@ -65,7 +67,10 @@ Current state (2026-06-30 18:57 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
 - [x] (2026-06-30 18:56 +05:30, Codex/GPT-5) Inspected `src/radle_medical_custom_runtime.py` and `notebooks/RadLE_Medical_Workbench_Runtime.ipynb`; verified roster order is `medgemma_1_5_4b`, `llava_med_mistral_7b`, `internvl3_5_8b`, `octomed_7b`.
 - [x] (2026-06-30 18:57 +05:30, Codex/GPT-5) Updated only `notebooks/RadLE_Medical_Workbench_Runtime.ipynb` defaults to select `llava_med_mistral_7b`; all full-run guardrails remained unchanged.
 - [x] (2026-06-30 18:57 +05:30, Codex/GPT-5) Ran local sanity checks: `py_compile` on helper modules, notebook JSON parse, all 16 code cells compiled, extracted config matched the expected LLaVA-Med full-run values, and `git diff --check` exited 0.
-- [ ] (next Workbench session, user/Codex) Pull latest `main` on Workbench, restart kernel, reload notebook from disk, run cells top-to-bottom, and audit actual files before promoting or syncing.
+- [x] (2026-06-30 19:04 +05:30, user on Workbench) Tried the committed LLaVA-Med vLLM path; config printed 200 cases, 263 images, model-scoped run ID, and `MAX_OUTPUT_TOKENS=2048`, but vLLM exited before readiness with `model_type=llava_mistral` unrecognized by Transformers.
+- [x] (2026-06-30 19:41 +05:30, Codex/GPT-5) Rejected the OctoMed pivot after user correction, restored the main notebook to the normal committed path, created `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb`, and made that copy the isolated LLaVA/SGLang experiment.
+- [x] (2026-06-30 19:43 +05:30, Codex/GPT-5) Validated the LLaVA copy locally: both Workbench notebooks parse and compile, helper modules compile, copied notebook extracts `SERVER_ENGINE=sglang`, selected model `llava_med_mistral_7b`, run ID `llava_med_mistral_7b_medical_full_200_cases`, `TEST_LIMIT=None`, `RESUME=True`, expected 200 cases, expected 263 images, and `MAX_OUTPUT_TOKENS=2048`.
+- [ ] (next Workbench session, user/Codex) Pull latest `main` on Workbench, restart kernel, open/reload `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb` from disk, run cells top-to-bottom, and audit actual files before promoting or syncing.
 
 ## Surprises & Discoveries
 
@@ -88,6 +93,10 @@ Current state (2026-06-30 18:57 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
 - Observation: The previous Workbench ExecPlan was not maintained during the full baseline run, so it became stale even though the run itself succeeded.
   Evidence: Before this revision, `Current State` still asked for a live GPU smoke and did not mention the completed 200-case MedGemma run.
   Date/Author: 2026-06-30, Codex/GPT-5
+
+- Observation: LLaVA-Med cannot be made to work by simply rerunning the vLLM server cell in the pinned Workbench runtime.
+  Evidence: Workbench vLLM 0.23.0 server exited before readiness for `microsoft/llava-med-v1.5-mistral-7b` with `Value error, The checkpoint you are trying to load has model type llava_mistral but Transformers does not recognize this architecture.`
+  Date/Author: 2026-06-30, user and Codex/GPT-5
 
 ## Decision Log
 
@@ -115,6 +124,10 @@ Current state (2026-06-30 18:57 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
   Rationale: Current file inspection shows the helper-module roster order is `medgemma_1_5_4b`, then `llava_med_mistral_7b`, then `internvl3_5_8b`, then `octomed_7b`. The local model config does not mark LLaVA-Med as gated and does not override the default max output token policy.
   Date/Author: 2026-06-30, Codex/GPT-5
 
+- Decision: Keep LLaVA-Med as the target and isolate its serving workaround in a copied notebook instead of pivoting to OctoMed.
+  Rationale: The user explicitly rejected moving to OctoMed before asking. The LLaVA-Med failure is a serving-stack issue, not a dataset/run-contract issue, so a separate copy lets the project try LLaVA-specific SGLang or native-adapter changes without contaminating the normal Workbench notebook for the other roster models.
+  Date/Author: 2026-06-30, user and Codex/GPT-5
+
 - Decision: Stay on `main` in the local checkout unless the next model change expands beyond notebook/doc defaults.
   Rationale: The user is using `git pull` directly on Workbench. A short, reviewed commit to `main` keeps the remote execution path simple.
   Date/Author: 2026-06-30, Codex/GPT-5
@@ -125,12 +138,13 @@ Current state (2026-06-30 18:57 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
 - v4 (2026-06-30, Codex/GPT-5): Rewrote the plan after the completed MedGemma full run. Added verified baseline artifacts, GCS/local evidence, next-model workflow, repair lessons, and stricter acceptance rules so a fresh session can resume without chat history.
 - v5 (2026-06-30, Codex/GPT-5): Replaced the generic skills table with an operational skill-routing matrix that names triggers, evidence requirements, non-use cases, and activation mode for each phase.
 - v6 (2026-06-30, Codex/GPT-5): Recorded `llava_med_mistral_7b` as the next prepared full-run model, updated validation receipts, and shifted the next action to Workbench execution.
+- v7 (2026-06-30, Codex/GPT-5): Reconciled the live vLLM failure and user correction. Recorded that LLaVA remains the target, OctoMed requires explicit approval, and the LLaVA workaround now lives in `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb`.
 
 ## Outcomes & Retrospective
 
 Completed outcome: the Workbench medical path has produced one verified full 200-case baseline for `medgemma_1_5_4b`. The run has a model-scoped folder in GCS, a downloaded local mirror, final/private CSV with matching SHA-256, public release tables, scorer view, raw backups, repair artifacts, runtime logs, and provenance JSON.
 
-Remaining work: run `llava_med_mistral_7b` through the same controlled Workbench sequence. The next Workbench session should rely on the notebook's guardrails: expected 200 cases, expected 263 image files, resume enabled, audit before repair, no promotion with repair targets, export/sync only after a clean audit.
+Remaining work: run `llava_med_mistral_7b` from the copied LLaVA SGLang notebook. The next Workbench session should rely on the notebook's guardrails: expected 200 cases, expected 263 image files, resume enabled, audit before repair, no promotion with repair targets, export/sync only after a clean audit.
 
 Reusable lesson: for VM-hosted benchmark runs, artifact readiness should be proven by independent storage and file audits, not by notebook logs. This is broadly reusable, but no global skill update has been made. Ask the user before promoting it into a reusable skill.
 
@@ -333,6 +347,24 @@ Next-model prep local validation transcript from 2026-06-30:
     expected_cases: 200
     expected_image_files: 263
     max_output_tokens: 2048
+
+LLaVA SGLang copy local validation transcript from 2026-06-30:
+
+    compiled notebooks\RadLE_Medical_Workbench_Runtime.ipynb 16
+    compiled notebooks\RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb 16
+    llava_copy_selected_model: llava_med_mistral_7b
+    llava_copy_server_engine: sglang
+    llava_copy_run_id: llava_med_mistral_7b_medical_full_200_cases
+    llava_copy_test_limit: None
+    llava_copy_resume: True
+    llava_copy_expected_cases: 200
+    llava_copy_expected_images: 263
+    llava_copy_max_output_tokens: 2048
+
+Internet research notes for the LLaVA copy:
+
+    Microsoft LLaVA-Med README documents the native LLaVA-Med serving path with controller/model_worker and `--model-path microsoft/llava-med-v1.5-mistral-7b`.
+    Current SGLang source registers `LlavaMistralForCausalLM` in `sglang.srt.models.llava`, so the copied notebook probes for that class immediately after SGLang install.
 
 Important user preference:
 
