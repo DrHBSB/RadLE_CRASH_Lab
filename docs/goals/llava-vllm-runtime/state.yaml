@@ -87,7 +87,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/llava-vllm-runtime/"
     command: "node C:/Users/thehb/.agents/skills/goalbuddy/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/llava-vllm-runtime"
 
-active_task: T008
+active_task: T010
 
 tasks:
   - id: T001
@@ -353,7 +353,7 @@ tasks:
   - id: T008
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Review the next returned LLaVA-vLLM GUI smoke evidence or first visible error after T007."
     inputs:
@@ -369,6 +369,76 @@ tasks:
     expected_output:
       - "Decision: proceed to full-run GUI instruction, request GUI rerun, request Antigravity edit, or blocked."
       - "Rationale tied to the exact returned cell outputs or error text."
+      - "Next packet or task if not complete."
+    receipt:
+      result: done
+      decision: request_gui_rerun
+      full_outcome_complete: false
+      note: "notes/T008-gui-evidence-review.md"
+      rationale: "The latest screenshot still shows RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb as the active notebook. There is no vLLM notebook cell 9, cell 11, or cell 12 output and no first-error traceback to route to the editor."
+      evidence:
+        - "Screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t008-gui-review-20260701-031418.png"
+        - "Visible active notebook title/tab: RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb"
+        - "No visible vLLM /v1/models response, raw smoke response, parsed diagnosis, likert_score, or smoke pass line."
+      missing_evidence:
+        - "Active notebook path notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb."
+        - "Cell 9 config output from the vLLM notebook."
+        - "Cell 11 server evidence and /v1/models response."
+        - "Cell 12 non-writing smoke output with clinical diagnosis and likert_score."
+        - "Confirmation Section 7/cell 13 was not run."
+      required_board_updates:
+        - "Activate T009 to send a direct correction into the Antigravity side and keep waiting for vLLM notebook evidence."
+
+  - id: T009
+    type: pm
+    assignee: PM
+    status: done
+    reasoning_hint: medium
+    objective: "Send a direct correction into the Antigravity side after T008 again found SGLang, not vLLM, evidence."
+    inputs:
+      - "T008 GUI evidence review"
+      - "notes/T007-vllm-gui-smoke-instruction.md"
+      - "Screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t008-gui-review-20260701-031418.png"
+    constraints:
+      - "Do not claim runtime success."
+      - "Do not ask for or approve the full 200-case run yet."
+      - "Do not request product edits unless a real vLLM notebook error is returned."
+      - "Tell the Antigravity side that fixes require commit and push."
+    expected_output:
+      - "Direct message or instruction sent to the Antigravity side."
+      - "Screenshot or receipt showing the correction was sent."
+      - "Next active evidence-review task."
+    receipt:
+      result: done
+      note: "notes/T009-antigravity-correction-response.md"
+      summary: "Sent a direct correction into the Antigravity Codex panel. The extension acknowledged, made no product edits, restated the vLLM notebook GUI evidence request, kept weak evidence rejected, and reported branch codex/llava-vllm-runtime at HEAD 141b49c."
+      evidence:
+        - "Submitted correction screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t009-correction-post-click-20260701-031646.png"
+        - "Extension response screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t009-extension-response-20260701-031750.png"
+        - "Extension response says no product edits were made."
+        - "Extension response says current pushed branch is codex/llava-vllm-runtime, HEAD 141b49c."
+      runtime_claims: "none; GUI vLLM smoke evidence is still required"
+      next_active_task: T010
+
+  - id: T010
+    type: judge
+    assignee: Judge
+    status: active
+    reasoning_hint: high
+    objective: "Review the next returned vLLM notebook GUI smoke evidence or first visible error after the T009 direct correction."
+    inputs:
+      - "T009 Antigravity correction response"
+      - "User-pasted or screenshot evidence from notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
+      - "Cell 9/#4 config, cell 11/#6 server, and cell 12/#6.5 smoke outputs or the first visible error"
+    constraints:
+      - "Do not implement."
+      - "Reject evidence from the SGLang notebook."
+      - "Reject server readiness alone, token-count growth alone, blank output, one-token output, prompt echo, <image>/image> echo, non-JSON output, missing diagnosis, I don't know, placeholder diagnosis, or invalid likert_score."
+      - "Do not approve the full 200-case run unless the non-writing smoke gate evidence is sufficient."
+      - "If a real code/notebook defect is visible, prepare the next Antigravity edit/push packet with exact error evidence and require commit plus push."
+    expected_output:
+      - "Decision: proceed to full-run GUI instruction, request GUI rerun, request Antigravity edit, or blocked."
+      - "Rationale tied to exact returned vLLM cell outputs or error text."
       - "Next packet or task if not complete."
     receipt: null
 
@@ -399,9 +469,10 @@ checks:
   dirty_fingerprint: unknown
   last_verification:
     result: pass
-    task: T007
+    task: T009
     commands:
-      - "Reviewed screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t006-gui-review-20260701-030931.png"
+      - "Reviewed screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t008-gui-review-20260701-031418.png"
       - "Confirmed visible active notebook remains RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb"
-      - "Confirmed branch origin HEAD at 3d4f929 and no goal-folder diff before this board update"
-      - "Prepared GUI-only instruction notes/T007-vllm-gui-smoke-instruction.md"
+      - "Rejected evidence because no vLLM notebook cell 9/11/12 output or first-error text was visible"
+      - "Sent direct correction to Antigravity Codex panel"
+      - "Reviewed screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t009-extension-response-20260701-031750.png"
