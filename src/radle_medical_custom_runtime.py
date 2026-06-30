@@ -58,7 +58,7 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
 DEFAULT_BASE_URL = f"http://{DEFAULT_HOST}:{DEFAULT_PORT}/v1"
 DEFAULT_CACHE_ROOT = "/content/radle_runtime_cache"
-MEDICAL_MAX_OUTPUT_TOKENS = 1024
+MEDICAL_MAX_OUTPUT_TOKENS = 2048
 
 
 def _path_is_writable(path: pathlib.Path) -> bool:

@@ -585,7 +585,7 @@ def apply_no_paid_cleanup_to_cell(df, df_idx, model_name, info):
     return True
 
 
-def build_no_paid_cleanup_plan(df, models=None):
+def build_no_paid_cleanup_plan(df, models=None, max_output_tokens=MAX_OUTPUT_TOKENS):
     """Build a dataframe of cells that can be repaired from raw text without API calls."""
     if "Master_Case_ID" not in df.columns:
         raise ValueError("Benchmark dataframe must contain Master_Case_ID.")
@@ -595,7 +595,12 @@ def build_no_paid_cleanup_plan(df, models=None):
     for _, row in df.iterrows():
         case_id = normalize_case_id(row["Master_Case_ID"])
         for model_name in model_names:
-            info = classify_cell_for_audit(row, model_name, attempts=0)
+            info = classify_cell_for_audit(
+                row,
+                model_name,
+                attempts=0,
+                max_output_tokens=max_output_tokens,
+            )
             if info.get("bucket") != "no_paid_cleanup":
                 continue
 
@@ -620,7 +625,7 @@ def build_no_paid_cleanup_plan(df, models=None):
     return pd.DataFrame(rows)
 
 
-def apply_no_paid_cleanups(df, models=None, verbose=False):
+def apply_no_paid_cleanups(df, models=None, verbose=False, max_output_tokens=MAX_OUTPUT_TOKENS):
     """Apply all no-paid cleanup candidates in-place and return the number changed."""
     model_names = model_names_from_models(models)
     cleanup_count = 0
@@ -629,7 +634,12 @@ def apply_no_paid_cleanups(df, models=None, verbose=False):
         row = df.loc[df_idx]
         case_id = normalize_case_id(row["Master_Case_ID"]) if "Master_Case_ID" in row.index else ""
         for model_name in model_names:
-            info = classify_cell_for_audit(row, model_name, attempts=0)
+            info = classify_cell_for_audit(
+                row,
+                model_name,
+                attempts=0,
+                max_output_tokens=max_output_tokens,
+            )
             if apply_no_paid_cleanup_to_cell(df, df_idx, model_name, info):
                 cleanup_count += 1
                 if verbose:
@@ -958,7 +968,13 @@ def _audit_call_log_tables(call_log_df, audit_df):
     return result
 
 
-def audit_benchmark_output(raw_csv, models=None, call_log_csv=None, expected_case_ids=None):
+def audit_benchmark_output(
+    raw_csv,
+    models=None,
+    call_log_csv=None,
+    expected_case_ids=None,
+    max_output_tokens=MAX_OUTPUT_TOKENS,
+):
     """Read-only audit of benchmark output quality. Performs no writes or API calls."""
     if not os.path.exists(raw_csv):
         raise FileNotFoundError(f"Raw CSV not found: {raw_csv}")
@@ -979,7 +995,12 @@ def audit_benchmark_output(raw_csv, models=None, call_log_csv=None, expected_cas
 
         for model_name in model_names:
             attempts = get_repair_attempts_from_log(call_log_df, case_id, model_name)
-            info = classify_cell_for_audit(row, model_name, attempts=attempts)
+            info = classify_cell_for_audit(
+                row,
+                model_name,
+                attempts=attempts,
+                max_output_tokens=max_output_tokens,
+            )
 
             raw = safe_str(row.get(f"Raw_Response_{model_name}", ""))
             completion_tokens = get_token_value(row, model_name, "Total_Tokens_Out")
@@ -1005,7 +1026,7 @@ def audit_benchmark_output(raw_csv, models=None, call_log_csv=None, expected_cas
                 "prompt_tokens": get_token_value(row, model_name, "Prompt_Tokens"),
                 "reasoning_tokens": get_token_value(row, model_name, "Reasoning_Tokens"),
                 "raw_len": len(raw.strip()),
-                "hit_max_tokens": completion_tokens >= MAX_OUTPUT_TOKENS,
+                "hit_max_tokens": completion_tokens >= max_output_tokens,
                 "raw_preview": compact_text(raw)[:300],
                 "rescued_diag": info.get("rescued_diag", ""),
                 "rescued_likert": info.get("rescued_likert", ""),
@@ -1538,7 +1559,13 @@ def assert_schema_stable(df, reference_columns, context=""):
         )
 
 
-def build_repair_plan(df, models=None, repair_log_df=None, image_index=None):
+def build_repair_plan(
+    df,
+    models=None,
+    repair_log_df=None,
+    image_index=None,
+    max_output_tokens=MAX_OUTPUT_TOKENS,
+):
     """Build a dataframe of case-model cells eligible for targeted repair."""
     if "Master_Case_ID" not in df.columns:
         raise ValueError("Benchmark dataframe must contain Master_Case_ID.")
@@ -1553,7 +1580,12 @@ def build_repair_plan(df, models=None, repair_log_df=None, image_index=None):
         case_id = str(row["Master_Case_ID"])
         for model_name, model in model_by_name.items():
             attempts = get_repair_attempts_from_log(repair_log_df, case_id, model_name)
-            info = classify_cell_for_audit(row, model_name, attempts=attempts)
+            info = classify_cell_for_audit(
+                row,
+                model_name,
+                attempts=attempts,
+                max_output_tokens=max_output_tokens,
+            )
             if not info.get("needs_api_repair"):
                 continue
 
@@ -1653,12 +1685,17 @@ def run_targeted_repair(
     models = models or MODELS
     model_by_name = {m["name"]: m for m in models}
 
-    no_paid_cleanup_plan_df = build_no_paid_cleanup_plan(df_repair, models=models)
+    no_paid_cleanup_plan_df = build_no_paid_cleanup_plan(
+        df_repair,
+        models=models,
+        max_output_tokens=max_output_tokens,
+    )
     repair_plan_df = build_repair_plan(
         df_repair,
         models=models,
         repair_log_df=repair_log_df,
         image_index=image_index,
+        max_output_tokens=max_output_tokens,
     )
 
     print("")
@@ -1691,7 +1728,12 @@ def run_targeted_repair(
             "repair_plan_csv": repair_plan_csv,
         }
 
-    no_paid_cleanups_applied = apply_no_paid_cleanups(df_repair, models=models, verbose=True)
+    no_paid_cleanups_applied = apply_no_paid_cleanups(
+        df_repair,
+        models=models,
+        verbose=True,
+        max_output_tokens=max_output_tokens,
+    )
     if no_paid_cleanups_applied:
         print(f"No-API cleanups applied: {no_paid_cleanups_applied}")
         repair_plan_df = build_repair_plan(
@@ -1699,6 +1741,7 @@ def run_targeted_repair(
             models=models,
             repair_log_df=repair_log_df,
             image_index=image_index,
+            max_output_tokens=max_output_tokens,
         )
 
     atomic_to_csv(repair_plan_df, repair_plan_csv)
@@ -1735,7 +1778,12 @@ def run_targeted_repair(
         while True:
             current_row = df_repair.loc[df_idx]
             attempts = get_repair_attempts_from_log(repair_log_df, case_id, model_name)
-            info = classify_cell_for_audit(current_row, model_name, attempts=attempts)
+            info = classify_cell_for_audit(
+                current_row,
+                model_name,
+                attempts=attempts,
+                max_output_tokens=max_output_tokens,
+            )
             if not info.get("needs_api_repair"):
                 print(f"SKIP already acceptable/exhausted: case {case_id} | {model_name} | {info.get('reason')}")
                 break
@@ -1865,6 +1913,7 @@ def run_targeted_repair(
                 df_repair.loc[df_idx],
                 model_name,
                 attempts=attempts_after,
+                max_output_tokens=max_output_tokens,
             )
             if apply_no_paid_cleanup_to_cell(df_repair, df_idx, model_name, post_info):
                 no_paid_cleanups_applied += 1
@@ -1872,6 +1921,7 @@ def run_targeted_repair(
                     df_repair.loc[df_idx],
                     model_name,
                     attempts=attempts_after,
+                    max_output_tokens=max_output_tokens,
                 )
             post_repair_status = post_info.get("reason", "")
 
@@ -1923,8 +1973,13 @@ def run_targeted_repair(
         models=models,
         repair_log_df=repair_log_df,
         image_index=image_index,
+        max_output_tokens=max_output_tokens,
     )
-    remaining_no_paid_cleanup_plan = build_no_paid_cleanup_plan(df_repair, models=models)
+    remaining_no_paid_cleanup_plan = build_no_paid_cleanup_plan(
+        df_repair,
+        models=models,
+        max_output_tokens=max_output_tokens,
+    )
 
     print("")
     print("Targeted repair chunk complete.")
@@ -2031,7 +2086,12 @@ def run_benchmark(
         for model in models:
             model_name = model["name"]
             row = df.loc[df_idx]
-            info = classify_cell_for_audit(row, model_name, attempts=0)
+            info = classify_cell_for_audit(
+                row,
+                model_name,
+                attempts=0,
+                max_output_tokens=max_output_tokens,
+            )
 
             if info.get("bucket") == "no_paid_cleanup":
                 if apply_no_paid_cleanup_to_cell(df, df_idx, model_name, info):
@@ -2219,6 +2279,7 @@ def build_public_case_model_table(
     run_id=None,
     case_prefix="case_",
     case_uid_map=None,
+    max_output_tokens=MAX_OUTPUT_TOKENS,
 ):
     """Build a public case-model table without diagnoses, raw responses, or image names."""
     if not os.path.exists(results_csv):
@@ -2236,7 +2297,12 @@ def build_public_case_model_table(
     for _, row in df.iterrows():
         case_id = normalize_case_id(row["Master_Case_ID"])
         for model_name in model_names:
-            info = classify_cell_for_audit(row, model_name, attempts=0)
+            info = classify_cell_for_audit(
+                row,
+                model_name,
+                attempts=0,
+                max_output_tokens=max_output_tokens,
+            )
             reason = info.get("reason", "")
             diagnosis = safe_str(row.get(f"Diagnosis_{model_name}", ""))
             likert = row.get(f"Likert_{model_name}", "")
@@ -2358,6 +2424,7 @@ def export_public_release_tables(
     call_log_csv=None,
     run_id=None,
     case_prefix="case_",
+    max_output_tokens=MAX_OUTPUT_TOKENS,
 ):
     """Write sanitized public release tables without answers or raw model text."""
     os.makedirs(output_dir, exist_ok=True)
@@ -2372,6 +2439,7 @@ def export_public_release_tables(
         run_id=run_id,
         case_prefix=case_prefix,
         case_uid_map=case_uid_map,
+        max_output_tokens=max_output_tokens,
     )
     summary_df = build_public_model_summary(case_model_df)
     call_log_df = build_public_sanitized_call_log(
