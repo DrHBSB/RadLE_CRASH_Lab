@@ -167,6 +167,7 @@ Current state (2026-06-30 21:09 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
 - v6 (2026-06-30, Codex/GPT-5): Recorded `llava_med_mistral_7b` as the next prepared full-run model, updated validation receipts, and shifted the next action to Workbench execution.
 - v7 (2026-06-30, Codex/GPT-5): Reconciled the live vLLM failure and user correction. Recorded that LLaVA remains the target, OctoMed requires explicit approval, and the LLaVA workaround now lives in `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb`.
 - v8 (2026-06-30, Codex/GPT-5): Recorded the SGLang torch/torchvision CUDA mismatch and patched the copied notebook to force reinstall the official PyTorch CUDA-13 trio before probing SGLang LLaVA support.
+- v9 (2026-06-30, Codex/GPT-5): Recorded the later LLaVA SGLang startup lessons: SGLang imports are not enough because `AutoConfig` parses first, `llava_mistral` must be registered as a Mistral-derived config with a concrete `pad_token_id`, and the server cell must rewrite/probe the runtime shim immediately before launch to avoid stale Workbench state.
 
 ## Outcomes & Retrospective
 
