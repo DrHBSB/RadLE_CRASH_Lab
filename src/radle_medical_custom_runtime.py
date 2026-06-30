@@ -162,11 +162,11 @@ MEDICAL_CUSTOM_RUNTIME_MODELS = [
     ),
     MedicalRuntimeModel(
         name="llava_med_mistral_7b",
-        model_id="microsoft/llava-med-v1.5-mistral-7b",
-        preferred_engine="sglang",
+        model_id="chaoyinshe/llava-med-v1.5-mistral-7b-hf",
+        preferred_engine="vllm",
         notes=(
-            "Biomedical LLaVA-Med Mistral 7B checkpoint; serve with SGLang "
-            "because Workbench vLLM 0.23.0 did not recognize model_type llava_mistral."
+            "HF-format LLaVA-Med Mistral 7B checkpoint for vLLM; "
+            "do not route the original Microsoft checkpoint through vLLM by config relabeling."
         ),
     ),
     MedicalRuntimeModel(
