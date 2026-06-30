@@ -60,6 +60,75 @@ DEFAULT_BASE_URL = f"http://{DEFAULT_HOST}:{DEFAULT_PORT}/v1"
 DEFAULT_CACHE_ROOT = "/content/radle_runtime_cache"
 
 
+def _path_is_writable(path: pathlib.Path) -> bool:
+    """Return True when path exists and a small temp file can be written."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".radle_write_probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except Exception:
+        return False
+
+
+def detect_runtime_root(env_var: str = "RADLE_RUNTIME_ROOT") -> pathlib.Path:
+    """Choose a writable runtime root for Colab, Workbench, or local runs."""
+    override = os.environ.get(env_var)
+    if override:
+        root = pathlib.Path(override).expanduser()
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+
+    candidates = [pathlib.Path("/content"), pathlib.Path.home(), pathlib.Path.cwd()]
+    for candidate in candidates:
+        if candidate.exists() and _path_is_writable(candidate):
+            return candidate
+
+    raise RuntimeError(
+        f"Could not find a writable runtime root. Set {env_var} to a writable path."
+    )
+
+
+def get_secret(name: str, *fallback_env_names: str) -> str | None:
+    """Read a secret from environment variables or Colab Secrets when available."""
+    names = (name, *fallback_env_names)
+    for env_name in names:
+        value = os.environ.get(env_name)
+        if value:
+            return value
+
+    try:
+        from google.colab import userdata
+    except Exception:
+        return None
+
+    for secret_name in names:
+        try:
+            value = userdata.get(secret_name)
+        except Exception:
+            value = None
+        if value:
+            return value
+    return None
+
+
+def is_colab_enterprise() -> bool:
+    """Return True when the notebook is running in Colab Enterprise."""
+    return os.environ.get("VERTEX_PRODUCT") == "COLAB_ENTERPRISE"
+
+
+def is_standard_colab() -> bool:
+    """Return True when standard Colab APIs appear available."""
+    if is_colab_enterprise():
+        return False
+    try:
+        import google.colab  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
 @dataclass(frozen=True)
 class MedicalRuntimeModel:
     """Configuration for one experimental medical/open VLM."""
@@ -101,6 +170,13 @@ MEDICAL_CUSTOM_RUNTIME_MODELS = [
         model_id="OpenGVLab/InternVL3_5-8B",
         preferred_engine="vllm",
         notes="Strong open general VLM control; not medical-specific.",
+    ),
+    MedicalRuntimeModel(
+        name="octomed_7b",
+        model_id="OctoMed/OctoMed-7B",
+        preferred_engine="vllm",
+        default_gpu_memory_utilization=0.8,
+        notes="Qwen2.5-VL-based open medical multimodal reasoning model.",
     ),
 ]
 
@@ -194,7 +270,40 @@ def _env_with_hf_token(hf_token: str | None = None) -> dict:
     if token:
         env["HF_TOKEN"] = token
         env["HUGGING_FACE_HUB_TOKEN"] = token
+
+    # Cloud Assist L4/G2 NCCL Stability Fixes
+    env.setdefault("NCCL_P2P_DISABLE", "1")
+    env.setdefault("NCCL_IB_DISABLE", "1")
+    env.setdefault("NCCL_DEBUG", "WARN")
+
     return env
+
+
+def verify_vllm_importable() -> None:
+    """Fail fast when the installed vLLM wheel does not match the runtime CUDA libs."""
+    command = [
+        sys.executable,
+        "-c",
+        (
+            "from vllm.platforms import current_platform; "
+            "import vllm; "
+            "print('vLLM import OK:', vllm.__version__, vllm.__file__, current_platform)"
+        ),
+    ]
+    result = subprocess.run(command, text=True, capture_output=True, check=False)
+    if result.returncode != 0:
+        details = "\n".join(
+            part
+            for part in (result.stdout.strip(), result.stderr.strip())
+            if part
+        )
+        raise RuntimeError(
+            "vLLM failed to import before server startup. This usually means the "
+            "installed vLLM wheel does not match the Colab CUDA runtime. Rerun the "
+            "dependency cell so it uninstalls stale vLLM and installs the explicit "
+            "CUDA-12.9 wheel, then retry.\n\n"
+            f"{details}"
+        )
 
 
 def build_vllm_command(
@@ -286,6 +395,7 @@ def start_model_server(
         )
 
     if engine == "vllm":
+        verify_vllm_importable()
         command = build_vllm_command(
             model_name=model_name,
             host=host,
