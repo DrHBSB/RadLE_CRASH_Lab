@@ -1,0 +1,288 @@
+# GoalBuddy v2 state.yaml
+# Board truth lives here. goal.md is the editable charter; notes/ holds long receipts only.
+
+version: 2
+
+goal:
+  title: "Antigravity Codex extension edits for LLaVA-vLLM Workbench"
+  slug: "llava-vllm-antigravity-extension"
+  kind: existing_plan
+  tranche: "Perform only coordinator-approved edit/push slices for the LLaVA-vLLM Workbench route."
+  status: done
+  paired_goal:
+    slug: "llava-vllm-runtime"
+    path: "docs/goals/llava-vllm-runtime/goal.md"
+    role: "Codex app coordinator and GUI evidence reviewer."
+  oracle:
+    signal: "Antigravity Codex returns bounded edit/push receipts requested by the Codex app coordinator, without claiming notebook runtime success."
+    cadence: "after each coordinator-approved edit/push slice"
+    final_proof: "Receipt includes changed files, branch/commit/PR evidence when pushed, static validation or review notes, and any blocked GUI/runtime needs to paste back into the Codex app goal."
+  intake:
+    original_request: "Create the Antigravity Codex extension side of a two-goal LLaVA-vLLM Workbench workflow."
+    interpreted_outcome: "Use Antigravity Codex only for file edits and GitHub push handoff, while runtime notebook evidence stays with the GUI/user plus Codex app coordinator loop."
+    input_shape: existing_plan
+    audience: "RadLE medical Workbench experiment owner"
+    authority: requested
+    proof_type: artifact
+    completion_proof: "Coordinator-approved edits are pushed or otherwise returned with concrete evidence for the Codex app coordinator to review."
+    likely_misfire: "Trying to restart kernels, execute cells, inspect notebook outputs, or claim runtime success from static edits."
+    blind_spots_considered:
+      - "Jupyter and Workbench runtime behavior must be driven through Antigravity GUI, not this extension as an output witness."
+      - "The extension can edit and push, but pasted GUI evidence is still required before runtime gates can pass."
+      - "The coordinator goal decides the next edit packet after reviewing returned evidence."
+      - "SGLang already failed despite a green server and correct visual token insertion; do not mistake superficial multimodal signals for success."
+      - "The original Microsoft checkpoint uses original LLaVA weight layout, so config relabeling is not enough for vLLM."
+    existing_plan_facts:
+      - "Paired coordinator goal: docs/goals/llava-vllm-runtime/goal.md."
+      - "Source plan: Documents/execplan_llava_vllm_runtime.md."
+      - "Parent SSOT: Documents/execplan_medical_workbench_runtime.md points to the child LLaVA-vLLM plan as authoritative."
+      - "Claude handoff says begin at Milestone 1: verify chaoyinshe/llava-med-v1.5-mistral-7b-hf before implementation claims."
+      - "SGLang abandonment evidence from Workbench HEAD 080ec65: all shims applied, Mistral template loaded, prompt_tokens 371->949 = 576 visual tokens, short prompt 24->600, but 4-way probe A/B/C empty and D returned image>."
+      - "Probe/smoke outputs were throwaway and not committed; SGLang notebook unchanged at 080ec65."
+      - "Future Section 6.5 smoke must hard-fail on empty output, 1-token EOS, <image> placeholder echo, and prompt echo."
+      - "Original microsoft/llava-med-v1.5-mistral-7b is original LLaVA weight layout, not HF LlavaForConditionalGeneration; do not solve by config relabel."
+      - "Preferred checkpoint: chaoyinshe/llava-med-v1.5-mistral-7b-hf; fallback only after recorded preferred-checkpoint failure: transformers convert_llava_weights_to_hf.py."
+      - "Target notebook: notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb."
+      - "Target runtime mapping: llava_med_mistral_7b should use chaoyinshe/llava-med-v1.5-mistral-7b-hf and vLLM when coordinator approves that slice."
+      - "Do not add controls, SGLang shims, sitecustomize hacks, or chat-template hacks."
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+  continuous_until_full_outcome: true
+  missing_input_or_credentials_do_not_stop_goal: true
+  exact_human_approval_can_terminal_wait: true
+  preserve_and_validate_existing_plan: true
+  intake_misfire_must_be_audited: true
+  goal_pressure_requires_oracle: true
+  no_completion_on_weak_proof: true
+  no_kernel_or_cell_execution: true
+  no_runtime_success_claims: true
+  slice_policy:
+    max_consecutive_tiny_tasks: 2
+    prefer_vertical_slices: true
+    judge_picks_largest_safe_slice: true
+    worker_completes_whole_slice: true
+
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+
+visual_board:
+  selected: local
+  local:
+    status: live
+    url: "http://goalbuddy.localhost:41737/llava-vllm-antigravity-extension/"
+    command: "node C:/Users/thehb/.agents/skills/goalbuddy/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/llava-vllm-antigravity-extension"
+
+active_task: null
+
+tasks:
+  - id: T001
+    type: worker
+    assignee: Worker
+    status: blocked
+    reasoning_hint: medium
+    objective: "Execute only the first coordinator-approved Antigravity edit/push packet."
+    inputs:
+      - "Latest coordinator packet pasted from docs/goals/llava-vllm-runtime/goal.md"
+      - "Documents/execplan_llava_vllm_runtime.md"
+    constraints:
+      - "Do not start implementation if no coordinator packet was pasted into the Antigravity conversation."
+      - "Do not restart kernels, execute notebook cells, inspect notebook outputs, or claim runtime success."
+      - "Edit only files explicitly approved by the coordinator packet."
+      - "Return a receipt the user can paste back into the Codex app goal."
+      - "Preserve Claude handoff facts: SGLang dead at HEAD 080ec65, preferred HF checkpoint first, conversion only as fallback."
+    allowed_files:
+      - "src/radle_medical_custom_runtime.py"
+      - "notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
+      - "Documents/execplan_llava_vllm_runtime.md"
+      - "Documents/execplan_medical_workbench_runtime.md"
+      - "docs/goals/llava-vllm-antigravity-extension/**"
+    verify:
+      - "Static file review shows only coordinator-approved files changed."
+      - "Notebook file can be opened as notebook JSON or in Antigravity editor."
+      - "No SGLang/sitecustomize/chat-template shim carryover was introduced."
+      - "Any smoke-gate code hard-fails on empty output, 1-token EOS, <image> placeholder echo, and prompt echo."
+      - "Branch, commit, or PR evidence is available if pushed."
+    stop_if:
+      - "No coordinator packet was pasted."
+      - "Requested work requires kernel restart, cell execution, live output inspection, or Workbench GUI state."
+      - "Need files outside coordinator-approved scope."
+      - "Static notebook structure looks corrupted."
+      - "Requested work reopens SGLang, relabels the Microsoft checkpoint as the vLLM fix, or starts conversion without coordinator approval."
+      - "Push/auth fails and no local diff/branch evidence can be returned."
+    expected_output:
+      - "Changed files"
+      - "Static validation performed"
+      - "Branch/commit/PR link if pushed"
+      - "Blocked reason if not completed"
+      - "Exact text to paste back into the Codex app coordinator goal"
+    receipt:
+      result: blocked
+      summary: "Stopped before product edits because no coordinator packet was pasted into this Antigravity-side goal; paired coordinator board T001 is still active and has not produced a packet."
+      evidence:
+        - "docs/goals/llava-vllm-antigravity-extension/state.yaml T001 has stop_if: No coordinator packet was pasted."
+        - "docs/goals/llava-vllm-runtime/state.yaml has active_task: T001 with receipt: null."
+        - "The Antigravity goal state checker passed before this receipt update."
+      commands:
+        - cmd: "node C:/Users/thehb/.agents/skills/goalbuddy/scripts/check-goal-state.mjs docs/goals/llava-vllm-antigravity-extension/state.yaml"
+          status: pass
+        - cmd: "git status --short --branch"
+          status: pass
+      next_required_input: "Paste a coordinator-approved edit/push packet from docs/goals/llava-vllm-runtime/goal.md, or run /goal Follow docs/goals/llava-vllm-runtime/goal.md. first."
+
+  - id: T002
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Execute the first coordinator-approved edit/push packet from docs/goals/llava-vllm-runtime T001."
+    inputs:
+      - "docs/goals/llava-vllm-runtime/notes/T001-first-antigravity-packet.md"
+      - "Documents/execplan_llava_vllm_runtime.md"
+      - "src/radle_medical_custom_runtime.py"
+      - "notebooks/RadLE_Medical_Workbench_Runtime.ipynb"
+    constraints:
+      - "Do not restart kernels, execute notebook cells, inspect live notebook outputs, or claim runtime success."
+      - "Do not use CLI notebook execution as proof of Workbench/Jupyter behavior."
+      - "Do not touch OctoMed, InternVL, MedGemma, or the abandoned SGLang notebook path."
+      - "Do not use microsoft/llava-med-v1.5-mistral-7b through vLLM by config relabeling."
+      - "Do not start checkpoint conversion without a later coordinator packet."
+      - "Do not add text-only controls, image-perturbation controls, extra experimental arms, SGLang shims, sitecustomize hacks, or chat-template hacks."
+    allowed_files:
+      - "src/radle_medical_custom_runtime.py"
+      - "notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
+      - "Documents/execplan_llava_vllm_runtime.md"
+      - "Documents/execplan_medical_workbench_runtime.md"
+      - "docs/goals/llava-vllm-antigravity-extension/state.yaml"
+      - "docs/goals/llava-vllm-antigravity-extension/notes/**"
+    verify:
+      - "HF metadata gate for chaoyinshe/llava-med-v1.5-mistral-7b-hf passes without downloading full weights."
+      - "Notebook JSON loads and section headers can be listed."
+      - "Forbidden carryover search has no matches in notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb."
+      - "Runtime registry maps llava_med_mistral_7b to chaoyinshe/llava-med-v1.5-mistral-7b-hf with preferred_engine=\"vllm\"."
+      - "git diff --check passes."
+      - "git status --short is captured."
+    stop_if:
+      - "HF metadata gate fails."
+      - "Requested work requires GUI runtime evidence."
+      - "Need files outside coordinator-approved scope."
+      - "Static notebook structure looks corrupted."
+    receipt:
+      result: done
+      summary: "Executed the first coordinator-approved static edit/push packet: verified the HF-format checkpoint metadata, patched the LLaVA runtime mapping to vLLM, created the isolated LLaVA-vLLM Workbench notebook with a non-writing Section 6.5 smoke gate, updated the child ExecPlan, committed, and pushed branch codex/llava-vllm-runtime."
+      branch: "codex/llava-vllm-runtime"
+      commit: "7e52038"
+      pr: "not created; branch pushed and GitHub offered https://github.com/DrHBSB/RadLE_CRASH_Lab/pull/new/codex/llava-vllm-runtime"
+      changed_files:
+        - "src/radle_medical_custom_runtime.py"
+        - "notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
+        - "Documents/execplan_llava_vllm_runtime.md"
+        - "docs/goals/llava-vllm-antigravity-extension/state.yaml"
+      hf_checkpoint_metadata:
+        repo: "chaoyinshe/llava-med-v1.5-mistral-7b-hf"
+        resolved_revision: "627be53734c667cbb1669608dac747a4485a22d7"
+        required_files_present: "config.json, preprocessor_config.json, processor_config.json, tokenizer_config.json, tokenizer.json, tokenizer.model, model.safetensors.index.json, four model safetensor shards"
+        config_architectures: "LlavaForConditionalGeneration"
+        model_type: "llava"
+        image_token_index: 32000
+        vision_config: "present; clip_vision_model"
+        text_config: "present; mistral"
+      notebook_structure:
+        cells: 19
+        code_cells: 16
+        section_6_5_present: true
+        forbidden_carryover_search: "no matches"
+      runtime_claims: "none; GUI notebook execution evidence is still required"
+      blocked_or_missing: "No Workbench/Jupyter smoke or full-run runtime proof was attempted or claimed by this Antigravity edit slice."
+      commands:
+        - cmd: "Invoke-RestMethod https://huggingface.co/api/models/chaoyinshe/llava-med-v1.5-mistral-7b-hf and raw config.json metadata gate"
+          status: pass
+        - cmd: "py -3.11 -m py_compile src/radle_medical_custom_runtime.py"
+          status: pass
+        - cmd: "py -3.11 -c \"compile all code cells in notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb\""
+          status: pass
+        - cmd: "rg -n \"sglang|SGLang|sitecustomize|chat_template|llava_mistral|CLIPVisionConfig|MistralConfig positional|image_processor shim\" notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
+          status: pass
+        - cmd: "git diff --cached --check"
+          status: pass
+        - cmd: "git commit -m \"Add LLaVA vLLM Workbench runtime\""
+          status: pass
+        - cmd: "git push -u origin codex/llava-vllm-runtime"
+          status: pass
+
+  - id: T003
+    type: pm
+    assignee: PM
+    status: done
+    reasoning_hint: low
+    objective: "Wait for the first coordinator-approved edit/push packet before any Antigravity-side product edits."
+    inputs:
+      - "A coordinator packet from docs/goals/llava-vllm-runtime/goal.md"
+      - "Any user-pasted update from the Codex app coordinator goal"
+    constraints:
+      - "Do not edit product files until the coordinator packet exists."
+      - "Do not infer implementation scope from the ExecPlan alone."
+      - "Keep the Antigravity-side board valid and ready for the next packet."
+    expected_output:
+      - "Confirm packet received, then unblock or replace the next Worker task with exact allowed files and verification."
+      - "If no packet is present, tell the user to run the paired coordinator goal first."
+    receipt:
+      result: done
+      summary: "Coordinator packet found at docs/goals/llava-vllm-runtime/notes/T001-first-antigravity-packet.md; activated T002 with the packet's bounded file scope and verification."
+      evidence:
+        - "docs/goals/llava-vllm-runtime/state.yaml now has T001 done and active_task: T002."
+        - "docs/goals/llava-vllm-runtime/notes/T001-first-antigravity-packet.md contains the approved Antigravity edit/push packet."
+      commands:
+        - cmd: "node C:/Users/thehb/.agents/skills/goalbuddy/scripts/check-goal-state.mjs docs/goals/llava-vllm-runtime/state.yaml"
+          status: pass
+
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Audit whether the Antigravity editing side has completed its current coordinator-approved responsibility."
+    inputs:
+      - "All done task receipts"
+      - "Current edit/push evidence"
+      - "Paired coordinator decision if available"
+    constraints:
+      - "Do not implement."
+      - "Reject completion if the extension claimed notebook runtime success."
+      - "Reject completion if changed files or push evidence are vague."
+    expected_output:
+      - "complete | not_complete"
+      - "full_outcome_complete: true | false for the Antigravity edit slice only"
+      - "Evidence to paste back into the Codex app coordinator goal"
+      - "Missing evidence and next task if not complete"
+    receipt:
+      result: done
+      decision: complete
+      full_outcome_complete: true
+      summary: "The current Antigravity coordinator-approved edit/push slice is complete. Evidence is bounded to static edits and push proof; runtime success remains explicitly unclaimed and must be proven by the paired Codex app coordinator through Antigravity GUI evidence."
+      evidence:
+        - "T002 receipt records HF metadata, changed files, commit 7e52038, pushed branch codex/llava-vllm-runtime, and static validation."
+        - "No notebook kernel restart, cell execution, live output inspection, or runtime success claim was performed in this Antigravity slice."
+        - "The paired coordinator goal should now ingest this receipt under docs/goals/llava-vllm-runtime T002."
+      paste_back_instruction: "Paste the T002 Antigravity receipt into the Codex app coordinator goal docs/goals/llava-vllm-runtime for its T002 review."
+
+checks:
+  dirty_fingerprint: unknown
+  last_verification:
+    result: pass
+    task: T002
+    commands:
+      - "HF metadata gate via official Hugging Face API"
+      - "py -3.11 -m py_compile src/radle_medical_custom_runtime.py"
+      - "compile all notebook code cells"
+      - "forbidden carryover search"
+      - "git diff --cached --check"
+      - "git push -u origin codex/llava-vllm-runtime"
