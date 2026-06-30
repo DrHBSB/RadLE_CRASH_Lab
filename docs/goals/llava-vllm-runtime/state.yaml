@@ -1,0 +1,407 @@
+# GoalBuddy v2 state.yaml
+# Board truth lives here. goal.md is the editable charter; notes/ holds long receipts only.
+
+version: 2
+
+goal:
+  title: "Coordinate LLaVA-vLLM Workbench GUI execution from Codex app"
+  slug: "llava-vllm-runtime"
+  kind: existing_plan
+  tranche: "Coordinate the paired Antigravity editing goal and Antigravity GUI notebook evidence until the LLaVA-vLLM Workbench run is complete or blocked with proof."
+  status: active
+  paired_goal:
+    slug: "llava-vllm-antigravity-extension"
+    path: "docs/goals/llava-vllm-antigravity-extension/goal.md"
+    role: "Antigravity Codex extension edits repo/notebook files and pushes to GitHub; it does not run kernels, execute cells, or inspect notebook outputs."
+  oracle:
+    signal: "Paired Antigravity edit/push receipts plus user-pasted Antigravity GUI notebook evidence prove llava_med_mistral_7b_medical_full_200_cases completed with audit integrity, guarded promotion, answer-free public exports, runtime provenance, and synced run bundle."
+    cadence: "after each returned Antigravity receipt, after each GUI evidence packet, and at final audit"
+    final_proof: "Final Judge/PM receipt cites Antigravity edit/push evidence, GUI checkpoint/runtime evidence, notebook validation, smoke output, 200-case audit, repair/promotion decision, public release outputs, provenance, and sync evidence."
+  intake:
+    original_request: "$goal-prep C:/Users/thehb/Documents/RadLE v2/Documents/execplan_llava_vllm_runtime.md; corrected to require two goals with Antigravity Codex extension as editor/pusher and Codex app as GUI-evidence coordinator."
+    interpreted_outcome: "Prepare a paired-goal workflow where this Codex app board coordinates Antigravity edits and GUI notebook evidence instead of assuming CLI notebook control."
+    input_shape: existing_plan
+    audience: "RadLE medical Workbench experiment owner"
+    authority: requested
+    proof_type: artifact
+    completion_proof: "A completed and audited LLaVA-vLLM full-run artifact set for RUN_ID=llava_med_mistral_7b_medical_full_200_cases, proven through paired-goal receipts and Antigravity GUI evidence, or a receipt-backed stop showing why the route cannot proceed."
+    likely_misfire: "Using one board for both editing and GUI execution, treating Antigravity Codex as able to run cells/see outputs, or treating CLI checks as notebook runtime proof."
+    blind_spots_considered:
+      - "The working Jupyter and Workbench extensions are in Antigravity, not in this terminal/CLI path."
+      - "Antigravity Codex extension can edit and push but cannot restart kernels, run cells, or inspect live notebook outputs."
+      - "This Codex app must coordinate through exact prompts and user-pasted evidence."
+      - "A pushed notebook is not proof that the live GUI smoke/full run worked."
+      - "Changes must stay isolated from OctoMed, InternVL, MedGemma, and the official benchmark path."
+      - "SGLang already failed despite all shims, clean template load, and correct image-token insertion."
+      - "The original Microsoft checkpoint is original LLaVA layout; vLLM needs HF-format weights, not config relabeling."
+    existing_plan_facts:
+      - "Source plan: Documents/execplan_llava_vllm_runtime.md."
+      - "Paired editor goal: docs/goals/llava-vllm-antigravity-extension/goal.md."
+      - "Parent SSOT: Documents/execplan_medical_workbench_runtime.md points to the child LLaVA-vLLM plan as authoritative."
+      - "Claude handoff says begin at Milestone 1."
+      - "SGLang abandonment evidence from Workbench HEAD 080ec65: all shims applied, Mistral template loaded, prompt_tokens 371->949 = 576 visual tokens, short prompt 24->600, but 4-way probe A/B/C empty and D returned image>."
+      - "Probe/smoke outputs were throwaway and not committed; SGLang notebook unchanged at 080ec65."
+      - "Future Section 6.5 smoke must hard-fail on empty output, 1-token EOS, <image> placeholder echo, and prompt echo."
+      - "Original microsoft/llava-med-v1.5-mistral-7b is original LLaVA weight layout, not HF LlavaForConditionalGeneration; config relabel is not enough."
+      - "Candidate checkpoint: chaoyinshe/llava-med-v1.5-mistral-7b-hf; verify live before claiming runtime success."
+      - "Fallback only after recorded preferred-checkpoint failure: transformers convert_llava_weights_to_hf.py."
+      - "Target notebook: notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb."
+      - "Run contract: RUN_ID=llava_med_mistral_7b_medical_full_200_cases, 200 cases, 263 images, TEST_LIMIT=None, RESUME=True, MAX_OUTPUT_TOKENS=2048."
+      - "vLLM args include --limit-mm-per-prompt {\"image\": 5}; use MODEL_DTYPE=float16 unless vLLM refuses with recorded evidence."
+      - "Keep the standard RadLE prompt and OpenAI-style base64 data URL image payload from src/radle_benchmark.py."
+      - "Do not add controls, SGLang shims, sitecustomize hacks, or chat-template hacks."
+      - "Do not promote or sync while integrity problems or repair targets remain unless the user explicitly overrides."
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+  continuous_until_full_outcome: true
+  missing_input_or_credentials_do_not_stop_goal: true
+  exact_human_approval_can_terminal_wait: true
+  preserve_and_validate_existing_plan: true
+  intake_misfire_must_be_audited: true
+  goal_pressure_requires_oracle: true
+  no_completion_on_weak_proof: true
+  two_goal_coordination_required: true
+  no_cli_notebook_runtime_proof: true
+  slice_policy:
+    max_consecutive_tiny_tasks: 2
+    prefer_vertical_slices: true
+    judge_picks_largest_safe_slice: true
+    worker_completes_whole_slice: true
+
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+
+visual_board:
+  selected: local
+  local:
+    status: live
+    url: "http://goalbuddy.localhost:41737/llava-vllm-runtime/"
+    command: "node C:/Users/thehb/.agents/skills/goalbuddy/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/llava-vllm-runtime"
+
+active_task: T008
+
+tasks:
+  - id: T001
+    type: pm
+    assignee: PM
+    status: done
+    reasoning_hint: medium
+    objective: "Prepare the first copy-paste packet that starts or orients the Antigravity Codex extension editing goal."
+    inputs:
+      - "docs/goals/llava-vllm-runtime/goal.md"
+      - "docs/goals/llava-vllm-antigravity-extension/goal.md"
+      - "Documents/execplan_llava_vllm_runtime.md"
+    constraints:
+      - "Do not edit implementation or notebook files from this task."
+      - "Do not claim that Antigravity Codex can run cells, restart kernels, or see notebook outputs."
+      - "Packet must tell Antigravity Codex to edit/push only and return commit/PR/diff evidence."
+      - "Packet must preserve the checkpoint-first and Workbench guardrail constraints."
+    expected_output:
+      - "Exact prompt for the user to paste into the Antigravity Codex extension."
+      - "Exact evidence the Antigravity goal must return to this Codex app goal."
+      - "Next board task to activate after the user returns an Antigravity receipt."
+    receipt:
+      result: done
+      note: "notes/T001-first-antigravity-packet.md"
+      summary: "Prepared the first coordinator-approved Antigravity packet. It requests static HF checkpoint metadata verification first, then bounded runtime mapping and new LLaVA-vLLM Workbench notebook edits only if the structural gate passes. It requires edit/push evidence and explicitly forbids runtime success claims without GUI evidence."
+      evidence:
+        - "docs/goals/llava-vllm-runtime/goal.md read"
+        - "docs/goals/llava-vllm-runtime/state.yaml active_task was T001"
+        - "docs/goals/llava-vllm-antigravity-extension/goal.md read"
+        - "docs/goals/llava-vllm-antigravity-extension/state.yaml active_task was T003 waiting for a coordinator packet"
+        - "Documents/execplan_llava_vllm_runtime.md read"
+      commands:
+        - cmd: "node C:/Users/thehb/.agents/skills/goalbuddy/scripts/check-goal-state.mjs docs/goals/llava-vllm-runtime/state.yaml"
+          status: pass
+        - cmd: "node C:/Users/thehb/.agents/skills/goalbuddy/scripts/check-update.mjs --json"
+          status: unavailable_npm_missing_no_update_reported
+        - cmd: "node C:/Users/thehb/.agents/skills/goalbuddy/scripts/render-task-prompt.mjs docs/goals/llava-vllm-runtime"
+          status: pass
+      next_active_task: T002
+
+  - id: T002
+    type: pm
+    assignee: PM
+    status: done
+    reasoning_hint: medium
+    objective: "Ingest and summarize the Antigravity Codex extension edit/push receipt."
+    inputs:
+      - "User-pasted Antigravity receipt, diff, commit, branch, or PR link"
+      - "docs/goals/llava-vllm-antigravity-extension/state.yaml when available"
+    constraints:
+      - "Do not assume edits are correct from a success message alone."
+      - "Ask for missing commit, diff, file list, or static validation evidence when needed."
+      - "Do not move to GUI runtime evidence until the edit/push receipt is specific enough to review."
+    expected_output:
+      - "Receipt summary"
+      - "Evidence accepted, missing, or rejected"
+      - "Decision: request another Antigravity edit packet, proceed to GUI actions, or escalate to Judge"
+    receipt:
+      result: done
+      note: "notes/T002-antigravity-receipt-review.md"
+      summary: "Accepted the Antigravity edit/push receipt after local review. Commit 7e52038 on branch codex/llava-vllm-runtime added the LLaVA-vLLM ExecPlan, created the LLaVA-vLLM Workbench notebook, and changed only the LLaVA runtime registry entry. Static checks pass, but runtime success remains unproven and must come from Antigravity GUI notebook evidence."
+      evidence_accepted:
+        - "Antigravity board T002 done and T999 complete for the edit slice."
+        - "Commit 7e52038 Add LLaVA vLLM Workbench runtime."
+        - "Branch codex/llava-vllm-runtime pushed to origin."
+        - "HF metadata for chaoyinshe/llava-med-v1.5-mistral-7b-hf resolved revision 627be53734c667cbb1669608dac747a4485a22d7."
+        - "Notebook exists with 19 cells and a non-writing 6.5 smoke gate."
+        - "Runtime mapping sets llava_med_mistral_7b to chaoyinshe/llava-med-v1.5-mistral-7b-hf with preferred_engine=\"vllm\"."
+      evidence_missing:
+        - "No GUI /v1/models server evidence yet."
+        - "No GUI Section 6.5 clinical JSON smoke output yet."
+        - "No full 200-case run, audit, repair/promotion, public export, provenance, or GCS sync evidence yet."
+      commands:
+        - cmd: "git show --name-status --stat --oneline 7e52038"
+          status: pass
+        - cmd: "git merge-base --is-ancestor HEAD origin/codex/llava-vllm-runtime"
+          status: pass
+        - cmd: "Invoke-RestMethod Hugging Face API and raw config.json metadata gate"
+          status: pass
+        - cmd: "py -3.11 -m py_compile src/radle_medical_custom_runtime.py"
+          status: pass
+        - cmd: "compile all notebook code cells with py -3.11"
+          status: pass
+        - cmd: "rg forbidden carryover terms in notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
+          status: pass_no_matches
+      decision: "proceed_to_gui_actions"
+      next_active_task: T003
+
+  - id: T003
+    type: pm
+    assignee: PM
+    status: done
+    reasoning_hint: medium
+    objective: "Guide the user through the next Antigravity GUI notebook action and request precise pasted evidence."
+    inputs:
+      - "Accepted Antigravity edit/push evidence"
+      - "Current ExecPlan milestone"
+      - "Notebook GUI state described or shown by the user"
+    constraints:
+      - "Do not tell the user to prove notebook runtime success with CLI commands."
+      - "Give exact GUI steps for Antigravity only: open notebook, restart kernel, run selected section/cell, capture visible output, or paste error text."
+      - "Request only the evidence needed for the current gate."
+    expected_output:
+      - "Exact GUI action instructions"
+      - "Exact output/error/screenshot fields to paste back"
+      - "Stop condition for the user if the GUI action fails"
+    receipt:
+      result: done
+      note: "notes/T003-antigravity-gui-smoke-instructions.md"
+      summary: "Prepared exact Antigravity GUI instructions for the next runtime gate: open the new LLaVA-vLLM Workbench notebook on branch codex/llava-vllm-runtime, restart/select the Workbench kernel, run cells 1-12 through the non-writing 6.5 smoke gate, stop before cell 13, and paste precise server/smoke evidence or errors back to this coordinator."
+      evidence_requested:
+        - "Branch/kernel/notebook path context."
+        - "Cell 9 run config output."
+        - "Cell 11 server log path and /v1/models response."
+        - "Cell 12 raw smoke response plus parsed diagnosis and likert_score."
+        - "Stop confirmation that cell 13 was not run and no full-run CSV row was written by smoke."
+      stop_conditions:
+        - "Notebook/kernel/import/dataset/HF/vLLM/server failure."
+        - "Smoke output empty, one-token, prompt echo, <image>/image> echo, non-JSON, missing diagnosis, I don't know, placeholder diagnosis, or invalid likert_score."
+        - "Cell 13 starts accidentally."
+      decision: "await_gui_smoke_evidence"
+      next_active_task: T004
+
+  - id: T004
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Review returned Antigravity GUI evidence and decide the next coordination step."
+    inputs:
+      - "T002 receipt if edit evidence was involved"
+      - "T003 returned GUI output, screenshot summary, or error text"
+      - "Documents/execplan_llava_vllm_runtime.md"
+    constraints:
+      - "Do not implement."
+      - "Reject superficial proof such as server readiness, token-count growth, blank output, prompt echo, <image> echo, or \"I don't know\"."
+      - "If more edits are needed, define the next Antigravity edit packet."
+      - "If GUI runtime evidence is sufficient, define the next GUI action or final audit criteria."
+    expected_output:
+      - "Decision: proceed, request Antigravity edit, request GUI rerun, blocked, or ready for final audit."
+      - "Rationale tied to pasted evidence and goal oracle."
+      - "Next packet or task if not complete."
+    receipt:
+      result: done
+      decision: not_complete
+      full_outcome_complete: false
+      note: "notes/T004-gui-evidence-review.md"
+      rationale: "Visible GUI evidence shows the Antigravity edit goal completed, but the active notebook is still the SGLang notebook and no vLLM server/smoke output is visible. The coordinator must request the correct vLLM notebook smoke run before any full run."
+      evidence:
+        - "Screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-gui-evidence-20260701-025810.png"
+        - "Visible active tab: RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb"
+        - "No visible /v1/models response, raw smoke response, parsed diagnosis, likert_score, or smoke pass line."
+      missing_evidence:
+        - "Active notebook path notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb."
+        - "Cell 9 config output from the new vLLM notebook."
+        - "Cell 11 server evidence and /v1/models response."
+        - "Cell 12 non-writing smoke output with clinical diagnosis and likert_score."
+        - "Confirmation cell 13 was not run."
+      required_board_updates:
+        - "Activate T005 to reissue the corrective GUI smoke instruction."
+
+  - id: T005
+    type: pm
+    assignee: PM
+    status: done
+    reasoning_hint: medium
+    objective: "Reissue a corrective Antigravity GUI instruction because the visible notebook state is still the SGLang notebook, not the new vLLM smoke gate."
+    inputs:
+      - "T004 GUI evidence review"
+      - "notes/T003-antigravity-gui-smoke-instructions.md"
+      - "Screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-gui-evidence-20260701-025810.png"
+    constraints:
+      - "Do not claim runtime success."
+      - "Do not ask for the full 200-case run yet."
+      - "Keep the instruction GUI-only and bounded to the new vLLM notebook cells 1-12."
+    expected_output:
+      - "Short corrective GUI instruction to open the correct notebook and run only through the 6.5 smoke gate."
+      - "Exact evidence fields to paste back."
+      - "Stop condition before cell 13."
+    receipt:
+      result: done
+      note: "notes/T005-corrective-gui-smoke-instruction.md"
+      summary: "Reissued a bounded GUI-only correction: the visible state was still on the old SGLang notebook, so the next evidence must come from notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb, run only through the non-writing 6.5 smoke gate, with cell 13/full run explicitly stopped."
+      evidence:
+        - "T004 found active GUI tab was RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb."
+        - "T003 smoke instructions remain valid once the correct vLLM notebook is opened."
+      next_active_task: T006
+
+  - id: T006
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Review corrected Antigravity GUI smoke evidence from the new LLaVA-vLLM notebook and decide the next coordination step."
+    inputs:
+      - "T005 corrective instruction"
+      - "User-pasted or screenshot evidence from notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
+      - "Cell 9, cell 11, and cell 12 outputs"
+    constraints:
+      - "Do not implement."
+      - "Reject evidence from the SGLang notebook."
+      - "Reject server readiness alone, token-count growth, blank output, prompt echo, <image>/image> echo, non-JSON output, missing diagnosis, I don't know, placeholder diagnosis, or invalid likert_score."
+      - "Do not approve full-run instructions unless the non-writing smoke gate evidence is sufficient."
+    expected_output:
+      - "Decision: proceed to full-run GUI instruction, request GUI rerun, request Antigravity edit, or blocked."
+      - "Rationale tied to the exact returned cell outputs."
+      - "Next packet or task if not complete."
+    receipt:
+      result: done
+      decision: request_gui_rerun
+      full_outcome_complete: false
+      note: "notes/T006-current-gui-review.md"
+      rationale: "Fresh GUI evidence still shows the old SGLang notebook as the active notebook. The required vLLM notebook cells 9, 11, and 12 outputs are absent, so the non-writing smoke gate remains unproven."
+      evidence:
+        - "Screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t006-gui-review-20260701-030931.png"
+        - "Visible active notebook title/tab: RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb"
+        - "No visible /v1/models response, raw smoke response, parsed diagnosis, likert_score, or smoke pass line from notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb."
+        - "Antigravity extension receipt is pushed at 3d4f929 and still does not claim runtime success."
+      missing_evidence:
+        - "Active notebook path notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb."
+        - "Cell 9 config output from the new vLLM notebook."
+        - "Cell 11 server evidence and /v1/models response."
+        - "Cell 12 non-writing smoke output with clinical diagnosis and likert_score."
+        - "Confirmation cell 13 was not run."
+      required_board_updates:
+        - "Activate T007 to restate the exact GUI-only correction and keep waiting for vLLM notebook evidence."
+
+  - id: T007
+    type: pm
+    assignee: PM
+    status: done
+    reasoning_hint: medium
+    objective: "Restate the exact GUI-only action required after T006 again found the old SGLang notebook active."
+    inputs:
+      - "T006 current GUI evidence review"
+      - "notes/T005-corrective-gui-smoke-instruction.md"
+      - "Screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t006-gui-review-20260701-030931.png"
+    constraints:
+      - "Do not claim runtime success."
+      - "Do not ask for the full 200-case run yet."
+      - "Do not request an Antigravity edit packet unless the vLLM smoke output shows a concrete code or notebook defect."
+      - "Keep the instruction GUI-only and bounded to the new vLLM notebook through the non-writing Section 6.5 smoke gate."
+    expected_output:
+      - "Short corrective GUI instruction to open notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb."
+      - "Exact cell outputs or errors needed for the next Judge review."
+      - "Explicit stop before Section 7/cell 13."
+    receipt:
+      result: done
+      note: "notes/T007-vllm-gui-smoke-instruction.md"
+      summary: "Restated the GUI-only correction after T006 again found the old SGLang notebook active. The instruction requires opening the exact LLaVA-vLLM notebook, restarting/clearing outputs, running only through the non-writing Section 6.5 smoke gate, returning cells 9, 11, and 12 evidence, and stopping before Section 7/cell 13."
+      evidence_requested:
+        - "Visible active notebook path/title proving notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb."
+        - "Branch and kernel shown in the GUI."
+        - "Cell 9 configuration output."
+        - "Cell 11 vLLM server log path and /v1/models response."
+        - "Cell 12 raw smoke response plus parsed diagnosis and likert_score."
+        - "Confirmation Section 7/cell 13 was not run and no full-run CSV row was written by smoke."
+      rejection_rules:
+        - "Reject evidence from the SGLang notebook."
+        - "Reject server readiness alone, token-count growth alone, blank output, one-token output, prompt echo, <image>/image> echo, non-JSON output, missing diagnosis, I don't know, placeholder diagnosis, or invalid likert_score."
+      next_active_task: T008
+
+  - id: T008
+    type: judge
+    assignee: Judge
+    status: active
+    reasoning_hint: high
+    objective: "Review the next returned LLaVA-vLLM GUI smoke evidence or first visible error after T007."
+    inputs:
+      - "T007 GUI instruction"
+      - "User-pasted or screenshot evidence from notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
+      - "Cell 9, cell 11, and cell 12 outputs or the first visible error"
+    constraints:
+      - "Do not implement."
+      - "Reject evidence from the SGLang notebook."
+      - "Reject server readiness alone, token-count growth alone, blank output, one-token output, prompt echo, <image>/image> echo, non-JSON output, missing diagnosis, I don't know, placeholder diagnosis, or invalid likert_score."
+      - "Do not approve the full 200-case run unless the non-writing smoke gate evidence is sufficient."
+      - "If a real code/notebook defect is visible, prepare the next Antigravity edit/push packet with exact error evidence."
+    expected_output:
+      - "Decision: proceed to full-run GUI instruction, request GUI rerun, request Antigravity edit, or blocked."
+      - "Rationale tied to the exact returned cell outputs or error text."
+      - "Next packet or task if not complete."
+    receipt: null
+
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Audit whether the paired-goal LLaVA-vLLM Workbench outcome is complete."
+    inputs:
+      - "All done task receipts from this board"
+      - "Returned Antigravity edit/push receipts"
+      - "Returned Antigravity GUI notebook evidence"
+      - "Documents/execplan_llava_vllm_runtime.md"
+    constraints:
+      - "Do not implement."
+      - "Reject completion if the paired Antigravity goal has required editing work still queued, active, or blocked without an accepted terminal reason."
+      - "Reject completion if GUI notebook runtime evidence is missing or only CLI/static evidence exists."
+      - "Reject completion if promotion/sync bypassed guardrails without explicit owner override."
+    expected_output:
+      - "complete | not_complete"
+      - "full_outcome_complete: true | false"
+      - "Evidence mapped to Antigravity edits, checkpoint/runtime, notebook smoke, full run, audit, repair/promotion, public export, provenance, and sync."
+      - "Missing evidence and next task if not complete."
+    receipt: null
+
+checks:
+  dirty_fingerprint: unknown
+  last_verification:
+    result: pass
+    task: T007
+    commands:
+      - "Reviewed screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t006-gui-review-20260701-030931.png"
+      - "Confirmed visible active notebook remains RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb"
+      - "Confirmed branch origin HEAD at 3d4f929 and no goal-folder diff before this board update"
+      - "Prepared GUI-only instruction notes/T007-vllm-gui-smoke-instruction.md"
