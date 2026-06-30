@@ -12,7 +12,7 @@ This plan exists so a fresh agent can continue the model sequence without relyin
 
 ## Current State
 
-Current state (2026-06-30 19:41 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-case Workbench run is complete, promoted, synced to GCS, and downloaded locally under `results/medgemma_1_5_4b_medical_full_200_cases/`. The attempted `llava_med_mistral_7b` vLLM run failed the live Workbench server-readiness gate because vLLM 0.23.0 / Transformers did not recognize `model_type=llava_mistral`. Do not pivot to OctoMed without asking the user. The main Workbench notebook remains the normal notebook, and a separate LLaVA-specific copy now exists at `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb`; that copy selects `llava_med_mistral_7b`, uses `SERVER_ENGINE = "sglang"`, probes for SGLang `LlavaMistralForCausalLM` support after install, and keeps `RUN_LABEL_BASE = "medical_full_200_cases"`, model-scoped `RUN_ID`, `TEST_LIMIT = None`, `RESUME = True`, `EXPECTED_FULL_CASES = 200`, `EXPECTED_FULL_IMAGES = 263`, and `MAX_OUTPUT_TOKENS = 2048`. Next: pull latest `main` on Workbench, restart the kernel, reload/open the LLaVA SGLang notebook copy from disk, and run its cells top-to-bottom.
+Current state (2026-06-30 19:54 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-case Workbench run is complete, promoted, synced to GCS, and downloaded locally under `results/medgemma_1_5_4b_medical_full_200_cases/`. The attempted `llava_med_mistral_7b` vLLM run failed because vLLM 0.23.0 / Transformers did not recognize `model_type=llava_mistral`. The first SGLang attempt stopped early because SGLang installed CUDA-13 PyTorch while the existing CUDA-12.9 torchvision from the vLLM path remained installed. Do not pivot to OctoMed without asking the user. The isolated LLaVA copy at `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb` now removes vLLM in the SGLang path, installs `sglang[all]`, force-reinstalls the matching official PyTorch CUDA-13 trio (`torch==2.11.0`, `torchvision==0.26.0`, `torchaudio==2.11.0` from the `cu130` index), then probes SGLang `LlavaMistralForCausalLM`. It still selects `llava_med_mistral_7b` and keeps `RUN_LABEL_BASE = "medical_full_200_cases"`, model-scoped `RUN_ID`, `TEST_LIMIT = None`, `RESUME = True`, `EXPECTED_FULL_CASES = 200`, `EXPECTED_FULL_IMAGES = 263`, and `MAX_OUTPUT_TOKENS = 2048`. Next: pull latest `main` on Workbench, restart the kernel, reload/open the LLaVA SGLang notebook copy from disk, and rerun from the dependency cell.
 
 ## Locked Facts
 
@@ -27,6 +27,7 @@ Current state (2026-06-30 19:41 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
 - Run IDs must be model-scoped: `RUN_ID = f"{SELECTED_MODEL_NAME}_{RUN_LABEL_BASE}"`.
 - For full runs, `RUN_LABEL_BASE = "medical_full_200_cases"`, `TEST_LIMIT = None`, and `RESUME = True`.
 - `llava_med_mistral_7b` is not a supported Workbench vLLM target in the pinned runtime: vLLM 0.23.0 exited before readiness because Transformers did not recognize `model_type=llava_mistral`.
+- The first SGLang probe failed because PyTorch reported CUDA 13.0 while torchvision was compiled for CUDA 12.9; the LLaVA copy must force reinstall matching CUDA-13 PyTorch/torchvision/torchaudio after `sglang[all]`.
 - Do not pivot to OctoMed without explicit user approval; the current task is to make LLaVA-Med work.
 - The LLaVA-specific notebook copy is `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb`, using run ID `llava_med_mistral_7b_medical_full_200_cases`.
 - The completed baseline run is `medgemma_1_5_4b_medical_full_200_cases`.
@@ -70,6 +71,7 @@ Current state (2026-06-30 19:41 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
 - [x] (2026-06-30 19:04 +05:30, user on Workbench) Tried the committed LLaVA-Med vLLM path; config printed 200 cases, 263 images, model-scoped run ID, and `MAX_OUTPUT_TOKENS=2048`, but vLLM exited before readiness with `model_type=llava_mistral` unrecognized by Transformers.
 - [x] (2026-06-30 19:41 +05:30, Codex/GPT-5) Rejected the OctoMed pivot after user correction, restored the main notebook to the normal committed path, created `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb`, and made that copy the isolated LLaVA/SGLang experiment.
 - [x] (2026-06-30 19:43 +05:30, Codex/GPT-5) Validated the LLaVA copy locally: both Workbench notebooks parse and compile, helper modules compile, copied notebook extracts `SERVER_ENGINE=sglang`, selected model `llava_med_mistral_7b`, run ID `llava_med_mistral_7b_medical_full_200_cases`, `TEST_LIMIT=None`, `RESUME=True`, expected 200 cases, expected 263 images, and `MAX_OUTPUT_TOKENS=2048`.
+- [x] (2026-06-30 19:54 +05:30, user on Workbench and Codex/GPT-5) Captured the first SGLang dependency failure: SGLang import reached `torchvision.io.decode_jpeg`, then failed because PyTorch was CUDA 13.0 while torchvision was CUDA 12.9. Patched the LLaVA copy to uninstall vLLM in the SGLang path and force reinstall matching `torch==2.11.0`, `torchvision==0.26.0`, and `torchaudio==2.11.0` from `https://download.pytorch.org/whl/cu130` before the SGLang LLaVA probe.
 - [ ] (next Workbench session, user/Codex) Pull latest `main` on Workbench, restart kernel, open/reload `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb` from disk, run cells top-to-bottom, and audit actual files before promoting or syncing.
 
 ## Surprises & Discoveries
@@ -96,6 +98,10 @@ Current state (2026-06-30 19:41 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
 
 - Observation: LLaVA-Med cannot be made to work by simply rerunning the vLLM server cell in the pinned Workbench runtime.
   Evidence: Workbench vLLM 0.23.0 server exited before readiness for `microsoft/llava-med-v1.5-mistral-7b` with `Value error, The checkpoint you are trying to load has model type llava_mistral but Transformers does not recognize this architecture.`
+  Date/Author: 2026-06-30, user and Codex/GPT-5
+
+- Observation: SGLang import can fail before model startup if the old vLLM CUDA-12.9 torchvision wheel remains after SGLang installs CUDA-13 PyTorch.
+  Evidence: Workbench dependency cell printed `PyTorch has CUDA Version=13.0 and torchvision has CUDA Version=12.9. Please reinstall the torchvision that matches your PyTorch install.`
   Date/Author: 2026-06-30, user and Codex/GPT-5
 
 ## Decision Log
@@ -139,6 +145,7 @@ Current state (2026-06-30 19:41 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
 - v5 (2026-06-30, Codex/GPT-5): Replaced the generic skills table with an operational skill-routing matrix that names triggers, evidence requirements, non-use cases, and activation mode for each phase.
 - v6 (2026-06-30, Codex/GPT-5): Recorded `llava_med_mistral_7b` as the next prepared full-run model, updated validation receipts, and shifted the next action to Workbench execution.
 - v7 (2026-06-30, Codex/GPT-5): Reconciled the live vLLM failure and user correction. Recorded that LLaVA remains the target, OctoMed requires explicit approval, and the LLaVA workaround now lives in `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb`.
+- v8 (2026-06-30, Codex/GPT-5): Recorded the SGLang torch/torchvision CUDA mismatch and patched the copied notebook to force reinstall the official PyTorch CUDA-13 trio before probing SGLang LLaVA support.
 
 ## Outcomes & Retrospective
 
