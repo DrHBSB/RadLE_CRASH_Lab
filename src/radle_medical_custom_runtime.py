@@ -58,6 +58,7 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
 DEFAULT_BASE_URL = f"http://{DEFAULT_HOST}:{DEFAULT_PORT}/v1"
 DEFAULT_CACHE_ROOT = "/content/radle_runtime_cache"
+MEDICAL_MAX_OUTPUT_TOKENS = 1024
 
 
 def _path_is_writable(path: pathlib.Path) -> bool:
@@ -204,9 +205,13 @@ def configure_cache_environment(cache_root: str = DEFAULT_CACHE_ROOT) -> dict:
 def print_runtime_resources() -> None:
     """Print compact GPU and disk diagnostics in Colab/custom runtimes."""
     print("Python:", sys.version.split()[0])
+    df_targets = ["/"]
+    if pathlib.Path("/content").exists():
+        df_targets.append("/content")
+
     for command in (
         ["nvidia-smi"],
-        ["df", "-h", "/", "/content"],
+        ["df", "-h", *df_targets],
     ):
         try:
             result = subprocess.run(command, text=True, capture_output=True, check=False)
@@ -559,7 +564,7 @@ def run_medical_model_benchmark(
     test_limit: int | None = 1,
     backup_dir=None,
     resume: bool = True,
-    max_output_tokens: int = radle_benchmark.MAX_OUTPUT_TOKENS,
+    max_output_tokens: int = MEDICAL_MAX_OUTPUT_TOKENS,
     universal_temperature: float = radle_benchmark.UNIVERSAL_TEMPERATURE,
 ):
     """Run RadLE for one experimental medical model through a compatible endpoint."""
