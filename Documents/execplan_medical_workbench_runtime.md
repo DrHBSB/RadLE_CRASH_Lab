@@ -12,7 +12,7 @@ This plan exists so a fresh agent can continue the model sequence without relyin
 
 ## Current State
 
-Current state (2026-06-30 21:09 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-case Workbench run is complete, promoted, synced to GCS, and downloaded locally under `results/medgemma_1_5_4b_medical_full_200_cases/`. The attempted `llava_med_mistral_7b` vLLM run failed because vLLM 0.23.0 / Transformers did not recognize `model_type=llava_mistral`. The first SGLang attempt stopped early because SGLang installed CUDA-13 PyTorch while the existing CUDA-12.9 torchvision from the vLLM path remained installed; the CUDA vision stack is now fixed on Workbench. The second SGLang attempt imported the LLaVA-Mistral SGLang model class but the server still exited during startup because the child process' Transformers `AutoConfig` did not know `llava_mistral`. The third SGLang attempt reached model weight loading and then failed because the shim registered `llava_mistral` as a `LlavaConfig` subclass, which lacks Mistral fields such as `pad_token_id`; repeated pasted logs with the same error indicate Workbench can still run a stale shim unless the config cell is rerun. Do not pivot to OctoMed without asking the user. The isolated LLaVA copy at `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb` now removes vLLM in the SGLang path, installs `sglang[all]`, force-reinstalls the matching official PyTorch CUDA-13 trio (`torch==2.11.0`, `torchvision==0.26.0`, `torchaudio==2.11.0` from the `cu130` index), probes SGLang `LlavaMistralForCausalLM`, and defines `configure_llava_mistral_sglang_shim()` to write a child-process `sitecustomize.py` shim that registers Transformers `AutoConfig` key `llava_mistral` as a `MistralConfig` subclass, explicitly sets `pad_token_id` from `eos_token_id` when absent or `None`, and probes that field. The model config cell and the server cell both call that function. It still selects `llava_med_mistral_7b` and keeps `RUN_LABEL_BASE = "medical_full_200_cases"`, model-scoped `RUN_ID`, `TEST_LIMIT = None`, `RESUME = True`, `EXPECTED_FULL_CASES = 200`, `EXPECTED_FULL_IMAGES = 263`, and `MAX_OUTPUT_TOKENS = 2048`. Next: pull latest `main` on Workbench, restart the kernel, reload/open the LLaVA SGLang notebook copy from disk, rerun cells top-to-bottom, and confirm the server cell itself prints `llava_mistral config shim OK: LlavaMistralConfig llava_mistral pad_token_id=` immediately before starting the server.
+Current state (2026-06-30 21:26 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-case Workbench run is complete, promoted, synced to GCS, and downloaded locally under `results/medgemma_1_5_4b_medical_full_200_cases/`. LLaVA-Med and OctoMed both remain isolated model-specific experiments, but the active user request is now the custom InternVL notebook. `notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb` was created as an InternVL/vLLM copy, validated locally, committed, and pushed to `origin/main` as commit `16f6628`. A Workbench run from the older local InternVL notebook confirmed the right config (`internvl3_5_8b`, 200 cases, 263 images, model-scoped run ID, vLLM, `bfloat16`, and `MAX_MODEL_LEN=8192`) but vLLM exited during model initialization before any benchmark rows because the runtime had an incompatible `flash_attn` package: vLLM imported `flash_attn.ops.triton.rotary` from the Qwen3 rotary path and got `ModuleNotFoundError: No module named 'flash_attn.ops'`. Commit `16f6628` now makes the dependency cell probe `flash_attn.ops.triton.rotary` and uninstall `flash-attn`/`flash_attn` only if that probe fails, so vLLM can use its fallback instead of crashing on a partial FlashAttention package. This revision also reconciles stale OctoMed lower sections and adds a model-attempt ledger. Next: on Workbench, move any untracked local InternVL notebook aside if `git pull` refuses, pull `main`, reload `notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb` from disk, restart the kernel, rerun the dependency cell and server cell, confirm `/v1/models`, then start the full benchmark only after the server is ready.
 
 ## Locked Facts
 
@@ -31,8 +31,20 @@ Current state (2026-06-30 21:09 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
 - The second SGLang server attempt failed because the launcher still calls Transformers `AutoConfig` before SGLang model dispatch; the LLaVA copy must prepend a runtime `sitecustomize.py` shim that registers `llava_mistral`.
 - The third SGLang server attempt proved `LlavaConfig` is the wrong base for that shim; the shim must register `llava_mistral` as a `MistralConfig` subclass so SGLang's Mistral language model path sees fields such as `pad_token_id`.
 - The LLaVA SGLang server cell must rewrite/probe the shim immediately before launch because `/home/jupyter/radle_runtime_shims/sitecustomize.py` can remain stale if Workbench runs only the server cell after a pull.
-- Do not pivot to OctoMed without explicit user approval; the current task is to make LLaVA-Med work.
+- OctoMed was explicitly user-approved as a prior isolated next-model path, but it is not the active path for the current InternVL run.
 - The LLaVA-specific notebook copy is `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb`, using run ID `llava_med_mistral_7b_medical_full_200_cases`.
+- The OctoMed-specific notebook copy is `notebooks/RadLE_Medical_Workbench_OctoMed_Runtime.ipynb`, using run ID `octomed_7b_medical_full_200_cases`.
+- OctoMed notebook commit `65a774bd6c4be214cbcc70318ba2cbfbe7efc73e` was pushed to `origin/main`; Workbench confirmed it is using short commit `65a774b`.
+- OctoMed uses vLLM with `MODEL_DTYPE="bfloat16"`, `TENSOR_PARALLEL_SIZE=2`, `GPU_MEMORY_UTILIZATION=0.8`, `MAX_MODEL_LEN=8192`, `MAX_OUTPUT_TOKENS=2048`, `OCTOMED_SAMPLING_TEMPERATURE=0.6`, and `OCTOMED_TOP_P=0.95`.
+- RadLE case `156` is the only 5-image case: `156.1.png`, `156.2.png`, `156.3.png`, `156.4.png`, and `156.5.png`; the OctoMed notebook includes a non-writing case-156 smoke before the full run.
+- vLLM 0.23.0 requires `--limit-mm-per-prompt` as JSON such as `{"image": 5}`; the rejected `image=5` form is a CLI syntax error, not an image-count or model-download failure.
+- vLLM 0.23.0 imports `llguidance` during OpenAI server startup and depends on `llguidance >=1.7.0,<1.8.0`, `outlines_core==0.2.14`, `tilelang==0.1.9`, and `tokenspeed-mla==0.1.2`; do not remove these for the OctoMed/vLLM path.
+- The active InternVL-specific notebook copy is `notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb`, using run ID `internvl3_5_8b_medical_full_200_cases`.
+- InternVL notebook commit `16f6628` was pushed to `origin/main`; Workbench must pull/reload this commit before rerunning the dependency and server cells.
+- InternVL uses vLLM with `MODEL_DTYPE="bfloat16"`, `MAX_MODEL_LEN=model_runtime.default_max_model_len` (8192 for this helper config), `MAX_OUTPUT_TOKENS=2048`, `TENSOR_PARALLEL_SIZE=1`, and `GPU_MEMORY_UTILIZATION=model_runtime.default_gpu_memory_utilization`.
+- InternVL is ungated in `src/radle_medical_custom_runtime.py`; the HF-token cell should not prompt unless `model_runtime.requires_hf_token` is true.
+- The observed InternVL startup blocker is an incompatible partial `flash_attn` package: vLLM reaches InternVL/Qwen3 model init and then fails importing `flash_attn.ops.triton.rotary`.
+- Commit `16f6628` probes `flash_attn.ops.triton.rotary` during the vLLM dependency cell and uninstalls `flash-attn`/`flash_attn` only if `flash_attn` exists without that rotary module.
 - The completed baseline run is `medgemma_1_5_4b_medical_full_200_cases`.
 - The completed baseline provenance commit is `f7204264d120df37767f22b58ffd6c87e11b21a4`.
 - The completed baseline local final CSV is `results/medgemma_1_5_4b_medical_full_200_cases/final/RadLE_v2_results_final.csv`.
@@ -53,6 +65,10 @@ Current state (2026-06-30 21:09 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
 - Do not start the next full run with an unscoped run ID such as `medical_full_200_cases`; model name must be part of `RUN_ID`. See Decision Log 2026-06-30.
 - Do not promote or sync a run if audit shows wrong row count, duplicate or missing cases, or pending repair targets. See Decision Log 2026-06-30.
 - Do not assume the next model is ready just because it is in the roster; inspect current notebook/helper code and any model-specific runtime constraints first. See Decision Log 2026-06-30.
+- Do not diagnose the OctoMed `llguidance` failure as a model download problem; vLLM exited before download/load while importing server modules. See Decision Log 2026-06-30.
+- Do not uninstall vLLM shared dependencies such as `llguidance`, `outlines_core`, `tilelang`, or `tokenspeed-mla` to silence stale SGLang dependency warnings. See Decision Log 2026-06-30.
+- Do not run the InternVL benchmark until the vLLM server reaches `/v1/models`; the latest failure occurred before readiness and before any benchmark row should be trusted. See Decision Log 2026-06-30.
+- Do not leave a local untracked InternVL notebook on Workbench if it blocks `git pull`; move it aside, pull `16f6628` or newer, reload from disk, and restart the kernel. See Decision Log 2026-06-30.
 
 ## Progress
 
@@ -81,7 +97,17 @@ Current state (2026-06-30 21:09 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
 - [x] (2026-06-30 20:55 +05:30, Codex/GPT-5) Patched the isolated LLaVA SGLang notebook so the runtime shim defines `LlavaMistralConfig(MistralConfig)` and the subprocess preflight asserts `pad_token_id` exists before server startup.
 - [x] (2026-06-30 21:09 +05:30, user on Workbench and Codex/GPT-5) Received another Workbench server log with the same `pad_token_id` failure, consistent with a stale shim or skipped config-cell rerun rather than a new SGLang error.
 - [x] (2026-06-30 21:09 +05:30, Codex/GPT-5) Hardened the isolated LLaVA notebook: the shim function now explicitly sets `pad_token_id` from `eos_token_id` when absent or `None`, and the server cell reruns the shim/probe immediately before `start_model_server(...)`.
-- [ ] (next Workbench session, user/Codex) Pull latest `main` on Workbench, restart kernel, open/reload `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb` from disk, run cells top-to-bottom, confirm the server cell prints the `llava_mistral` shim probe with `pad_token_id=`, and audit actual files before promoting or syncing.
+- [x] (2026-06-30 21:16 +05:30, Codex/GPT-5) Researched OctoMed against official Hugging Face/arXiv/vLLM/Qwen sources and prepared `notebooks/RadLE_Medical_Workbench_OctoMed_Runtime.ipynb` as an isolated vLLM/Qwen2.5-VL notebook.
+- [x] (2026-06-30 21:16 +05:30, Codex/GPT-5) Patched the OctoMed notebook after Workbench rejected `--limit-mm-per-prompt image=5`; vLLM requires JSON `{"image": 5}`. Added a non-writing case-156 smoke cell and pushed commit `65a774bd6c4be214cbcc70318ba2cbfbe7efc73e` to `origin/main`.
+- [x] (2026-06-30 21:16 +05:30, user on Workbench and Codex/GPT-5) Workbench pulled commit `65a774b`, confirmed the OctoMed config, and got past the prior CLI parse failure, but vLLM exited before model download/load with `ModuleNotFoundError: No module named 'llguidance'`.
+- [x] (2026-06-30 21:16 +05:30, Codex/GPT-5) Researched vLLM 0.23.0 requirements and determined the dependency cleanup must preserve vLLM shared dependencies (`llguidance`, `outlines_core`, `tilelang`, `tokenspeed-mla`) and reinstall pinned vLLM if its import probe fails after cleanup.
+- [x] (2026-06-30 21:23 +05:30, user and Codex/GPT-5) Switched the active request to preparing `notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb` as the custom InternVL notebook; researched InternVL3.5 against model config and vLLM support, without editing first.
+- [x] (2026-06-30 21:23 +05:30, Codex/GPT-5) Updated the InternVL notebook to select `internvl3_5_8b`, keep `SERVER_ENGINE="vllm"`, use `bfloat16`, use the helper default max model length, avoid HF-token prompting for ungated models, and preserve the 200-case/263-image full-run contract.
+- [x] (2026-06-30 21:23 +05:30, user on Workbench and Codex/GPT-5) Workbench confirmed the InternVL config: selected model `internvl3_5_8b`, run ID `internvl3_5_8b_medical_full_200_cases`, 200 cases, 263 images, vLLM endpoint, and `MODEL_DTYPE=bfloat16`.
+- [x] (2026-06-30 21:24 +05:30, user on Workbench and Codex/GPT-5) Workbench attempted the InternVL vLLM server and failed before readiness during InternVL/Qwen3 model initialization with `ModuleNotFoundError: No module named 'flash_attn.ops'` while importing `flash_attn.ops.triton.rotary`.
+- [x] (2026-06-30 21:24 +05:30, Codex/GPT-5) Patched the InternVL notebook dependency cell to probe `flash_attn.ops.triton.rotary` and uninstall incompatible `flash-attn`/`flash_attn` only if the partial package would make vLLM crash; validated JSON/code cells and pushed commit `16f6628` to `origin/main`.
+- [x] (2026-06-30 21:26 +05:30, user and Codex/GPT-5) User caught that this ExecPlan still compressed or omitted several failure/try details and left active runbook sections stale. Reconciled the lower sections from OctoMed to InternVL and added a model-attempt ledger under `Artifacts And Notes`.
+- [ ] (next Workbench session, user/Codex) Pull latest `main` on Workbench, move any blocking untracked local InternVL notebook aside, restart the kernel, reload/open `notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb`, rerun the dependency cell and server cell, confirm `/v1/models`, and only then start the full 200-case benchmark.
 
 ## Surprises & Discoveries
 
@@ -125,6 +151,30 @@ Current state (2026-06-30 21:09 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
   Evidence: The same `AttributeError: 'LlavaMistralConfig' object has no attribute 'pad_token_id'` appeared again after the MistralConfig fix was committed, and the server log did not show the updated preflight output with `pad_token_id=`.
   Date/Author: 2026-06-30, user and Codex/GPT-5
 
+- Observation: vLLM 0.23.0 rejects `--limit-mm-per-prompt image=5` before model startup because the argument is parsed with `json.loads`.
+  Evidence: Workbench server log ended with `api_server.py: error: argument --limit-mm-per-prompt: Value image=5 cannot be converted to <function loads ...>` and exit code 2. After commit `65a774b`, the config printed `--limit-mm-per-prompt`, `{"image": 5}` and passed that parser step.
+  Date/Author: 2026-06-30, user and Codex/GPT-5
+
+- Observation: The OctoMed `llguidance` failure is a local vLLM dependency break introduced by cleanup, not a model download failure.
+  Evidence: Workbench server log at commit `65a774b` failed while importing `/opt/micromamba/lib/python3.12/site-packages/vllm/v1/structured_output/backend_guidance.py`, before any Hugging Face download or safetensors loading, with `ModuleNotFoundError: No module named 'llguidance'`.
+  Date/Author: 2026-06-30, user and Codex/GPT-5
+
+- Observation: SGLang conflict cleanup and vLLM dependency cleanup cannot share one delete list.
+  Evidence: vLLM 0.23.0 requirements list `llguidance >=1.7.0,<1.8.0`, `outlines_core==0.2.14`, `tilelang==0.1.9`, and `tokenspeed-mla==0.1.2`; SGLang had complained about different versions of some of those packages, but removing them breaks vLLM.
+  Date/Author: 2026-06-30, Codex/GPT-5
+
+- Observation: The plan's active path can drift when model-specific notebooks are prepared in quick succession.
+  Evidence: Before this revision, `Current State`, `Plan Of Work`, and `Validation And Acceptance` still described the OctoMed dependency repair as the active next step, while the user was actively running the InternVL notebook and asking to update the plan for that path.
+  Date/Author: 2026-06-30, Codex/GPT-5
+
+- Observation: The previous plan update failed the observable mirror check required after user-caught errors.
+  Evidence: Contradicting artifact: `Documents/execplan_medical_workbench_runtime.md` had InternVL in `Current State` and `Progress`, but OctoMed in `Plan Of Work`, `Concrete Steps`, `Validation And Acceptance`, and recovery guidance. Missed verification: the update did not grep the active model name across every runbook section before finishing. User view: the user reread the chat and pointed out that multiple failures and tries were still not reflected.
+  Date/Author: 2026-06-30, user and Codex/GPT-5
+
+- Observation: InternVL/vLLM reached model initialization but failed on a partial or incompatible FlashAttention package, not on dataset staging or model selection.
+  Evidence: The server log entered `vllm/model_executor/models/internvl.py`, then Qwen3 rotary embedding construction, then failed importing `flash_attn.ops.triton.rotary` with `ModuleNotFoundError: No module named 'flash_attn.ops'`. The config cell had already printed `internvl3_5_8b`, 200 cases, 263 images, and `bfloat16`.
+  Date/Author: 2026-06-30, user and Codex/GPT-5
+
 ## Decision Log
 
 - Decision: Keep Workbench-specific notebook behavior in `notebooks/RadLE_Medical_Workbench_Runtime.ipynb` and keep `notebooks/RadLE_Medical_Custom_Runtime.ipynb` as the standard custom-runtime Colab path.
@@ -147,12 +197,36 @@ Current state (2026-06-30 21:09 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
   Rationale: The model returned a valid abstention phrase, repeated repair calls reproduced the same output, and promotion should distinguish a true abstention from a malformed diagnosis.
   Date/Author: 2026-06-30, Codex/GPT-5 and user
 
-- Decision: Select `llava_med_mistral_7b` as the next full Workbench model.
-  Rationale: Current file inspection shows the helper-module roster order is `medgemma_1_5_4b`, then `llava_med_mistral_7b`, then `internvl3_5_8b`, then `octomed_7b`. The local model config does not mark LLaVA-Med as gated and does not override the default max output token policy.
+- Decision (superseded): Select `llava_med_mistral_7b` as the next full Workbench model.
+  Rationale: This was correct before the LLaVA serving failures and before the user approved OctoMed. Current file inspection showed the helper-module roster order was `medgemma_1_5_4b`, then `llava_med_mistral_7b`, then `internvl3_5_8b`, then `octomed_7b`, and the local LLaVA model config did not mark it as gated.
   Date/Author: 2026-06-30, Codex/GPT-5
 
-- Decision: Keep LLaVA-Med as the target and isolate its serving workaround in a copied notebook instead of pivoting to OctoMed.
-  Rationale: The user explicitly rejected moving to OctoMed before asking. The LLaVA-Med failure is a serving-stack issue, not a dataset/run-contract issue, so a separate copy lets the project try LLaVA-specific SGLang or native-adapter changes without contaminating the normal Workbench notebook for the other roster models.
+- Decision (superseded): Keep LLaVA-Med as the target and isolate its serving workaround in a copied notebook instead of pivoting to OctoMed.
+  Rationale: This was a point-in-time correction before OctoMed was explicitly approved. The LLaVA-Med failure is a serving-stack issue, not a dataset/run-contract issue, so a separate copy lets the project try LLaVA-specific SGLang or native-adapter changes without contaminating the normal Workbench notebook for the other roster models.
+  Date/Author: 2026-06-30, user and Codex/GPT-5
+
+- Decision (superseded): After explicit user approval, make `octomed_7b` the active next Workbench model in an isolated OctoMed notebook.
+  Rationale: This was correct for the OctoMed session. The current active request has since moved to InternVL, but keeping OctoMed in `notebooks/RadLE_Medical_Workbench_OctoMed_Runtime.ipynb` preserves the official path and the LLaVA experiment while allowing vLLM/Qwen2.5-VL-specific settings if the user returns to OctoMed.
+  Date/Author: 2026-06-30, user and Codex/GPT-5
+
+- Decision: For OctoMed/vLLM, pass the multi-image limit as JSON and smoke-test the only 5-image RadLE case before the full run.
+  Rationale: vLLM 0.23.0 parses `--limit-mm-per-prompt` with JSON loading, so `{"image": 5}` is the valid form. The value `5` comes from the dataset contract because case `156` has five images in one grouped case; it is not a download setting and not evidence of a model cap failure.
+  Date/Author: 2026-06-30, Codex/GPT-5 and user
+
+- Decision: For the OctoMed vLLM path, preserve vLLM shared dependencies and repair vLLM by reinstalling the pinned wheel if the import probe fails.
+  Rationale: Workbench showed the server exits before model download/load if `llguidance` is removed. vLLM 0.23.0 depends on `llguidance`, `outlines_core`, `tilelang`, and `tokenspeed-mla`, so the cleanup cell must not delete them just because SGLang previously reported resolver conflicts.
+  Date/Author: 2026-06-30, Codex/GPT-5
+
+- Decision: Make `internvl3_5_8b` the active current Workbench path in an isolated InternVL notebook.
+  Rationale: The user explicitly asked to prepare `notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb` as the custom InternVL notebook. Keeping InternVL in its own copy preserves the official path, the LLaVA experiment, and the OctoMed experiment while allowing InternVL/vLLM-specific dtype, token, and dependency handling.
+  Date/Author: 2026-06-30, user and Codex/GPT-5
+
+- Decision: For InternVL/vLLM, treat missing `flash_attn.ops.triton.rotary` as an incompatible optional dependency and remove `flash-attn` only when the exact rotary probe fails.
+  Rationale: vLLM failed during InternVL/Qwen3 rotary embedding setup because the installed `flash_attn` package did not expose the path vLLM attempted to import. The notebook fix is narrow: probe the path, uninstall `flash-attn`/`flash_attn` only if the partial package is present, and otherwise leave the environment alone.
+  Date/Author: 2026-06-30, Codex/GPT-5
+
+- Decision: Keep an explicit model-attempt ledger in `Artifacts And Notes` when a model path has multiple failed server tries.
+  Rationale: The user needs a fresh agent to understand which failures were already tested and why a later notebook branch exists. Progress checkboxes alone were too compressed and let important evidence fall out of the active plan.
   Date/Author: 2026-06-30, user and Codex/GPT-5
 
 - Decision: Stay on `main` in the local checkout unless the next model change expands beyond notebook/doc defaults.
@@ -168,12 +242,15 @@ Current state (2026-06-30 21:09 +05:30, Codex/GPT-5): the `medgemma_1_5_4b` 200-
 - v7 (2026-06-30, Codex/GPT-5): Reconciled the live vLLM failure and user correction. Recorded that LLaVA remains the target, OctoMed requires explicit approval, and the LLaVA workaround now lives in `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb`.
 - v8 (2026-06-30, Codex/GPT-5): Recorded the SGLang torch/torchvision CUDA mismatch and patched the copied notebook to force reinstall the official PyTorch CUDA-13 trio before probing SGLang LLaVA support.
 - v9 (2026-06-30, Codex/GPT-5): Recorded the later LLaVA SGLang startup lessons: SGLang imports are not enough because `AutoConfig` parses first, `llava_mistral` must be registered as a Mistral-derived config with a concrete `pad_token_id`, and the server cell must rewrite/probe the runtime shim immediately before launch to avoid stale Workbench state.
+- v10 (2026-06-30 21:19 +05:30, Codex/GPT-5): Updated the plan for the approved OctoMed path after commit `65a774b`. Recorded that JSON `{"image": 5}` fixed the vLLM CLI syntax error, that the current blocker is missing `llguidance` from cleanup before model download/load, and that the next edit must preserve vLLM dependencies and verify/reinstall pinned vLLM.
+- v11 (2026-06-30 21:26 +05:30, Codex/GPT-5): Reconciled the plan from the prior OctoMed-active state to the current InternVL-active state. Recorded commit `16f6628`, the successful InternVL config checks, the `flash_attn.ops.triton.rotary` startup failure, and the pushed dependency-cell probe/cleanup fix.
+- v12 (2026-06-30 21:26 +05:30, Codex/GPT-5): Corrected the user-caught stale lower sections and expanded the failure/try history. `Plan Of Work`, `Milestones`, `Concrete Steps`, `Validation And Acceptance`, and recovery guidance now match the InternVL-active path; `Artifacts And Notes` now includes a model-attempt ledger for LLaVA, OctoMed, and InternVL.
 
 ## Outcomes & Retrospective
 
 Completed outcome: the Workbench medical path has produced one verified full 200-case baseline for `medgemma_1_5_4b`. The run has a model-scoped folder in GCS, a downloaded local mirror, final/private CSV with matching SHA-256, public release tables, scorer view, raw backups, repair artifacts, runtime logs, and provenance JSON.
 
-Remaining work: run `llava_med_mistral_7b` from the copied LLaVA SGLang notebook. The next Workbench session should rely on the notebook's guardrails: expected 200 cases, expected 263 image files, resume enabled, audit before repair, no promotion with repair targets, export/sync only after a clean audit.
+Remaining work: rerun the active InternVL notebook from commit `16f6628` or newer. The next Workbench session should move any blocking untracked local InternVL notebook aside, pull latest `main`, restart/reload `notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb`, rerun the dependency cell so the `flash_attn.ops.triton.rotary` probe can remove a partial FlashAttention package if needed, start vLLM, confirm `/v1/models`, and only then run the full 200-case benchmark with the same audit, repair, promotion, export, and sync guardrails.
 
 Reusable lesson: for VM-hosted benchmark runs, artifact readiness should be proven by independent storage and file audits, not by notebook logs. This is broadly reusable, but no global skill update has been made. Ask the user before promoting it into a reusable skill.
 
@@ -184,7 +261,7 @@ This section is a routing matrix, not a menu. Use a skill only when its trigger 
 | Workflow Gate | Trigger For Using A Skill | Skill To Use | Required Receipt / Evidence | Do Not Use It For | Activation |
 | --- | --- | --- | --- | --- | --- |
 | Long-lived state and handoff | The run target, dataset contract, promotion rules, repair policy, or completed-run evidence changes. | `execplan` | Updated `Current State`, `Locked Facts`, `Progress`, `Decision Log`, and `Artifacts And Notes` with exact paths, counts, hashes, and next action. | Routine status replies, simple command output, or one-off notebook cell guidance. | `auto-suggest` |
-| Notebook mutation | Editing `notebooks/RadLE_Medical_Workbench_Runtime.ipynb`, changing defaults, adding cells, or touching notebook JSON. | `jupyter-notebook` | Notebook parses as JSON, code cells compile, config grep shows expected model/run settings, and diff is scoped to intended cells. | Purely reading a notebook or giving the user run instructions without editing. | `auto-suggest` |
+| Notebook mutation | Editing `notebooks/RadLE_Medical_Workbench_Runtime.ipynb`, `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb`, `notebooks/RadLE_Medical_Workbench_OctoMed_Runtime.ipynb`, `notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb`, changing defaults, adding cells, or touching notebook JSON. | `jupyter-notebook` | Notebook parses as JSON, code cells compile, config grep shows expected model/run settings, and diff is scoped to intended cells. | Purely reading a notebook or giving the user run instructions without editing. | `auto-suggest` |
 | Model feasibility research | Current helper/notebook files are insufficient to decide whether a roster model can run under vLLM on 2 x L4, needs gated access, a different dtype, a different engine, or a specific model revision. | `hugging-face:hf-cli` for Hub metadata and files; use web/primary sources only if the skill or local files cannot answer. | Exact model repo ID, relevant config fields, gated/access status, model card/runtime caveats, and any dtype/context/GPU-memory implications recorded in this plan or the commit message. | Re-checking known local roster order, downloading weights, or doing broad model shopping. | `manual` |
 | Workbench and GCS operations | Verifying remote run artifacts, copying results, checking object metadata, or confirming dataset snapshot objects. | `none`; use `gcloud storage` or the available gcloud MCP directly. | GCS object paths, object sizes/timestamps where useful, manifest contents, and local hash/row-count checks after download. | Treating notebook rsync logs as proof of persistence. | `none` |
 | Run audit and repair decision | Audit results affect whether to repair, clean up, promote, export, or sync. | `data-analytics:analyze-data-quality` when the evidence spans multiple CSVs/manifests or conflicting counts; otherwise `none` with direct Python/CSV checks. | Dataset integrity table, row count, unique case count, missing/extra/duplicate cases, bucket/status summaries, repair-target table, final manifest hash, public summary alignment. | Cosmetic summaries or dashboard/report generation. | `manual` |
@@ -200,6 +277,9 @@ This repository contains RadLE v2 benchmark notebooks and helper modules. The of
 Important paths:
 
 - `notebooks/RadLE_Medical_Workbench_Runtime.ipynb`: Workbench notebook to edit for next medical model runs.
+- `notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb`: isolated LLaVA-Med SGLang experiment; not the active next run unless the user returns to LLaVA.
+- `notebooks/RadLE_Medical_Workbench_OctoMed_Runtime.ipynb`: isolated OctoMed vLLM/Qwen2.5-VL notebook; not the active next run unless the user returns to OctoMed.
+- `notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb`: isolated InternVL3.5 vLLM notebook; this is the active current path after commit `16f6628`.
 - `src/radle_medical_custom_runtime.py`: model roster, server startup helpers, OpenAI-compatible client setup, medical benchmark wrapper, and CSV validation helpers.
 - `src/radle_benchmark.py`: shared benchmark/audit/repair/promote/export logic.
 - `Documents/runtime_provenance_contract_radle_medical.md`: internal contract for dataset snapshot, Workbench host, model roster, and provenance expectations; useful but partly stale and should be verified.
@@ -209,25 +289,25 @@ The Workbench VM used for the baseline was `medical-master-radfm` in GCP project
 
 ## Plan Of Work
 
-First, orient against current files. Read the Workbench notebook config cell and the model roster in `src/radle_medical_custom_runtime.py`. Confirm `HEAD`, branch, and working tree state. Confirm whether `Documents/runtime_provenance_contract_radle_medical.md` or this ExecPlan needs an update for the next model.
+First, orient against current files. Read `notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb`, the model roster in `src/radle_medical_custom_runtime.py`, and `git status --short --branch`. Expect unrelated dirty files in this checkout; do not revert them. Treat any existing uncommitted InternVL notebook tweak as a candidate fix only after inspecting the diff.
 
-Second, select the next model conservatively. Current file inspection verified that the roster lists `llava_med_mistral_7b` after `medgemma_1_5_4b`, then `internvl3_5_8b`, then `octomed_7b`. The selected next model is `llava_med_mistral_7b`; its local model config does not require a Hugging Face token and does not override the default max output token policy.
+Second, keep `internvl3_5_8b` as the active current model because the user explicitly asked to prepare the custom InternVL notebook and is actively running it on Workbench. Preserve the InternVL run contract: model-scoped run ID `internvl3_5_8b_medical_full_200_cases`, 200 cases, 263 image files, vLLM, `bfloat16`, max model length from the helper default, max output tokens 2048, `TEST_LIMIT=None`, and `RESUME=True`.
 
-Third, edit only the Workbench notebook defaults needed for the next run. Preserve `RUN_LABEL_BASE = "medical_full_200_cases"`, `RUN_ID = f"{SELECTED_MODEL_NAME}_{RUN_LABEL_BASE}"`, `TEST_LIMIT = None`, `RESUME = True`, `EXPECTED_FULL_CASES = 200`, `EXPECTED_FULL_IMAGES = 263`, and `MAX_OUTPUT_TOKENS = 2048` unless inspection proves a different safe value is needed. Keep the completed MedGemma result folder untouched.
+Third, for the current blocker, do not edit the benchmark wrapper or dataset logic. The pushed notebook fix already lives in the dependency cell: after vLLM installs and imports, it probes `flash_attn.ops.triton.rotary`; if a partial `flash_attn` package exists without that module, it uninstalls `flash-attn`/`flash_attn` so vLLM can use its rotary fallback. If a later Workbench run still fails, inspect the new server log and patch only the narrow dependency/setup behavior that explains that log.
 
-Fourth, validate locally. Parse the notebook JSON, compile notebook code cells, compile the helper modules, and run a focused config extraction if possible. Do not start a real model server locally.
+Fourth, validate locally after any future edit. Parse the InternVL notebook JSON, compile its code cells, compile the helper modules, and run a focused config/dependency-string extraction. Do not start a real model server locally.
 
-Fifth, commit and push. Because the Workbench run uses `git pull`, the notebook change must be pushed before the user restarts the Workbench kernel. Include this ExecPlan or provenance contract in the commit only if they were intentionally updated and should travel with the repo.
+Fifth, commit and push only the intended InternVL notebook fix and intentional documentation updates. Because the Workbench run uses `git pull`, any future fix must be pushed before the user restarts the Workbench kernel.
 
-Sixth, give the user an exact Workbench runbook. It should include pulling latest repo, restarting kernel, reloading notebook from disk, confirming the printed config, starting vLLM, running the benchmark, auditing, inspecting repair targets before repair, promoting/exporting/syncing only after zero repair targets, and stopping the server.
+Sixth, give the user an exact Workbench runbook. It should include pulling latest repo, moving aside a blocking untracked local InternVL notebook if needed, restarting the kernel, reloading the InternVL notebook from disk, rerunning dependency/setup cells so the FlashAttention probe executes, confirming the printed config, starting vLLM, confirming `/v1/models`, running the benchmark only after server readiness, auditing, inspecting repair targets before repair, promoting/exporting/syncing only after zero repair targets or a documented narrow cleanup, and stopping the server.
 
 ## Milestones
 
-Milestone 1, next-model preparation, uses `jupyter-notebook`: The Workbench notebook defaults point to the verified next model and print a model-scoped full-run config for 200 cases and 263 image files. Evidence is a local notebook parse/config check and a focused diff.
+Milestone 1, InternVL notebook readiness, uses `jupyter-notebook`: The InternVL notebook selects `internvl3_5_8b`, uses vLLM and bfloat16, avoids unnecessary HF-token prompting for this ungated model, and contains the FlashAttention rotary probe/cleanup. Evidence is a local notebook parse/config/dependency check and a focused diff or commit.
 
-Milestone 2, repository handoff, uses `execplan`: The notebook change, this plan, and any provenance-contract update are reconciled so a fresh session can understand the completed baseline and next model target. Evidence is `git diff --check`, status, and a commit on `main`.
+Milestone 2, repository handoff, uses `execplan`: The notebook change, this plan, and any provenance-contract update are reconciled so a fresh session can understand the completed baseline, LLaVA detour, OctoMed detour, active InternVL target, and current FlashAttention dependency blocker. Evidence is `git diff --check`, status, and a commit on `main`.
 
-Milestone 3, live Workbench run, uses `none`: The user runs the notebook on the Workbench VM, confirms the config, starts vLLM, completes the benchmark with resume enabled, and gets 200 validated output rows. Evidence is audit output plus files in the run folder, not logs alone.
+Milestone 3, live InternVL Workbench run, uses `none`: The user runs the InternVL notebook on the Workbench VM, confirms the config, starts vLLM, confirms `/v1/models`, completes the benchmark with resume enabled, and gets 200 validated output rows. Evidence is audit output plus files in the run folder, not logs alone.
 
 Milestone 4, completed-run verification, uses `data-analytics:analyze-data-quality` optionally: Verify final/private CSV rows and unique cases, public summary, manifest hash, GCS object presence, and local download if requested. Evidence is literal row counts, SHA-256, and GCS/local paths.
 
@@ -238,16 +318,16 @@ From repo root, inspect state:
     git status --short --branch
     git rev-parse --short HEAD
 
-Expected on 2026-06-30 before the next-model edit:
+Expected on 2026-06-30 after the InternVL notebook fix:
 
     ## main...origin/main
-    f720426
+    16f6628
 
 There may be unrelated modified and untracked files. Do not revert user work.
 
-Inspect roster and notebook defaults:
+Inspect roster, InternVL defaults, and dependency cleanup terms:
 
-    rg -n "MEDICAL_CUSTOM_RUNTIME_MODELS|name=|SELECTED_MODEL_NAME|RUN_LABEL_BASE|RUN_ID|TEST_LIMIT|RESUME|MAX_OUTPUT_TOKENS|MODEL_DTYPE" src/radle_medical_custom_runtime.py notebooks/RadLE_Medical_Workbench_Runtime.ipynb
+    rg -n "MEDICAL_CUSTOM_RUNTIME_MODELS|name=|internvl3_5_8b|SELECTED_MODEL_NAME|RUN_LABEL_BASE|RUN_ID|TEST_LIMIT|RESUME|MAX_OUTPUT_TOKENS|MODEL_DTYPE|BF16_MODELS|MAX_MODEL_LEN|SERVER_ENGINE|flash_attn|requires_hf_token" src/radle_medical_custom_runtime.py notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb
 
 Expected current model names include:
 
@@ -256,17 +336,39 @@ Expected current model names include:
     internvl3_5_8b
     octomed_7b
 
-Validate Python modules after notebook/default edits:
+Expected InternVL-specific facts include:
+
+    selected_model: internvl3_5_8b
+    model_scoped_run_id: internvl3_5_8b_medical_full_200_cases
+    server_engine: vllm
+    model_dtype: bfloat16
+    max_model_len: model_runtime.default_max_model_len
+    HF token prompt gated by model_runtime.requires_hf_token
+    flash_attn.ops.triton.rotary probe before server startup
+
+Validate Python modules after notebook edits:
 
     py -3.11 -m py_compile src/radle_medical_custom_runtime.py src/radle_benchmark.py
 
 Expected: no output and exit code 0.
 
-Validate notebook JSON and code-cell compilation:
+Validate InternVL notebook JSON and code-cell compilation:
 
-    py -3.11 -c "import ast,json,pathlib; nb=json.loads(pathlib.Path('notebooks/RadLE_Medical_Workbench_Runtime.ipynb').read_text(encoding='utf-8-sig')); cells=[c for c in nb['cells'] if c.get('cell_type')=='code']; [compile(''.join(c.get('source',[])), f'cell_{i}', 'exec') for i,c in enumerate(cells,1)]; print('compiled code cells', len(cells))"
+    py -3.11 -c "import ast,json,pathlib; nb=json.loads(pathlib.Path('notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb').read_text(encoding='utf-8-sig')); cells=[c for c in nb['cells'] if c.get('cell_type')=='code']; [compile(''.join(c.get('source',[])), f'internvl_cell_{i}', 'exec') for i,c in enumerate(cells,1)]; print('compiled InternVL code cells', len(cells))"
 
-Expected: prints `compiled code cells` followed by a positive count.
+Expected: prints `compiled InternVL code cells` followed by a positive count.
+
+Extract dependency-cleanup guardrails after the fix:
+
+    py -3.11 -c "import json,pathlib; p=pathlib.Path('notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb'); src='\n'.join(''.join(c.get('source',[])) for c in json.loads(p.read_text(encoding='utf-8-sig'))['cells'] if c.get('cell_type')=='code'); [print(term, term in src) for term in ['flash_attn.ops.triton.rotary','flash-attn','uninstall','SELECTED_MODEL_NAME = \"internvl3_5_8b\"','BF16_MODELS']]"
+
+Expected: all five checks print `True`.
+
+When the user reruns on Workbench, the dependency/setup section should probe FlashAttention before server launch. A useful standalone probe is:
+
+    /opt/micromamba/bin/python3 -c "import importlib.util; print(importlib.util.find_spec('flash_attn')); print(importlib.util.find_spec('flash_attn.ops.triton.rotary'))"
+
+Expected after the dependency cell: either `flash_attn` is absent, or `flash_attn.ops.triton.rotary` is present. If `flash_attn` is present and the rotary path is absent, the patched dependency cell should uninstall it before server startup.
 
 Check whitespace:
 
@@ -294,18 +396,21 @@ Expected: the listing includes `final/`, `public_release/`, `raw/`, `repair/`, `
 
 ## Validation And Acceptance
 
-Local acceptance for the next-model prep:
+Local acceptance for the InternVL dependency repair:
 
-- The Workbench notebook parses as JSON and all code cells compile.
+- The InternVL notebook parses as JSON and all code cells compile.
 - `src/radle_medical_custom_runtime.py` and `src/radle_benchmark.py` compile.
-- A focused grep or notebook inspection shows the intended next `SELECTED_MODEL_NAME`, model-scoped `RUN_ID`, `TEST_LIMIT = None`, `RESUME = True`, expected 200 cases, expected 263 image files, and `MAX_OUTPUT_TOKENS = 2048` unless explicitly changed.
+- A focused grep or notebook inspection shows `SELECTED_MODEL_NAME = "internvl3_5_8b"`, model-scoped `RUN_ID`, `TEST_LIMIT = None`, `RESUME = True`, expected 200 cases, expected 263 image files, `MAX_OUTPUT_TOKENS = 2048`, vLLM, and `bfloat16`.
+- The HF token cell only prompts when `model_runtime.requires_hf_token` is true.
+- The dependency/setup logic probes `flash_attn.ops.triton.rotary` and removes `flash-attn`/`flash_attn` only if a partial package would make vLLM crash.
 - `git diff --check` is clean.
 - The completed MedGemma result folder is not modified.
 
-Live acceptance for a next full run:
+Live acceptance for the InternVL full run:
 
 - The notebook prints the current repo commit after pull.
-- The config printout shows the selected next model, `medical_full_200_cases`, model-scoped run ID, full mode, expected 200 cases, expected 263 image files, and the selected dtype.
+- The config printout shows `internvl3_5_8b`, `medical_full_200_cases`, model-scoped run ID, full mode, expected 200 cases, expected 263 image files, `bfloat16`, and `MAX_MODEL_LEN=8192`.
+- The dependency/setup cells run the FlashAttention rotary probe before server startup.
 - The server cell reaches `/v1/models` and `nvidia-smi` shows `VLLM::EngineCore` before the benchmark cell runs.
 - The benchmark cell validates exactly 200 output rows.
 - The audit reports 200 rows, 200 unique cases, no missing or extra case IDs, and zero repair targets before promotion. If repair targets exist, inspect them before repair.
@@ -315,6 +420,10 @@ Live acceptance for a next full run:
 ## Idempotence And Recovery
 
 The notebook setup cells are intended to be rerunnable. If Workbench asks whether to reload from disk after `git pull`, reload from disk and do not overwrite a newer file.
+
+If Workbench has a local untracked `notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb` and `git pull` refuses to overwrite it, move it aside to `/home/jupyter/RadLE_Medical_Workbench_Internvl_Runtime.local_before_16f6628.ipynb`, then pull again. Reload the notebook from disk and restart the kernel so the dependency cell and imported modules match the pulled file.
+
+If the old InternVL dependency cell already failed on `flash_attn.ops.triton.rotary`, restart the kernel after pulling commit `16f6628` or newer, rerun the dependency/setup cell, and check that the FlashAttention probe either removes `flash_attn` or finds `flash_attn.ops.triton.rotary`. Do not proceed to the benchmark with a server that has not reached `/v1/models`.
 
 If the Jupyter session is disposed but `nvidia-smi` still shows `VLLM::EngineCore`, reconnect the kernel and test the endpoint before restarting the server. If `nvidia-smi` shows no vLLM process, rerun the server cell before rerunning the benchmark cell.
 
@@ -365,6 +474,62 @@ Completed baseline public summary:
     run_id,model,provider,n_cases,valid_response_rate,abstention_rate,mean_likert_score,mean_latency_seconds,mean_prompt_tokens,mean_completion_tokens,mean_reasoning_tokens,mean_score_binary,mean_score_likert
     medgemma_1_5_4b_medical_full_200_cases,medgemma_1_5_4b,UNKNOWN,200,1.0,0.135,3.2254335260115607,15.847999999999999,670.585,463.56,0.0,,
 
+Model-attempt ledger as of 2026-06-30 21:26 +05:30:
+
+    1. MedGemma baseline succeeded.
+       Notebook path: notebooks/RadLE_Medical_Workbench_Runtime.ipynb
+       Model: medgemma_1_5_4b / google/medgemma-1.5-4b-it
+       Engine/dtype: vLLM / bfloat16
+       Result: 200-case run completed, repaired exact "I don't know" rows as abstentions, promoted, exported, synced, and locally verified.
+
+    2. LLaVA-Med vLLM path failed before server readiness.
+       Notebook path: notebooks/RadLE_Medical_Workbench_Runtime.ipynb at the time
+       Model: llava_med_mistral_7b / microsoft/llava-med-v1.5-mistral-7b
+       Engine/dtype: vLLM / float16
+       Try: selected LLaVA-Med as the next roster model after MedGemma.
+       Failure: vLLM 0.23.0 exited before readiness because Transformers did not recognize `model_type=llava_mistral`.
+       Consequence: do not retry LLaVA-Med under the pinned vLLM runtime without a model-adapter change.
+
+    3. LLaVA-Med SGLang copy failed first on a CUDA vision stack mismatch.
+       Notebook path: notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb
+       Try: isolated LLaVA into an SGLang notebook copy.
+       Failure: SGLang import reached `torchvision.io.decode_jpeg`, then failed because PyTorch reported CUDA 13.0 while torchvision was compiled for CUDA 12.9.
+       Patch tried: uninstall vLLM in the SGLang path and force reinstall `torch==2.11.0`, `torchvision==0.26.0`, and `torchaudio==2.11.0` from the official `cu130` PyTorch wheel index.
+
+    4. LLaVA-Med SGLang copy then failed because server launch still used Transformers AutoConfig.
+       Try: after the CUDA stack fix, probe `sglang.srt.models.llava.LlavaMistralForCausalLM`.
+       Success within try: SGLang class import succeeded.
+       Failure: `python -m sglang.launch_server ... --model-path microsoft/llava-med-v1.5-mistral-7b` still called Transformers `AutoConfig` and failed with `KeyError`/`ValueError` for `llava_mistral`.
+       Patch tried: write `/home/jupyter/radle_runtime_shims/sitecustomize.py`, prepend it to `PYTHONPATH`, register `llava_mistral`, and run a subprocess `AutoConfig.from_pretrained(...)` probe before server startup.
+
+    5. LLaVA-Med SGLang copy then failed after weight loading began because the first shim used the wrong config base.
+       Try: sitecustomize registered `llava_mistral` as a LLaVA-derived config.
+       Failure: server reached `Load weight begin`, then SGLang's Mistral path accessed `config.pad_token_id` and crashed with `AttributeError: 'LlavaMistralConfig' object has no attribute 'pad_token_id'`.
+       Patch tried: change the shim to subclass `MistralConfig`, assert `pad_token_id` exists, and later set `pad_token_id` from `eos_token_id` if absent.
+       Extra Workbench lesson: the same `pad_token_id` error recurred when Workbench appeared to be using a stale shim, so the server cell now rewrites/probes the shim immediately before launch.
+
+    6. OctoMed first failed on vLLM CLI syntax, not image-count capacity or model download.
+       Notebook path: notebooks/RadLE_Medical_Workbench_OctoMed_Runtime.ipynb
+       Model: octomed_7b / OctoMed/OctoMed-7B
+       Engine/dtype: vLLM / bfloat16
+       Try: pass one grouped RadLE case at a time, allowing up to five images because the dataset has one 5-image grouped case, case 156.
+       Failure: `--limit-mm-per-prompt image=5` exited with `api_server.py: error: argument --limit-mm-per-prompt: Value image=5 cannot be converted to <function loads ...>`.
+       Patch tried: use JSON form `--limit-mm-per-prompt '{"image": 5}'` and add a non-writing case-156 smoke before the full benchmark.
+
+    7. OctoMed then failed because cleanup removed a vLLM dependency before model download/load.
+       Try: Workbench pulled commit `65a774b`; config printed `octomed_7b`, 200 cases, 263 images, `bfloat16`, tensor parallel size 2, `MAX_MODEL_LEN=8192`, and JSON `{"image": 5}`.
+       Failure: vLLM got past the CLI parser but exited during OpenAI server imports with `ModuleNotFoundError: No module named 'llguidance'`.
+       Root cause: the dependency cleanup list removed packages such as `llguidance`, `tilelang`, `tokenspeed-mla`, and `outlines` while trying to clear stale SGLang conflicts; vLLM 0.23.0 itself requires the shared vLLM packages.
+       Consequence: OctoMed fix, if resumed, must preserve vLLM shared dependencies and reinstall/probe pinned vLLM rather than treating this as model download trouble.
+
+    8. InternVL became the active path and first failed on a partial FlashAttention package.
+       Notebook path: notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb
+       Model: internvl3_5_8b / OpenGVLab/InternVL3_5-8B
+       Engine/dtype: vLLM / bfloat16
+       Try: Workbench confirmed `internvl3_5_8b`, run ID `internvl3_5_8b_medical_full_200_cases`, 200 cases, 263 images, vLLM endpoint, and `MODEL_DTYPE=bfloat16`.
+       Failure: server reached InternVL/Qwen3 model initialization, then failed importing `flash_attn.ops.triton.rotary` with `ModuleNotFoundError: No module named 'flash_attn.ops'`.
+       Patch tried: commit `16f6628` probes `flash_attn.ops.triton.rotary` during the dependency cell and uninstalls `flash-attn`/`flash_attn` only if the installed package is partial/incompatible.
+
 Next-model prep local validation transcript from 2026-06-30:
 
     notebook: notebooks\RadLE_Medical_Workbench_Runtime.ipynb
@@ -394,6 +559,73 @@ Internet research notes for the LLaVA copy:
 
     Microsoft LLaVA-Med README documents the native LLaVA-Med serving path with controller/model_worker and `--model-path microsoft/llava-med-v1.5-mistral-7b`.
     Current SGLang source registers `LlavaMistralForCausalLM` in `sglang.srt.models.llava`, so the copied notebook probes for that class immediately after SGLang install.
+
+OctoMed Workbench config transcript from commit `65a774b`:
+
+    Selected model: octomed_7b
+    Model ID: OctoMed/OctoMed-7B
+    Run label base: medical_full_200_cases
+    Model-scoped run ID: octomed_7b_medical_full_200_cases
+    Expected cases this run: 200
+    Expected image files this run: 263
+    Multi-image grouped cases: 50
+    Max images per grouped case: 5
+    Tensor parallel size: 2
+    GPU memory utilization: 0.8
+    Max model len: 8192
+    Model dtype: bfloat16
+    Extra server args: ['--dtype', 'bfloat16', '--limit-mm-per-prompt', '{"image": 5}', '--mm-processor-kwargs', '{"min_pixels": 262144, "max_pixels": 262144}']
+
+OctoMed server failure transcript from commit `65a774b`:
+
+    $ /opt/micromamba/bin/python3 -m vllm.entrypoints.openai.api_server ... --limit-mm-per-prompt {"image": 5} ...
+    ModuleNotFoundError: No module named 'llguidance'
+
+vLLM dependency research note for the OctoMed fix:
+
+    vLLM 0.23.0 requirements include llguidance >=1.7.0,<1.8.0 and outlines_core==0.2.14 in common requirements.
+    vLLM 0.23.0 CUDA requirements include tilelang==0.1.9 and tokenspeed-mla==0.1.2.
+    Therefore the OctoMed dependency cleanup must not remove llguidance, outlines_core, tilelang, or tokenspeed-mla.
+
+InternVL notebook local validation transcript from commit `16f6628`:
+
+    compiled code cells 16
+    src/radle_medical_custom_runtime.py and src/radle_benchmark.py compiled with py -3.11 -m py_compile
+    notebook title: RadLE Medical Workbench InternVL Runtime
+    server_engine: vllm
+    selected_model: internvl3_5_8b
+    model_scoped_run_id: internvl3_5_8b_medical_full_200_cases
+    model_dtype: bfloat16
+    max_model_len: model_runtime.default_max_model_len
+    dependency probe: flash_attn.ops.triton.rotary
+
+InternVL Workbench config transcript before the FlashAttention fix:
+
+    Selected model: internvl3_5_8b
+    Run label base: medical_full_200_cases
+    Model-scoped run ID: internvl3_5_8b_medical_full_200_cases
+    Test limit: full
+    Expected cases this run: 200
+    Expected image files this run: 263
+    Multi-image grouped cases: 50
+    Dataset GCS URI: gs://radle-medical-data-toronto/datasets/radle-v2-frozen-2026-06-29/RadLE v2 Master Data
+    Run folder: /home/jupyter/radle_dataset/RadLE v2 Dataset/Runs/internvl3_5_8b_medical_full_200_cases
+    Raw results CSV: /home/jupyter/radle_dataset/RadLE v2 Dataset/Runs/internvl3_5_8b_medical_full_200_cases/raw/results.csv
+    Max output tokens: 2048
+    Model dtype: bfloat16
+    Endpoint: http://127.0.0.1:8000/v1
+
+InternVL server failure transcript before commit `16f6628`:
+
+    Starting vllm server for internvl3_5_8b...
+    Server process started. Log path: /home/jupyter/internvl3_5_8b_vllm_server.log
+    ModuleNotFoundError: No module named 'flash_attn.ops'
+
+InternVL dependency fix note:
+
+    Commit 16f6628 probes importlib.util.find_spec('flash_attn.ops.triton.rotary') after vLLM install/import.
+    If flash_attn exists but that rotary path is missing, the notebook uninstalls flash-attn and flash_attn, then prints the post-cleanup flash_attn spec.
+    The intent is to let vLLM use its fallback path instead of crashing on a partial FlashAttention package.
 
 Important user preference:
 
@@ -432,3 +664,17 @@ Workbench run environment observed for the completed baseline:
 - GPUs: `2 x NVIDIA L4`.
 - vLLM for MedGemma used dtype `bfloat16`.
 - Home-disk fallback was used because `/mnt/disks/models_ssd` was not mounted.
+
+OctoMed vLLM dependency expectations:
+
+- `vllm` server startup imports structured-output backends before model download/load.
+- `llguidance` must be importable for vLLM 0.23.0 OpenAI server startup.
+- `outlines_core`, `tilelang`, and `tokenspeed-mla` are also vLLM 0.23.0 dependencies in this runtime family.
+- The OctoMed setup cell may remove stale `sglang` if needed, but must not share the LLaVA/SGLang cleanup list.
+
+InternVL vLLM dependency expectations:
+
+- `OpenGVLab/InternVL3_5-8B` is served through the vLLM OpenAI-compatible path with `--trust-remote-code` supplied by `src/radle_medical_custom_runtime.py` when `needs_trust_remote_code=True`.
+- InternVL3.5 uses `bfloat16`; keep the notebook's `BF16_MODELS` entry for `internvl3_5_8b`.
+- A partial `flash_attn` install can be worse than no `flash_attn` install for this runtime because vLLM may attempt `flash_attn.ops.triton.rotary` and crash before readiness.
+- The current InternVL notebook fix removes `flash-attn` only when that exact rotary module is absent; do not broaden this cleanup without a new server log that proves the next failure.
