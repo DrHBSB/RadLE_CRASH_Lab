@@ -87,7 +87,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/llava-vllm-runtime/"
     command: "node C:/Users/thehb/.agents/skills/goalbuddy/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/llava-vllm-runtime"
 
-active_task: T012
+active_task: T013
 
 tasks:
   - id: T001
@@ -494,7 +494,7 @@ tasks:
   - id: T012
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Review the next returned vLLM GUI outputs or first real error after the now-open notebook is run through Section 6.5."
     inputs:
@@ -511,6 +511,47 @@ tasks:
       - "Decision: proceed to full-run GUI instruction, request GUI rerun, request Antigravity edit, or blocked."
       - "Rationale tied to exact returned vLLM cell outputs or error text."
       - "Next packet or task if not complete."
+    receipt:
+      result: done
+      decision: request_gui_run
+      full_outcome_complete: false
+      note: "notes/T012-vllm-still-not-run-review.md"
+      rationale: "The correct LLaVA-vLLM notebook is open, but the GUI still shows Select Kernel at the top of the notebook and no Section #4/#6/#6.5 output or first-error text is visible. Static notebook JSON confirms all code cells still have empty execution_count and outputs=0."
+      evidence:
+        - "Screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t012-gui-review-20260701-032846.png"
+        - "Visible active notebook: RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
+        - "Visible GUI state: Select Kernel, cell 1 of 19."
+        - "Notebook JSON summary: all code cells execution_count empty and outputs=0."
+        - "Git status shows notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb is not dirty."
+      missing_evidence:
+        - "Selected/restarted kernel evidence."
+        - "Section #4 model/server/run config output."
+        - "Section #6 vLLM startup and /v1/models output."
+        - "Section #6.5 raw smoke response plus parsed diagnosis and likert_score."
+        - "Confirmation Section #7 was not run."
+        - "Any first real error text to route to the Antigravity editor."
+      required_board_updates:
+        - "Activate T013 to wait for the external GUI run evidence or first error; no product edit packet is justified yet."
+
+  - id: T013
+    type: pm
+    assignee: PM
+    status: active
+    reasoning_hint: medium
+    objective: "Collect the next external Antigravity GUI evidence after the open vLLM notebook is run through Section 6.5, or collect the first real error."
+    inputs:
+      - "T011 GUI run instruction"
+      - "T012 vLLM GUI output review"
+      - "User-pasted or screenshot evidence from notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
+    constraints:
+      - "Do not run notebook cells from the Codex app."
+      - "Do not claim runtime success."
+      - "Do not request product edits unless a real vLLM notebook/code error is returned."
+      - "Do not approve the full 200-case run until Section #6.5 smoke evidence passes the rejection rules."
+    expected_output:
+      - "The returned Section #4/#6/#6.5 GUI outputs or first real error."
+      - "A Judge task activation if evidence is returned."
+      - "An Antigravity edit/push packet only if a concrete code/notebook defect is visible."
     receipt: null
 
   - id: T999
@@ -540,9 +581,8 @@ checks:
   dirty_fingerprint: unknown
   last_verification:
     result: pass
-    task: T011
+    task: T012
     commands:
-      - "Opened notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb read-only in Antigravity GUI"
-      - "Reviewed screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t010-vllm-open-readonly-20260701-032335.png"
+      - "Reviewed screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t012-gui-review-20260701-032846.png"
       - "Summarized notebook JSON outputs: all code cells execution_count empty and outputs=0"
-      - "Prepared GUI-only run instruction notes/T011-vllm-gui-run-instruction.md"
+      - "Confirmed notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb is not dirty after read-only inspection"
