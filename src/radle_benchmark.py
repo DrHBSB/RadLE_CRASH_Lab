@@ -216,6 +216,24 @@ def extract_json_safely(raw_text):
     return "PARSE_FAILED", "PARSE_FAILED"
 
 
+def strip_local_vlm_thought_text(raw_text):
+    """Remove local VLM special-token thought blocks before JSON parsing."""
+    if raw_text is None:
+        return ""
+
+    text = str(raw_text)
+    # Gemma 3 / MedGemma through vLLM can emit a special-token thought preamble.
+    # Keep the original raw text in the CSV, but parse only the answer span.
+    text = re.sub(
+        r"<unused94>\s*thought\b.*?(?:<unused95>|<unused96>)",
+        "",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    text = re.sub(r"</?unused\d+>", "", text, flags=re.IGNORECASE)
+    return text.strip()
+
+
 def _csv_sibling_path(path, suffix):
     """Return a sibling CSV path by appending suffix to the CSV stem."""
     path_obj = pathlib.Path(path)
@@ -1430,7 +1448,11 @@ def extract_result(response, latency, api_params, grok_fallback_used, model):
         ):
             provider_used = response.model_extra.get("provider", "UNKNOWN")
 
-    diag, likert = extract_json_safely(raw_answer)
+    parse_answer = raw_answer
+    if not uses_native_anthropic(model) and not uses_native_google(model):
+        parse_answer = strip_local_vlm_thought_text(raw_answer)
+
+    diag, likert = extract_json_safely(parse_answer)
     name = model["name"]
 
     return {
