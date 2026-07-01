@@ -650,9 +650,10 @@ tasks:
     assignee: Judge
     status: active
     reasoning_hint: high
-    objective: "Review the clean GUI rerun after branch head 717a0ed, stopping before Section #7, and decide whether Section #6.5 smoke passes or another exact error must be routed to Antigravity."
+    objective: "Review the clean GUI rerun after branch head 254631b and the next pushed Antigravity fix, stopping before Section #7, and decide whether Section #6.5 smoke passes or another exact error must be routed to Antigravity."
     inputs:
-      - "Branch head 717a0ed pushed to origin/codex/llava-vllm-runtime with LLaVA vLLM chat/default generation fixes"
+      - "Branch head 254631b pushed to origin/codex/llava-vllm-runtime with LLaVA vLLM chat template override"
+      - "Current Antigravity investigation after 254631b showed the template override did not fix the one-token EOS/empty-response failure"
       - "Fresh Antigravity GUI notebook evidence after restart, clear outputs, and rerun only through Section #6.5"
       - "Visible Section #4 config output, Section #6 vLLM startup and /v1/models response, and Section #6.5 raw/parsed smoke output or first traceback"
     constraints:
@@ -692,15 +693,15 @@ tasks:
 checks:
   dirty_fingerprint: unknown
   last_verification:
-    result: waiting_for_kernel_restart_after_chat_defaults_fix
+    result: request_antigravity_fix_after_254631b_empty_response
     task: T015
     commands:
-      - "Observed Antigravity commit 6050807 Apply vLLM rotary fallback in runtime helper"
-      - "Observed pre-717a0ed GUI evidence in C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-reminder-after-4639b80-20260701-105513.png: Section #6 had passed /v1/models before the latest fix, but Section #6.5 failed with blank Smoke raw response, Smoke completion tokens: 1, and RuntimeError: LLaVA-vLLM smoke failed: empty response"
-      - "Verified origin/codex/llava-vllm-runtime equals 717a0ed89e110ab74e860bd205cc274ed652ea69"
-      - "Observed Antigravity commit 717a0ed Force LLaVA vLLM chat defaults"
-      - "Ran py -3.11 -m py_compile src\\radle_medical_custom_runtime.py: pass"
-      - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-after-717a0ed-current-20260701-110340.png; Antigravity reports runtime claims none and next GUI rerun is pull 717a0ed, restart/clear, run only through Section #6.5"
-      - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-continuation2-current-20260701-111132.png; GUI showed Cannot execute code, session has been disposed. Please try restarting the Kernel."
-      - "Verified git HEAD and origin remain c4f88acfabd72ee9061da29d635e9a4343fb0464, with product fix 717a0ed included underneath and no newer product commit"
-      - "T015 remains active; no Section #7/full-run approval until clean GUI rerun evidence passes"
+      - "Observed post-e09a102 GUI rerun in C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-rerun-after-e09a102-wait1-20260701-112206.png reached Section #6.5 but failed with blank raw response, finish_reason=stop, prompt_tokens=3255, completion_tokens=1, and RuntimeError: LLaVA-vLLM smoke failed: empty response."
+      - "Sent exact empty-response failure to Antigravity in C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-empty-smoke-sent-20260701-112443.png and required commit+push before another GUI run."
+      - "Verified origin/codex/llava-vllm-runtime equals 254631b528c14929a64fe68c733911f494cd15e8."
+      - "Observed Antigravity commit 254631b Add LLaVA vLLM chat template override; changed approved product files plus new src/templates/llava_med_mistral_vllm_chat_template.jinja."
+      - "Ran py -3.11 -m py_compile src\\radle_medical_custom_runtime.py: pass; git diff --check HEAD reported only unrelated line-ending warnings."
+      - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-after-254631b-current-20260701-113252.png; Antigravity reports runtime claims none and next GUI run is pull 254631b, restart/clear, run only through Section #6.5."
+      - "Reviewed user-triggered rerun screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-after-user-rerun-20260701-113605.png; Section #6.5 still failed with Smoke raw response blank, finish_reason=stop, prompt_tokens=3255, completion_tokens=1, and RuntimeError at Cell In[9], line 55: LLaVA-vLLM smoke failed: empty response."
+      - "Sent reviewer failure packet to Antigravity and confirmed current status in C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-254631b-short-failure-packet-sent-20260701-113745.png; Antigravity is investigating a model-scoped min_tokens/request-extra-body guard and still says parsed JSON smoke output is required before any success claim."
+      - "T015 remains active; no Section #7/full-run approval until a pushed fix is followed by clean GUI Section #6.5 evidence with parseable clinical JSON diagnosis and valid likert_score."
