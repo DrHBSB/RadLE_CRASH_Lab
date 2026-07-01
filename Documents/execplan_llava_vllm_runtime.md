@@ -14,7 +14,7 @@ The pivot exists because the SGLang route proved image tokens were inserted but 
 
 ## Current State
 
-Current state (2026-07-01 10:24 +05:30, Codex/GPT-5): the GUI run that fast-forwarded through commit `e711a5c` still failed before `/v1/models` with `ModuleNotFoundError: No module named 'flash_attn.ops'`, and the returned output did not include a server-cell FlashAttention probe/cleanup transcript before Section 6. The notebook now runs the same narrow `flash_attn.ops.triton.rotary` probe immediately inside Section 6 before launching vLLM, so the server-start path cleans a partial/incompatible `flash-attn`/`flash_attn` package even if the dependency cell was skipped or not re-executed in the current kernel. No Workbench/Jupyter runtime success has been claimed. Next after this correction is pushed: restart/clear the exact vLLM notebook and run only through Section 6.5.
+Current state (2026-07-01 10:35 +05:30, Codex/GPT-5): the GUI run that fast-forwarded through commit `9dfbfc6` reached the updated Section 6 cell but still failed before `/v1/models` with `ModuleNotFoundError: No module named 'flash_attn.ops'`. Local vLLM 0.23.0 source inspection showed why the uninstall-only fix was insufficient: `vllm.vllm_flash_attn` can register a virtual `flash_attn` package for its own internals, making `find_spec("flash_attn")` true while `flash_attn.ops.triton.rotary` remains absent. The notebook now applies a narrow pre-server patch to the installed vLLM `rotary_embedding/common.py` optional import so a missing `flash_attn*` rotary module leaves `apply_rotary_emb_flash_attn=None` and vLLM uses its existing native rotary fallback. No Workbench/Jupyter runtime success has been claimed. Next after this correction is pushed: restart/clear the exact vLLM notebook and run only through Section 6.5.
 
 HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE LLaVA-Med task and the parent SSOT (`Documents/execplan_medical_workbench_runtime.md`, HEAD `080ec65`) points here. The SGLang abandonment is backed by LIVE Workbench evidence, not a hunch — do not reopen SGLang. On Workbench HEAD `080ec65` the SGLang server came up, every shim applied (`CLIPVisionConfig/MistralConfig positional-arg shim applied`, `LlamaTokenizer.image_processor (CLIP) shim applied`, `llava_mistral config shim OK ... pad_token_id= 2 vision_feature_layer= -2`), and the custom mistral chat template loaded with NO parse error (`Loading chat template from argument: .../llava_med_mistral_chat_template.json`). The template was the canonically-correct FastChat `mistral` shape, so the failure is NOT a template-tuning gap. §6.5 confirmed the image is spliced (prompt_tokens 371->949 = exactly 576 CLIP visual tokens; a short-prompt probe went 24->600), yet a non-committed 4-way diagnostic probe against the live endpoint returned: `[A full/greedy]=''`, `[B full/temp0.7]=''`, `[C short/greedy]=''`, `[D short/temp0.7]='image> '` (4 tokens). Across TWO templates (vicuna echoed the text instructions; mistral echoes the literal `<image>` placeholder) the model NEVER engages the image — the guessed HF-projector fields + hand-attached CLIP processor produce image embeddings the LM ignores. The probe and smoke output were throwaway (NOT committed); the SGLang notebook is unchanged at `080ec65`. Calibrate the new §6.5 vLLM smoke to hard-fail on exactly this signature (empty / 1-token EOS / `<image>`-placeholder echo / prompt echo). The user (returning ~5h after this handoff) explicitly chose the vLLM + HF-checkpoint route; begin at Milestone 1 (verify `chaoyinshe/llava-med-v1.5-mistral-7b-hf`).
 
@@ -30,6 +30,7 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 - `notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb` must fetch/check out `codex/llava-vllm-runtime` by default and assert `llava_med_mistral_7b -> chaoyinshe/llava-med-v1.5-mistral-7b-hf` via `vllm` before Section 6 starts.
 - The post-`0b90a60` GUI run proved the branch and mapping are correct, then failed before `/v1/models` on a partial/incompatible `flash_attn` package missing `flash_attn.ops.triton.rotary`.
 - `notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb` now must probe `flash_attn.ops.triton.rotary` after vLLM install and again immediately before Section 6 server start, removing only the partial `flash-attn`/`flash_attn` package when that exact probe fails.
+- vLLM 0.23.0 can still make `find_spec("flash_attn")` true through its internal virtual `flash_attn` package; Section 6 must patch only the installed vLLM optional rotary import to fall back when `flash_attn.ops.triton.rotary` is absent.
 - Target notebook: `notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb`.
 - Run contract: `RUN_ID=llava_med_mistral_7b_medical_full_200_cases`, 200 cases, 263 images, `TEST_LIMIT=None`, `RESUME=True`, `MAX_OUTPUT_TOKENS=2048`.
 - vLLM server args must include `--limit-mm-per-prompt {"image": 5}` because case 156 has 5 images.
@@ -66,6 +67,8 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 - [x] (2026-07-01 10:13 +05:30, Codex/GPT-5) Patched the LLaVA-vLLM dependency cell to probe `flash_attn.ops.triton.rotary` and uninstall only partial/incompatible `flash-attn`/`flash_attn`; patched Section 6.5 to require Section 6 `endpoint_client` and `/v1/models` state before smoke.
 - [x] (2026-07-01 10:24 +05:30, user via Antigravity GUI and Codex/GPT-5) Confirmed the GUI run fast-forwarded through commit `e711a5c` and branch/mapping remained correct, but Section 6 still failed on `ModuleNotFoundError: No module named 'flash_attn.ops'`; the returned output did not show a server-cell FlashAttention probe/cleanup before server start.
 - [x] (2026-07-01 10:20 +05:30, Codex/GPT-5) Patched Section 6 itself to run the narrow `flash_attn.ops.triton.rotary` probe and cleanup immediately before `medical_runtime.start_model_server(...)`, making the server-start path robust to skipped/reordered dependency cells.
+- [x] (2026-07-01 10:35 +05:30, user via Antigravity GUI and Codex/GPT-5) Confirmed the GUI run fast-forwarded through commit `9dfbfc6`, retained the correct branch/mapping, then Section 6 still failed before `/v1/models` on `ModuleNotFoundError: No module named 'flash_attn.ops'`.
+- [x] (2026-07-01 10:35 +05:30, Codex/GPT-5) Inspected vLLM 0.23.0 local source and patched the notebook Section 6 preflight to update installed `vllm/model_executor/layers/rotary_embedding/common.py` so only the optional `flash_attn.ops.triton.rotary` import falls back cleanly when missing.
 - [ ] (next, Codex/GPT-5) Complete static validation, commit/push the correction slice, and return the receipt to the Codex app coordinator.
 - [ ] (next, user via Antigravity GUI + Codex app coordinator) Restart/clear the vLLM notebook and run only through Section 6.5 before any full run.
 
@@ -95,6 +98,10 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 - Observation: A partial or incompatible `flash_attn` package can crash vLLM 0.23.0 during LLaVA-Med Mistral startup before `/v1/models`.
   Evidence: the post-`0b90a60` GUI server log entered Mistral rotary embedding initialization, then failed importing `flash_attn.ops.triton.rotary` with `ModuleNotFoundError: No module named 'flash_attn.ops'`; Section 6.5 then produced `NameError: endpoint_client is not defined` only because Section 6 had not completed.
   Date/Author: 2026-07-01, user and Codex/GPT-5
+
+- Observation: In vLLM 0.23.0, uninstalling `flash-attn` is not enough if vLLM has registered its own virtual `flash_attn` package.
+  Evidence: local source `vllm/vllm_flash_attn/__init__.py` can register `sys.modules["flash_attn"]`; `vllm/model_executor/layers/rotary_embedding/common.py` checks only `find_spec("flash_attn")` before directly importing `flash_attn.ops.triton.rotary`, causing the same missing-ops crash even without a usable upstream FlashAttention package.
+  Date/Author: 2026-07-01, Codex/GPT-5
 
 
 ## Decision Log
@@ -135,6 +142,10 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
   Rationale: The GUI can reach the server cell without evidence that the dependency-cell cleanup ran in the current kernel; the invariant that matters is immediately before starting the vLLM subprocess.
   Date/Author: 2026-07-01, Codex/GPT-5
 
+- Decision: Patch vLLM's installed optional rotary FlashAttention import in the notebook preflight rather than adding a sitecustomize hook or changing model settings.
+  Rationale: The crash is in an optional acceleration path; catching only missing `flash_attn*` rotary modules preserves all other import failures while enabling vLLM's existing native rotary fallback.
+  Date/Author: 2026-07-01, Codex/GPT-5
+
 
 ## Revision Notes
 
@@ -145,11 +156,12 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 - v9 (2026-07-01 09:53 +05:30, Codex/GPT-5): Recorded the GUI Section 6 runtime defect and the correction: branch-pinned notebook bootstrap plus pre-server mapping assertions. Runtime proof remains pending and must come from a fresh GUI run through Section 6.5.
 - v10 (2026-07-01 10:13 +05:30, Codex/GPT-5): Recorded the post-branch-fix `flash_attn.ops.triton.rotary` startup failure and the notebook dependency-cell cleanup plus Section 6.5 prerequisite guard. Runtime proof remains pending.
 - v11 (2026-07-01 10:24 +05:30, Codex/GPT-5): Strengthened the FlashAttention cleanup by adding the same exact probe to Section 6 immediately before server startup, after GUI evidence through `e711a5c` still failed on the partial `flash_attn` package. Runtime proof remains pending.
+- v12 (2026-07-01 10:35 +05:30, Codex/GPT-5): Recorded the post-`9dfbfc6` repeated `flash_attn.ops` failure and added a notebook-time vLLM optional-import patch for the rotary fallback path. Runtime proof remains pending.
 
 
 ## Outcomes & Retrospective
 
-The first static vLLM implementation slice was pushed, and the branch/mapping correction was proven in the GUI at commit `0b90a60`. The next server failure is dependency-level: a discoverable but incomplete `flash_attn` package lacks `flash_attn.ops.triton.rotary` and crashes vLLM before `/v1/models`. The notebook now uses a narrow probe-and-cleanup both after vLLM install and immediately before server startup, and guards Section 6.5 against running after Section 6 fails. No Workbench/Jupyter smoke or full run has been proven yet. The main reusable lesson is project-specific here: a smoke gate must prove a real benchmark-style JSON diagnosis, not just server readiness or image-token insertion, and remote notebook bootstraps must make the imported repo revision visible.
+The first static vLLM implementation slice was pushed, and the branch/mapping correction was proven in the GUI at commit `0b90a60`. The current server failure remains dependency-level: vLLM sees a discoverable `flash_attn` namespace but cannot import `flash_attn.ops.triton.rotary`, crashing before `/v1/models`. The notebook now uses a narrow probe-and-cleanup both after vLLM install and immediately before server startup, then patches vLLM's optional rotary FlashAttention import to fall back natively when that exact submodule is missing. No Workbench/Jupyter smoke or full run has been proven yet. The main reusable lesson is project-specific here: a smoke gate must prove a real benchmark-style JSON diagnosis, not just server readiness or image-token insertion, and remote notebook bootstraps must make the imported repo revision visible.
 
 
 ## Suggested Skills By Phase
