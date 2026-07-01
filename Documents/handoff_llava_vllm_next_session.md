@@ -1,5 +1,10 @@
 # LLaVA-Med — next-session handoff (lean)
 
+> **DONE (2026-07-02): the LLaVA-Med Ollama run is COMPLETE and PROMOTED**
+> (16/200 committed, 184 abstentions). This handoff is historical. For the next
+> model see `Documents/handoff_octomed_ollama_next_session.md`; for the closed
+> LLaVA-Med state see `Documents/execplan_medical_vlm_ollama_runtime.md`.
+
 Read the actual files fresh; this is a pointer, not a summary to trust blindly.
 
 ## Primary plan (READ FIRST)

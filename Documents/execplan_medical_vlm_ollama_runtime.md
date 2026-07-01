@@ -40,27 +40,42 @@ OpenAI-compatible GGUF endpoint). The same pattern generalizes to future open mo
 
 ## Current State
 
-Current state (2026-07-01, Claude/Opus 4.8): LLaVA-Med is served through Ollama and
-proven to read images. The HF checkpoint route is dead. Two artifacts are pushed and
-ready to run on the VM:
-- `scripts/run_llava_med_ollama.py` — runs the standard RadLE benchmark through
-  Ollama's OpenAI endpoint with the SAME prompt/payload, writes the normal run CSV
-  (run label `medical_full_200_cases_ollama`), and prints a diagnosis-recovery
-  summary. Registry and the dead vLLM notebook are untouched (inline model config).
-- Conservative prose-diagnosis failsafe in `radle_benchmark.extract_json_safely`
-  (JSON -> numbered-VQA -> committed-prose), unit-tested so it recovers real
-  diagnoses (e.g. "presence of pulmonary embolism") but never fabricates from a
-  modality description or a possibility list.
+Current state (2026-07-02, Claude/Opus 4.8): **LLaVA-Med run COMPLETE and PROMOTED.**
+The full 200-case run finished, was adjudicated, promoted (raw->final,
+sha256 b6ebbba9...), and public tables were exported. Outputs downloaded to the
+user's machine at `RadLE Stats/llava_med_ollama_outputs/`.
 
-Known behavior from an 8-case probe: LLaVA-Med reads images but usually DESCRIBES
-the modality/anatomy rather than giving a diagnosis; only ~1/8 commit to one, and it
-never returns JSON. So expect many `PARSE_FAILED` (no-diagnosis) rows in the full
-run — that is the model's genuine behavior, routed to the audit/repair path, not a
-bug and not to be forced with prompt changes.
+Final result: **16/200 committed diagnoses, 184 genuine abstentions** (52
+deterministic-empty generations + 132 considered descriptions), **0 Likert
+self-confidence scores** (LLaVA-Med emits prose, never RadLE JSON). This is the
+model's honest capability result, not a bug — do not try to "improve" it via
+retries or prompt/decoding changes (both proven dead ends / parity violations).
 
-Next: user runs `--limit=5` shakedown then the full run, pastes the diagnosis-rate
-summary, then audit -> repair -> promote. Open methodology question deferred to the
-user after the numbers are in: how to score no-diagnosis cases (abstention vs repair).
+What was built and proven this run:
+- `scripts/run_llava_med_ollama.py` — standard RadLE benchmark through Ollama's
+  OpenAI endpoint, SAME prompt/payload, inline model config, run label
+  `medical_full_200_cases_ollama`.
+- Conservative prose failsafe in `radle_benchmark.extract_json_safely` (JSON ->
+  numbered-VQA -> committed-prose) + an **abstention/negation guard** (commit
+  5b7422f) so "diagnosis is not provided" is never returned as a diagnosis.
+- `scripts/radle_llava_med_adjudication.json` — documented recovery of 3
+  mis-extractions from the model's own text (43, 183, 196).
+- Promote-with-override: the final manifest documents why all 200 audit as
+  `paid_repair` (no Likert / unrepairable no-answers) yet promotion is intentional.
+
+The Ollama recipe here is now the reference for future open medical VLMs.
+
+Next model: **OctoMed-7B via Ollama** — see
+`Documents/handoff_octomed_ollama_next_session.md`.
+
+Two open threads carried out of this run (neither blocks the LLaVA-Med promotion):
+- **Stats classifier**: the public export summary mis-buckets prose-only/no-Likert
+  models (LLaVA-Med showed valid_rate=0.0 AND abstention_rate=0.0). Verify
+  `scripts/radle_v2_stats.py` + `radle_llm_judge.py` count a committed prose
+  diagnosis as an attempt and a no-answer as an abstention independent of Likert
+  BEFORE trusting any reported numbers. Not yet fixed.
+- Cosmetic: case 17's diagnosis kept the "diagnosis of " prefix
+  ("diagnosis of pancreatic cancer"); harmless for the judge, left as-is.
 
 
 ## Locked Facts
