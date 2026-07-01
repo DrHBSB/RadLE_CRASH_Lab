@@ -188,6 +188,17 @@ MEDICAL_CUSTOM_RUNTIME_MODELS = [
 MODEL_BY_NAME = {model.name: model for model in MEDICAL_CUSTOM_RUNTIME_MODELS}
 
 
+def _extend_args_if_missing(args: list[str], additions: list[str]) -> list[str]:
+    """Append CLI flag/value pairs unless the flag is already present."""
+    merged = list(args)
+    for idx in range(0, len(additions), 2):
+        flag = additions[idx]
+        value = additions[idx + 1]
+        if flag not in merged:
+            merged.extend([flag, value])
+    return merged
+
+
 def configure_cache_environment(cache_root: str = DEFAULT_CACHE_ROOT) -> dict:
     """Route model and package caches to a large writable runtime disk."""
     cache_root_path = pathlib.Path(cache_root)
@@ -412,6 +423,16 @@ def build_vllm_command(
         command.append("--trust-remote-code")
     if extra_args:
         command.extend(extra_args)
+    if model.name == "llava_med_mistral_7b":
+        command = _extend_args_if_missing(
+            command,
+            [
+                "--chat-template-content-format",
+                "openai",
+                "--generation-config",
+                "vllm",
+            ],
+        )
     return command
 
 
