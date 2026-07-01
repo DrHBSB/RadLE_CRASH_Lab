@@ -109,6 +109,9 @@ user after the numbers are in: how to score no-diagnosis cases (abstention vs re
   a modality description or a "can be used to diagnose ..." possibility list.
 - Do not promote or sync a run while integrity problems or repair targets remain,
   unless the user explicitly overrides (Workbench guardrails).
+- Do not add retries/best-of-N to raise LLaVA-Med's answer rate. Proven dead end:
+  empty generations are deterministic and the fix-levers break parity (see Decision
+  Log 2026-07-02). Retries recover transport failures (Morning), not this.
 
 
 ## Progress
@@ -121,10 +124,23 @@ user after the numbers are in: how to score no-diagnosis cases (abstention vs re
   commits, never JSON.
 - [x] (2026-07-01) Built the conservative prose failsafe in `extract_json_safely`
   (unit-tested) and `scripts/run_llava_med_ollama.py` (standard benchmark via Ollama).
-- [ ] (next, user) Run `--limit=5` shakedown, then the full 200-case run; paste the
-  diagnosis-rate summary.
-- [ ] (next) Audit the raw CSV; decide no-diagnosis scoring (abstention vs repair)
-  with the user; repair/promote/export under guardrails.
+- [x] (2026-07-02) Ran the full 200-case run. Result: 18 raw commits / 182 no-answer.
+  Re-extraction after the abstention fix -> **16 commits / 184 no-answer** (~8%).
+- [x] (2026-07-02) Fixed an abstention leak in the prose failsafe (commit 5b7422f):
+  cases 42, 53 had "diagnosis is not provided in this case" returned as a diagnosis.
+  Negation/abstention guard added; re-extracted in place (no re-inference), 18->16.
+- [x] (2026-07-02) Investigated retries (Morning-style) to recover no-answers.
+  DEAD END: the 52 empty-generation cases are DETERMINISTICALLY empty (3x re-hits
+  with the exact locked payload -> [0,0,0] chars every time), and parity forbids
+  the only levers that would change them (temperature/prompt/image). Retries help
+  transport failures (Morning), not this model's deterministic non-answers.
+- [ ] (next) Adjudicate the 16 commits: recover 3 mis-extractions (43 bilateral
+  optic nerve gliomas, 183 ovarian tumor, 196 pulmonary TB) from the model's own
+  text; decide the 4 finding-only cases (65/97/108/151 "large mass in <location>").
+- [ ] (next) Decide no-diagnosis scoring WITH user: the 184 are genuine abstentions
+  (52 deterministic-empty + 132 considered descriptions), NOT repairable. Promoting
+  requires explicitly overriding the "no promote with repair targets" guardrail,
+  because the repair targets are not repairable here. Then audit/promote/export.
 
 
 ## Surprises & Discoveries
@@ -141,6 +157,17 @@ user after the numbers are in: how to score no-diagnosis cases (abstention vs re
 - LLaVA-Med (VQA-tuned) tends to describe modality/anatomy rather than commit to a
   diagnosis under a long instruction prompt; sometimes returns byte-identical
   boilerplate for different images. This is a model-capability finding, reportable.
+- The full-run no-answer set is bimodal: 52/184 are EMPTY generations (model emits
+  EOS-first, `raw=nan`) and 132/184 are full descriptions with no committed
+  diagnosis. The empties are deterministic (retries return [0,0,0] chars) even
+  though non-empty cases vary run-to-run (case 5: 67->95 tokens across runs) -- so
+  the empties are a hard EOS decision on those images, not sampling noise. Both
+  classes are genuine model behavior; neither is a transport failure a retry fixes.
+- The prose failsafe's first-trigger-wins can UNDERSELL the model: on 3 cases it
+  grabbed a finding phrase over a diagnosis the model actually named earlier in the
+  same response (43, 183, 196). Fixed by human adjudication of the ~16 commits, NOT
+  by tuning trigger priority against the 200-case eval set (that would fit the
+  extractor to the test data -- a manuscript-integrity hazard).
 
 
 ## Decision Log
@@ -160,6 +187,13 @@ user after the numbers are in: how to score no-diagnosis cases (abstention vs re
   Rationale: the notebook is vLLM-specific and retired; a script reuses the proven
   benchmark/audit code with an inline Ollama config and no registry churn.
   Date/Author: 2026-07-01, Claude/Opus 4.8.
+- Decision: Do NOT add retries/best-of-N to recover no-answers for LLaVA-Med.
+  Rationale: proven empirically -- the 52 empty-generation cases are deterministic
+  ([0,0,0] chars over 3 re-hits with the exact locked payload), so a retry recovers
+  nothing; and resampling the 132 considered descriptions until they commit would
+  be best-of-N cherry-picking, not the transport-failure recovery Morning did. The
+  only levers that could change the empties (temperature/prompt/image) break
+  manuscript parity. Date/Author: 2026-07-02, user + Claude/Opus 4.8.
 
 
 ## Recipe: add a NEW open medical VLM (reference for future models / Codex)
