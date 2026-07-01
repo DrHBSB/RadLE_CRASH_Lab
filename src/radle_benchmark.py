@@ -175,6 +175,17 @@ _PROSE_MODALITY_STOP = (
     "film", "structures", "abnormalities", "various conditions", "anatomy",
     "the patient", "cavity", "region", "angiogram", "modality",
 )
+# Abstention / non-answer phrases. If the text captured right after a commit
+# trigger is really a declination ("...diagnosis is NOT PROVIDED in this case"),
+# treat it as no-diagnosis, never as a committed diagnosis. Conservative: this
+# only ever suppresses a false commit, it can never manufacture one.
+_PROSE_ABSTAIN = (
+    "not provided", "not specified", "not given", "not available",
+    "not mentioned", "not determined", "cannot be determined",
+    "could not be determined", "not possible to determine", "not clear",
+    "unclear", "not evident", "not identified", "not established",
+    "not stated", "unknown", "indeterminate", "no diagnosis",
+)
 _PROSE_CONFIDENCE = (
     ("very high confidence", 4),
     ("high confidence", 3),
@@ -200,6 +211,13 @@ def _extract_prose_diagnosis(text):
         phrase = match.group(1).strip().strip("()").strip()
         low = phrase.lower()
         if not phrase or len(phrase.split()) > 8:
+            continue
+        # Reject a declination captured after the trigger (e.g. "diagnosis is
+        # not provided in this case"): negation right after the trigger, or an
+        # explicit abstention phrase anywhere in the captured span.
+        if re.match(r"(?:not|no|n't|cannot|can't|could not|couldn't)\b", low):
+            continue
+        if any(abstain in low for abstain in _PROSE_ABSTAIN):
             continue
         if any(re.search(r"\b" + re.escape(stop) + r"\b", low) for stop in _PROSE_MODALITY_STOP):
             continue
