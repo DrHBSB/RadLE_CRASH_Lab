@@ -66,9 +66,13 @@ def main():
           "| visible devices:", os.environ.get("CUDA_VISIBLE_DEVICES"))
     print("Loading processor + model from cache (no download if already present)...")
     processor = AutoProcessor.from_pretrained(MODEL_ID)
+    # No device_map (that path needs `accelerate`); load then move to CUDA.
+    # CUDA_VISIBLE_DEVICES pins us to the idle GPU, so cuda:0 == physical GPU1.
     model = LlavaForConditionalGeneration.from_pretrained(
-        MODEL_ID, torch_dtype=torch.float16, device_map="auto"
+        MODEL_ID, torch_dtype=torch.float16
     )
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = model.to(device)
     model.eval()
     has_ct = getattr(processor, "chat_template", None) is not None
     print("processor chat_template present:", has_ct)
