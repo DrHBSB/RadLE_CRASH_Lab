@@ -169,7 +169,6 @@ MEDICAL_CUSTOM_RUNTIME_MODELS = [
             "min_tokens": 16,
             "skip_special_tokens": False,
             "spaces_between_special_tokens": False,
-            "bad_words": ["</s>", "<pad>"],
             "logit_bias": {"12": -100, "13": -100, "16": -100},
         },
         notes=(

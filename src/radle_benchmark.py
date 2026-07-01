@@ -213,6 +213,37 @@ def extract_json_safely(raw_text):
 
         return diag, likert
 
+    # VQA-format fallback: LLaVA-Med outputs numbered-list answers instead of JSON,
+    # e.g. "1. Pulmonary tuberculosis: 3 (moderate confidence) 2. Von Hippel-Lindau: 4 ..."
+    # Take the first numbered entry that has a real diagnosis and a numeric 0-4 score.
+    vqa_pattern = re.compile(
+        r"\b\d+\.\s+([^:0-9\n][^:\n]*?):\s*(\d+|null)\b",
+        flags=re.IGNORECASE,
+    )
+    vqa_matches = vqa_pattern.findall(text.split("</s>")[0])  # strip any trailing EOS text
+    if vqa_matches:
+        # Prefer the first entry with a real (non-IDK) diagnosis and numeric score.
+        for diag_raw, score_raw in vqa_matches:
+            diag_raw = diag_raw.strip()
+            score_raw = score_raw.strip().lower()
+            if score_raw == "null":
+                continue
+            try:
+                score_int = int(score_raw)
+            except ValueError:
+                continue
+            if score_int not in range(5):
+                continue
+            if diag_raw.lower() in {"i don't know", "unknown", "none", "n/a"}:
+                continue
+            return diag_raw, score_int
+        # All entries were IDK/null — return the first one.
+        diag_raw, score_raw = vqa_matches[0]
+        diag_raw = diag_raw.strip()
+        score_raw = score_raw.strip().lower()
+        likert = None if score_raw == "null" else score_raw
+        return diag_raw, likert
+
     return "PARSE_FAILED", "PARSE_FAILED"
 
 
