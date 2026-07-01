@@ -650,9 +650,9 @@ tasks:
     assignee: Judge
     status: active
     reasoning_hint: high
-    objective: "Review the clean GUI rerun after pushed Antigravity fixes through 6050807, stopping before Section #7, and decide whether Section #6.5 smoke passes or another exact error must be routed to Antigravity."
+    objective: "Review the clean GUI rerun after branch head 2eb2967, with runtime helper fix 6050807 included, stopping before Section #7, and decide whether Section #6.5 smoke passes or another exact error must be routed to Antigravity."
     inputs:
-      - "Antigravity fixes through commit 6050807 pushed to origin/codex/llava-vllm-runtime"
+      - "Branch head 2eb2967 pushed to origin/codex/llava-vllm-runtime; runtime helper fix 6050807 is included underneath"
       - "Fresh Antigravity GUI notebook evidence after restart, clear outputs, and rerun only through Section #6.5"
       - "Visible Section #4 config output, Section #6 vLLM startup and /v1/models response, and Section #6.5 raw/parsed smoke output or first traceback"
     constraints:
@@ -695,7 +695,7 @@ checks:
     result: awaiting_clean_gui_rerun_after_runtime_helper_fix
     task: T015
     commands:
-      - "Verified origin/codex/llava-vllm-runtime equals 6050807fbae51fd606151b8a6383b67500c45d8c"
+      - "Verified origin/codex/llava-vllm-runtime equals 2eb296771edea7c8629a5e990b18c3dabb82bc17; 2eb2967 is an ExecPlan-only timeline update after runtime helper fix 6050807"
       - "Observed Antigravity commit fa126f2 Patch vLLM rotary flash-attn fallback in notebook"
       - "Observed GUI rerun of fa126f2 in C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-fa126f2-server-wait-20260701-104149.png still failing Section #6 before /v1/models because the open notebook cell lacked the fresh patch after fast-forward"
       - "Observed Antigravity commit 6050807 Apply vLLM rotary fallback in runtime helper"
