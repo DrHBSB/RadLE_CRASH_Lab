@@ -105,20 +105,30 @@ def main():
             inputs["pixel_values"] = inputs["pixel_values"].to(torch.float16)
         n_in = inputs["input_ids"].shape[1]
 
-        with torch.no_grad():
-            out = model.generate(**inputs, max_new_tokens=256, do_sample=False)
-        gen = out[0][n_in:]
-        decoded = processor.decode(gen, skip_special_tokens=True)
-        decoded_raw = processor.decode(gen, skip_special_tokens=False)
-        outputs[cid] = decoded
-
         print("=" * 70)
         print(f"CASE {cid} | image={pathlib.Path(paths[0]).name} | template={template_mode}")
-        print(f"  input_tokens={n_in} generated_tokens={gen.shape[0]}")
-        ws = sum(decoded.count(c) for c in [" ", "\n", "\r", "\t"])
-        print(f"  char_len={len(decoded)} whitespace={ws} non_ws={len(decoded) - ws}")
-        print("  OUTPUT (skip_special=True) repr:", repr(decoded[:800]))
-        print("  OUTPUT (skip_special=False) repr:", repr(decoded_raw[:400]))
+        print(f"  input_tokens={n_in}")
+
+        # Pass 1: natural greedy (the model's own choice -> we already saw immediate EOS).
+        with torch.no_grad():
+            out_nat = model.generate(**inputs, max_new_tokens=256, do_sample=False)
+        gen_nat = out_nat[0][n_in:]
+        dec_nat = processor.decode(gen_nat, skip_special_tokens=True)
+        print(f"  [natural]     gen_tokens={gen_nat.shape[0]} repr={dec_nat[:400]!r}")
+
+        # Pass 2: FORCED past the first-token EOS. This is the real image-conditioning
+        # test: if forced content differs between case 1 and case 8 it reads images.
+        with torch.no_grad():
+            out_forced = model.generate(
+                **inputs, max_new_tokens=256, min_new_tokens=64, do_sample=False
+            )
+        gen_forced = out_forced[0][n_in:]
+        dec_forced = processor.decode(gen_forced, skip_special_tokens=True)
+        ws = sum(dec_forced.count(c) for c in [" ", "\n", "\r", "\t"])
+        print(f"  [forced m64]  gen_tokens={gen_forced.shape[0]} "
+              f"char_len={len(dec_forced)} whitespace={ws} non_ws={len(dec_forced) - ws}")
+        print(f"                repr={dec_forced[:800]!r}")
+        outputs[cid] = dec_forced.strip()
 
     print("=" * 70)
     distinct = set(v.strip() for v in outputs.values() if v.strip())
