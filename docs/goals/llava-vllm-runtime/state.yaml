@@ -650,9 +650,9 @@ tasks:
     assignee: Judge
     status: active
     reasoning_hint: high
-    objective: "Review the clean GUI rerun after branch head 2eb2967, with runtime helper fix 6050807 included, stopping before Section #7, and decide whether Section #6.5 smoke passes or another exact error must be routed to Antigravity."
+    objective: "Review the clean GUI rerun after branch head 717a0ed, stopping before Section #7, and decide whether Section #6.5 smoke passes or another exact error must be routed to Antigravity."
     inputs:
-      - "Branch head 2eb2967 pushed to origin/codex/llava-vllm-runtime; runtime helper fix 6050807 is included underneath"
+      - "Branch head 717a0ed pushed to origin/codex/llava-vllm-runtime with LLaVA vLLM chat/default generation fixes"
       - "Fresh Antigravity GUI notebook evidence after restart, clear outputs, and rerun only through Section #6.5"
       - "Visible Section #4 config output, Section #6 vLLM startup and /v1/models response, and Section #6.5 raw/parsed smoke output or first traceback"
     constraints:
@@ -692,13 +692,13 @@ tasks:
 checks:
   dirty_fingerprint: unknown
   last_verification:
-    result: awaiting_clean_gui_rerun_after_runtime_helper_fix
+    result: awaiting_clean_gui_rerun_after_chat_defaults_fix
     task: T015
     commands:
-      - "Verified origin/codex/llava-vllm-runtime equals 2eb296771edea7c8629a5e990b18c3dabb82bc17; 2eb2967 is an ExecPlan-only timeline update after runtime helper fix 6050807"
-      - "Observed Antigravity commit fa126f2 Patch vLLM rotary flash-attn fallback in notebook"
-      - "Observed GUI rerun of fa126f2 in C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-fa126f2-server-wait-20260701-104149.png still failing Section #6 before /v1/models because the open notebook cell lacked the fresh patch after fast-forward"
       - "Observed Antigravity commit 6050807 Apply vLLM rotary fallback in runtime helper"
+      - "Observed pre-717a0ed GUI evidence in C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-reminder-after-4639b80-20260701-105513.png: Section #6 had passed /v1/models before the latest fix, but Section #6.5 failed with blank Smoke raw response, Smoke completion tokens: 1, and RuntimeError: LLaVA-vLLM smoke failed: empty response"
+      - "Verified origin/codex/llava-vllm-runtime equals 717a0ed89e110ab74e860bd205cc274ed652ea69"
+      - "Observed Antigravity commit 717a0ed Force LLaVA vLLM chat defaults"
       - "Ran py -3.11 -m py_compile src\\radle_medical_custom_runtime.py: pass"
-      - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-focus-after-6050807-20260701-104558.png; Antigravity reports runtime claims none and next GUI rerun is pull/reload 6050807, restart/clear, run only through Section #6.5"
+      - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-after-717a0ed-current-20260701-110340.png; Antigravity reports runtime claims none and next GUI rerun is pull 717a0ed, restart/clear, run only through Section #6.5"
       - "T015 remains active; no Section #7/full-run approval until clean GUI rerun evidence passes"
