@@ -655,6 +655,7 @@ tasks:
       - "Branch head 45ad51c pushed to origin/codex/llava-vllm-runtime; latest product-runtime fix is 9f4422f Add LLaVA vLLM min tokens guard"
       - "Post-254631b GUI evidence showed the chat template override did not fix the one-token EOS/empty-response failure"
       - "The 9f4422f correction adds a LLaVA-only request extra body min_tokens guard and prints/uses it in Section #4 and Section #6.5"
+      - "Latest GUI evidence at commit 45ad51c reached Section #4 but did not visibly print Request extra body, so the open notebook cell output/source is not yet acceptable for the min_tokens fix"
       - "Fresh Antigravity GUI notebook evidence after restart, clear outputs, and rerun only through Section #6.5"
       - "Visible Section #4 config output, Section #6 vLLM startup and /v1/models response, and Section #6.5 raw/parsed smoke output or first traceback"
     constraints:
@@ -694,7 +695,7 @@ tasks:
 checks:
   dirty_fingerprint: unknown
   last_verification:
-    result: awaiting_clean_gui_rerun_after_9f4422f_min_tokens_guard
+    result: stale_or_incomplete_section4_after_45ad51c_missing_request_extra_body
     task: T015
     commands:
       - "Reviewed user-triggered rerun screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-after-user-rerun-20260701-113605.png; Section #6.5 still failed after 254631b with Smoke raw response blank, finish_reason=stop, prompt_tokens=3255, completion_tokens=1, and RuntimeError at Cell In[9], line 55: LLaVA-vLLM smoke failed: empty response."
@@ -706,4 +707,8 @@ checks:
       - "Notebook JSON/code compile passed: 19 cells, 16 code cells."
       - "Reviewed the request-extra-body path: MedicalRuntimeModel.benchmark_config returns request_extra_body, llava_med_mistral_7b sets {'min_tokens': 16}, Section #4 asserts/prints REQUEST_EXTRA_BODY, Section #6.5 sends it as extra_body, and src/radle_benchmark.py lines 1234-1235 pass model.get('extra') into the full benchmark chat request."
       - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-after-9f4422f-current-20260701-114154.png; Antigravity reports latest pushed fix is 9f4422f, runtime success remains unclaimed, and the next GUI gate is Section #4/#6/#6.5 evidence with min_tokens."
-      - "T015 remains active; no Section #7/full-run approval until a clean GUI rerun after 45ad51c/9f4422f produces parseable clinical JSON diagnosis and valid likert_score."
+      - "Verified coordinator board commit 8fac19294501105dbb8f41518fb949f4757d08e7 was pushed; GoalBuddy checker passed with T015 active and no warnings."
+      - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-after-8fac192-board-push-20260701-114428.png; setup evidence showed repo branch codex/llava-vllm-runtime at 45ad51c with correct llava_med_mistral_7b -> chaoyinshe/llava-med-v1.5-mistral-7b-hf via vllm mapping, but no runtime proof yet."
+      - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-visible-cell-cleared-20260701-114822.png; Section #4 output did not include the required Request extra body: {'min_tokens': 16} line and visible Section #4 source appeared to jump from Extra server args to Endpoint, indicating stale/incomplete open notebook cell state."
+      - "Antigravity was instructed to rerun/reload Section #4 after the 45ad51c pull and confirm Request extra body {'min_tokens': 16}; if absent, stop on Section #4 output instead of continuing to Section #6 or Section #7."
+      - "T015 remains active; no Section #7/full-run approval until Section #4 visibly prints the min_tokens request extra body and a clean GUI Section #6.5 rerun produces parseable clinical JSON diagnosis and valid likert_score."
