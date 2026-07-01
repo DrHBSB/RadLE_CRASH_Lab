@@ -237,6 +237,14 @@ Two open threads carried out of this run (neither blocks the LLaVA-Med promotion
 3. **Keep the RadLE prompt identical.** If the model does not emit JSON, rely on
    `extract_json_safely` (JSON -> VQA -> conservative prose). Extend the prose
    triggers/stoplist ONLY if needed and keep it commitment-only.
+   - **Reasoning models (emit `<think>...</think>` before the answer, e.g.
+     OctoMed):** `extract_json_safely` strips the trace and parses ONLY the text
+     after the last `</think>`; an unclosed `<think>` (truncated) -> no answer.
+     This is mandatory — the trace is full of hedged/rejected hypotheses the prose
+     failsafe would otherwise mine (proven: a rejected "meningioma" beat the final
+     "glioblastoma"). The strip is guarded on the tag, so non-reasoning models are
+     byte-identical. Raise `MAX_OUTPUT_TOKENS` (OctoMed uses 8192) so a long trace
+     cannot truncate the final answer into an artifactual abstention.
 4. **Run via a small script** modeled on `scripts/run_llava_med_ollama.py`: build
    run paths, build an OpenAI client for the endpoint, pass an inline model config
    `{"name": <stable_model_name>, "id": <endpoint_model_tag>, "extra": <or None>}`,

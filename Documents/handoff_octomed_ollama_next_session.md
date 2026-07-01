@@ -2,6 +2,21 @@
 
 Read the actual files fresh; this is a pointer, not a summary to trust blindly.
 
+## STATUS 2026-07-02 (Claude/Opus 4.8) — integration PROVEN, full run underway
+- GGUF WITH vision projector confirmed: `mradermacher/OctoMed-7B-GGUF` ships
+  `OctoMed-7B.mmproj-Q8_0.gguf`; pulled as `hf.co/mradermacher/OctoMed-7B-GGUF:Q8_0`.
+- Image conditioning PROVEN (5/5 distinct, correct, image-specific outputs).
+- Output format PROVEN: `<think>...reasoning...</think>` then clean RadLE JSON
+  `{"diagnosis": ..., "likert_score": N}`. NOT prose-only like LLaVA-Med, and it
+  emits Likert -> should dodge the no-Likert stats-classifier bug.
+- `extract_json_safely` now strips the `<think>` trace (commit 5ae5e51); shakedown
+  8/8 parsed, 0 PARSE_FAILED, 6 diagnoses + 2 honest "I don't know", all with Likert.
+- Scripts: `scripts/run_octomed_ollama.py` (MODEL_NAME=octomed_7b,
+  MAX_OUTPUT_TOKENS=8192, temp stays 0.01 for parity), probe reused via
+  `PROBE_MAX_TOKENS`. Full 200-case run started (resume kept the 8 shakedown rows).
+- NEXT: collect the full-run summary, then audit -> adjudicate -> promote -> export.
+  Watch how "I don't know"+null-Likert abstentions bucket in the audit.
+
 ## Goal
 Serve **OctoMed-7B** through the RadLE medical Workbench benchmark via **Ollama**
 (same pattern that worked for LLaVA-Med), producing an auditable, promotable
