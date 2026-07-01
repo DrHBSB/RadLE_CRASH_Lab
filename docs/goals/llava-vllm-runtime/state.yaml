@@ -650,9 +650,9 @@ tasks:
     assignee: Judge
     status: active
     reasoning_hint: high
-    objective: "Review the clean GUI rerun after pushed Antigravity notebook fixes through c7f0555, stopping before Section #7, and decide whether Section #6.5 smoke passes or another exact error must be routed to Antigravity."
+    objective: "Review the clean GUI rerun after pushed Antigravity fixes through 6050807, stopping before Section #7, and decide whether Section #6.5 smoke passes or another exact error must be routed to Antigravity."
     inputs:
-      - "Antigravity notebook fixes through commit c7f0555 pushed to origin/codex/llava-vllm-runtime"
+      - "Antigravity fixes through commit 6050807 pushed to origin/codex/llava-vllm-runtime"
       - "Fresh Antigravity GUI notebook evidence after restart, clear outputs, and rerun only through Section #6.5"
       - "Visible Section #4 config output, Section #6 vLLM startup and /v1/models response, and Section #6.5 raw/parsed smoke output or first traceback"
     constraints:
@@ -692,13 +692,13 @@ tasks:
 checks:
   dirty_fingerprint: unknown
   last_verification:
-    result: waiting_for_remote_jupyter_reconnect_before_clean_rerun
+    result: awaiting_clean_gui_rerun_after_runtime_helper_fix
     task: T015
     commands:
-      - "Verified origin/codex/llava-vllm-runtime equals 9dfbfc6a483f9e27427550ba4884605469b6e4a4 after coordinator receipt on top of Antigravity preflight commit c7f0555"
-      - "Observed Antigravity notebook-only commit 3258acd Suppress optional imports in LLaVA vLLM notebook"
-      - "Observed Antigravity commit c7f0555 Run flash-attn preflight before LLaVA vLLM server"
-      - "Sent current GUI blocker to Antigravity: Failed to connect to the remote Jupyter Server and verify the server is running and reachable"
-      - "Reviewed screenshots C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-jupyter-disconnect-sent-20260701-102909.png and C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-kernel-reconnect-check-20260701-103042.png"
-      - "Notebook still showed Connecting to Jupyter Server with no variables defined and no fresh Section #4/#6/#6.5 outputs"
+      - "Verified origin/codex/llava-vllm-runtime equals 6050807fbae51fd606151b8a6383b67500c45d8c"
+      - "Observed Antigravity commit fa126f2 Patch vLLM rotary flash-attn fallback in notebook"
+      - "Observed GUI rerun of fa126f2 in C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-fa126f2-server-wait-20260701-104149.png still failing Section #6 before /v1/models because the open notebook cell lacked the fresh patch after fast-forward"
+      - "Observed Antigravity commit 6050807 Apply vLLM rotary fallback in runtime helper"
+      - "Ran py -3.11 -m py_compile src\\radle_medical_custom_runtime.py: pass"
+      - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-focus-after-6050807-20260701-104558.png; Antigravity reports runtime claims none and next GUI rerun is pull/reload 6050807, restart/clear, run only through Section #6.5"
       - "T015 remains active; no Section #7/full-run approval until clean GUI rerun evidence passes"
