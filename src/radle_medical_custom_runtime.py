@@ -141,6 +141,7 @@ class MedicalRuntimeModel:
     needs_trust_remote_code: bool = True
     default_max_model_len: int = 8192
     default_gpu_memory_utilization: float = 0.9
+    request_extra_body: dict | None = None
     notes: str = ""
 
     def benchmark_config(self) -> dict:
@@ -148,7 +149,7 @@ class MedicalRuntimeModel:
         return {
             "name": self.name,
             "id": self.model_id,
-            "extra": None,
+            "extra": self.request_extra_body,
         }
 
 
@@ -164,6 +165,7 @@ MEDICAL_CUSTOM_RUNTIME_MODELS = [
         name="llava_med_mistral_7b",
         model_id="chaoyinshe/llava-med-v1.5-mistral-7b-hf",
         preferred_engine="vllm",
+        request_extra_body={"min_tokens": 16},
         notes=(
             "HF-format LLaVA-Med Mistral 7B checkpoint for vLLM; "
             "do not route the original Microsoft checkpoint through vLLM by config relabeling."
