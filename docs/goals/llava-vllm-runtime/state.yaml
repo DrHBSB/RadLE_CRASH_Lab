@@ -87,7 +87,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/llava-vllm-runtime/"
     command: "node C:/Users/thehb/.agents/skills/goalbuddy/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/llava-vllm-runtime"
 
-active_task: T015
+active_task: T016
 
 tasks:
   - id: T001
@@ -648,7 +648,7 @@ tasks:
   - id: T015
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Review the clean GUI rerun after the pushed LLaVA-vLLM min_tokens correction, stopping before Section #7, and decide whether Section #6.5 smoke passes or another exact error must be routed to Antigravity."
     inputs:
@@ -667,6 +667,55 @@ tasks:
     expected_output:
       - "Decision: smoke_pass_proceed_to_full_run_instruction, request_gui_rerun, or request_antigravity_fix."
       - "Evidence citations to the exact GUI screenshots or pasted outputs."
+      - "Next active task matching the decision."
+    receipt:
+      result: done
+      decision: request_gui_rerun
+      full_outcome_complete: false
+      summary: "Accepted Antigravity's committed and pushed diagnostic correction at 38134f8, but rejected the visible GUI output as post-38134f8 runtime proof. The visible Section #6.5 output still showed the post-min-tokens full-length blank failure and lacked the new 38134f8 diagnostics, so the next proof must be a fresh GUI rerun after pulling/reloading 38134f8 or newer."
+      pushed_fix_accepted:
+        commit: "38134f8e2daa6b9d399a48bf2494d2ea2127e89a"
+        summary: "Expose LLaVA vLLM hidden smoke output"
+        remote_verified: "HEAD and origin/codex/llava-vllm-runtime both pointed to 38134f8 during review"
+        files:
+          - "Documents/execplan_llava_vllm_runtime.md"
+          - "notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
+          - "src/radle_medical_custom_runtime.py"
+      gui_evidence_reviewed:
+        - "C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-active-rerun-wait-20260701-121507.png showed Section #4 accepted the min_tokens request body and Section #6.5 still failed with blank response, finish_reason=length, prompt_tokens=3256, completion_tokens=2048, and RuntimeError: LLaVA-vLLM smoke failed: empty response."
+        - "C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-current-20260701-1228.png showed the same visible old Section #6.5 failure, while Antigravity reported commit 38134f8 as pushed."
+        - "C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-38134f8-rerun-packet-sent-20260701-1234.png showed the reviewer packet landed and Antigravity confirmed the current visible output is stale pre-38134f8 execution, not a new post-fix runtime result."
+      static_validation:
+        - "py -3.11 -m py_compile src\\radle_medical_custom_runtime.py: pass"
+        - "Notebook JSON/code compile: pass, 19 cells, 16 code cells, outputs=0"
+        - "git diff --check HEAD~1 HEAD: pass"
+        - "Notebook cell 12 now contains Smoke raw response repr and Smoke raw response char length diagnostics."
+      accepted_context:
+        - "38134f8 changes request_extra_body to include min_tokens=16, skip_special_tokens=False, spaces_between_special_tokens=False, and bad_words=['</s>', '<pad>']."
+        - "The strict smoke gate still rejects blank output, one-token output, prompt echo, image placeholder echo, non-JSON, missing diagnosis, I don't know, placeholder diagnosis, and invalid likert_score."
+        - "No Section #7/full benchmark approval has been given."
+      next_active_task: T016
+
+  - id: T016
+    type: judge
+    assignee: Judge
+    status: active
+    reasoning_hint: high
+    objective: "Review the fresh Antigravity GUI rerun after pulling/reloading 38134f8 or newer, stopping before Section #7, and decide whether Section #6.5 smoke passes or another exact error must be routed to Antigravity."
+    inputs:
+      - "Antigravity pushed commit 38134f8e2daa6b9d399a48bf2494d2ea2127e89a Expose LLaVA vLLM hidden smoke output."
+      - "The committed notebook Section #6.5 must print Smoke raw response repr and Smoke raw response char length."
+      - "Antigravity acknowledged the currently visible output is stale pre-38134f8 execution and that no product fix is needed until a new GUI rerun returns evidence."
+      - "Fresh Antigravity GUI evidence after restart/clear/reload/pull as needed and rerun only through Section #6.5."
+    constraints:
+      - "Do not run notebook cells from the Codex app."
+      - "Do not approve Section #7 or the full benchmark until Section #6.5 smoke evidence passes."
+      - "Reject server readiness alone, token-count growth alone, blank output, one-token output, prompt echo, <image>/image> echo, non-JSON output, missing diagnosis, I don't know, placeholder diagnosis, or invalid likert_score."
+      - "Require visible Section #1 or setup evidence that the runtime is using commit 38134f8 or newer, Section #4 request extra body with the new keys, Section #6 /v1/models, and Section #6.5 raw/repr/char-length plus parsed JSON or exact traceback."
+      - "If another concrete notebook/runtime defect appears, route the exact traceback/log back to Antigravity and require another committed and pushed fix."
+    expected_output:
+      - "Decision: smoke_pass_proceed_to_full_run_instruction, request_gui_rerun, or request_antigravity_fix."
+      - "Evidence citations to exact GUI screenshots or pasted outputs."
       - "Next active task matching the decision."
     receipt: null
 
@@ -696,8 +745,8 @@ tasks:
 checks:
   dirty_fingerprint: unknown
   last_verification:
-    result: awaiting_user_jupyter_instance_selection_before_section4_rerun
-    task: T015
+    result: awaiting_post_38134f8_gui_rerun_with_raw_repr_and_char_length
+    task: T016
     commands:
       - "Reviewed user-triggered rerun screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-after-user-rerun-20260701-113605.png; Section #6.5 still failed after 254631b with Smoke raw response blank, finish_reason=stop, prompt_tokens=3255, completion_tokens=1, and RuntimeError at Cell In[9], line 55: LLaVA-vLLM smoke failed: empty response."
       - "Sent reviewer failure packet to Antigravity and confirmed current status in C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-254631b-short-failure-packet-sent-20260701-113745.png; Antigravity treated the repeated prompt_tokens=3255/one-token EOS as a real defect, not success."
@@ -718,4 +767,12 @@ checks:
       - "Verified local and origin/codex/llava-vllm-runtime were aligned at 409ce2b6a901f991e24ea39ee9c77a2b038bbfb0 before this board-only update; scoped LLaVA notebook/execplan/runtime files were clean."
       - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-final-check-20260701-120748.png; Antigravity showed a Select Jupyter Instance modal with medical-master-radfm (crashlab-synthetic), and no refreshed Section #4 Request extra body output yet."
       - "Current next action is user/Antigravity GUI only: select the intended Jupyter instance, then rerun Section #4 and confirm it prints Request extra body: {'min_tokens': 16}; if it does, continue only to Section #6 and #6.5, otherwise return the exact Section #4 output/traceback."
-      - "T015 remains active; no Section #7/full-run approval until Section #4 visibly prints the min_tokens request extra body and a clean GUI Section #6.5 rerun produces parseable clinical JSON diagnosis and valid likert_score."
+      - "Before the 38134f8 diagnostic commit, T015 remained active with no Section #7/full-run approval until Section #4 visibly printed the min_tokens request extra body and a clean GUI Section #6.5 rerun produced parseable clinical JSON diagnosis and valid likert_score."
+      - "Observed Antigravity commit 38134f8e2daa6b9d399a48bf2494d2ea2127e89a Expose LLaVA vLLM hidden smoke output; changed Documents/execplan_llava_vllm_runtime.md, notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb, and src/radle_medical_custom_runtime.py."
+      - "Verified HEAD and origin/codex/llava-vllm-runtime both pointed to 38134f8."
+      - "Ran py -3.11 -m py_compile src\\radle_medical_custom_runtime.py: pass."
+      - "Notebook JSON/code compile passed: 19 cells, 16 code cells, outputs=0."
+      - "Verified notebook Section #6.5 now contains Smoke raw response repr and Smoke raw response char length diagnostics, and runtime config includes min_tokens=16, skip_special_tokens=False, spaces_between_special_tokens=False, and bad_words=['</s>', '<pad>']."
+      - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-current-20260701-1228.png; visible GUI output still lacks the new 38134f8 diagnostics and therefore is not accepted as post-38134f8 runtime proof."
+      - "Sent the exact reviewer packet to Antigravity and confirmed in C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-38134f8-rerun-packet-sent-20260701-1234.png that Antigravity acknowledged the current visible output is stale pre-38134f8 execution, no product fix is needed from that packet, and the next GUI rerun must show commit 38134f8 or newer plus new raw/repr/char-length diagnostics."
+      - "T016 is active; no Section #7/full-run approval until a post-38134f8 Section #6.5 GUI rerun produces parseable clinical JSON diagnosis and valid likert_score."
