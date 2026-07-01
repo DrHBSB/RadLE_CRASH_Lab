@@ -137,10 +137,19 @@ user after the numbers are in: how to score no-diagnosis cases (abstention vs re
 - [ ] (next) Adjudicate the 16 commits: recover 3 mis-extractions (43 bilateral
   optic nerve gliomas, 183 ovarian tumor, 196 pulmonary TB) from the model's own
   text; decide the 4 finding-only cases (65/97/108/151 "large mass in <location>").
-- [ ] (next) Decide no-diagnosis scoring WITH user: the 184 are genuine abstentions
-  (52 deterministic-empty + 132 considered descriptions), NOT repairable. Promoting
-  requires explicitly overriding the "no promote with repair targets" guardrail,
-  because the repair targets are not repairable here. Then audit/promote/export.
+- [x] (2026-07-02) Adjudicated the 16 commits: recovered 3 mis-extractions via the
+  sidecar `scripts/radle_llava_med_adjudication.json` (43 bilateral optic nerve
+  gliomas, 183 ovarian tumor, 196 pulmonary TB); user (radiologist) ruled the 4
+  finding-only cases (65/97/108/151) COUNT as attempts. Final: 16/200 committed.
+- [x] (2026-07-02) User decided the 184 no-answers = genuine abstentions; promoted
+  with an explicit guardrail override (all 200 audit as `paid_repair` because
+  LLaVA-Med emits no Likert self-confidence -- also unrepairable under parity).
+  raw -> final (sha256 b6ebbba9...), public_release tables exported. Override
+  rationale + 16/184 split + adjudication ref baked into the final manifest.
+- [x] RUN COMPLETE. LLaVA-Med v1.5 Mistral 7B (Ollama q8): 16/200 committed
+  diagnoses, 184 genuine abstentions (52 deterministic-empty + 132 descriptions),
+  0 self-confidence scores. Reportable capability result; do not "improve" via
+  retries/prompt changes (parity). Remaining: transfer outputs off the VM.
 
 
 ## Surprises & Discoveries
