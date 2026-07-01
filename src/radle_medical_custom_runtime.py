@@ -165,7 +165,12 @@ MEDICAL_CUSTOM_RUNTIME_MODELS = [
         name="llava_med_mistral_7b",
         model_id="chaoyinshe/llava-med-v1.5-mistral-7b-hf",
         preferred_engine="vllm",
-        request_extra_body={"min_tokens": 16},
+        request_extra_body={
+            "min_tokens": 16,
+            "skip_special_tokens": False,
+            "spaces_between_special_tokens": False,
+            "bad_words": ["</s>", "<pad>"],
+        },
         notes=(
             "HF-format LLaVA-Med Mistral 7B checkpoint for vLLM; "
             "do not route the original Microsoft checkpoint through vLLM by config relabeling."
