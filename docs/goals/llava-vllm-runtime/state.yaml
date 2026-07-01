@@ -656,6 +656,7 @@ tasks:
       - "Post-254631b GUI evidence showed the chat template override did not fix the one-token EOS/empty-response failure"
       - "The 9f4422f correction adds a LLaVA-only request extra body min_tokens guard and prints/uses it in Section #4 and Section #6.5"
       - "Latest GUI evidence at commit 45ad51c reached Section #4 but did not visibly print Request extra body, so the open notebook cell output/source is not yet acceptable for the min_tokens fix"
+      - "Latest GUI evidence now shows Antigravity waiting on a Select Jupyter Instance modal before the refreshed Section #4 rerun can proceed"
       - "Fresh Antigravity GUI notebook evidence after restart, clear outputs, and rerun only through Section #6.5"
       - "Visible Section #4 config output, Section #6 vLLM startup and /v1/models response, and Section #6.5 raw/parsed smoke output or first traceback"
     constraints:
@@ -695,7 +696,7 @@ tasks:
 checks:
   dirty_fingerprint: unknown
   last_verification:
-    result: awaiting_user_gui_rerun_of_section4_after_4176196_pull
+    result: awaiting_user_jupyter_instance_selection_before_section4_rerun
     task: T015
     commands:
       - "Reviewed user-triggered rerun screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-after-user-rerun-20260701-113605.png; Section #6.5 still failed after 254631b with Smoke raw response blank, finish_reason=stop, prompt_tokens=3255, completion_tokens=1, and RuntimeError at Cell In[9], line 55: LLaVA-vLLM smoke failed: empty response."
@@ -714,4 +715,7 @@ checks:
       - "Verified local and origin/codex/llava-vllm-runtime were aligned at 4176196d28beccf26069c0f274b832d3dcef9ee8 before this board-only update; scoped LLaVA notebook and board status were clean."
       - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-continuation-current-20260701-115624.png; Antigravity had pulled 45ad51c..4176196 and recognized the visible Section #4 output was stale from before refresh, not acceptable min_tokens proof."
       - "Current next action is user/Antigravity GUI only: rerun Section #4 after the pull and confirm it prints Request extra body: {'min_tokens': 16}; if it does, continue only to Section #6 and #6.5, otherwise return the exact Section #4 output/traceback."
+      - "Verified local and origin/codex/llava-vllm-runtime were aligned at 409ce2b6a901f991e24ea39ee9c77a2b038bbfb0 before this board-only update; scoped LLaVA notebook/execplan/runtime files were clean."
+      - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-final-check-20260701-120748.png; Antigravity showed a Select Jupyter Instance modal with medical-master-radfm (crashlab-synthetic), and no refreshed Section #4 Request extra body output yet."
+      - "Current next action is user/Antigravity GUI only: select the intended Jupyter instance, then rerun Section #4 and confirm it prints Request extra body: {'min_tokens': 16}; if it does, continue only to Section #6 and #6.5, otherwise return the exact Section #4 output/traceback."
       - "T015 remains active; no Section #7/full-run approval until Section #4 visibly prints the min_tokens request extra body and a clean GUI Section #6.5 rerun produces parseable clinical JSON diagnosis and valid likert_score."
