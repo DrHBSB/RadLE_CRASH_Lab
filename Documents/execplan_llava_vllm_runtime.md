@@ -14,7 +14,7 @@ The pivot exists because the SGLang route proved image tokens were inserted but 
 
 ## Current State
 
-Current state (2026-07-01 02:50 +05:30, Codex/GPT-5): the Antigravity static edit slice is in progress on branch `codex/llava-vllm-runtime`. The HF Hub structural metadata gate for `chaoyinshe/llava-med-v1.5-mistral-7b-hf` passed via the official Hugging Face API at resolved revision `627be53734c667cbb1669608dac747a4485a22d7`; `src/radle_medical_custom_runtime.py` now maps `llava_med_mistral_7b` to that HF-format checkpoint with `preferred_engine="vllm"`; and `notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb` has been created from the proven Workbench pattern with a non-writing Section 6.5 smoke gate. No Workbench/Jupyter runtime success has been claimed. Next: finish static validation, commit/push the approved edit slice if auth allows, then hand the receipt back to the Codex app coordinator for GUI smoke/full-run evidence.
+Current state (2026-07-01 10:00 +05:30, Codex/GPT-5): the first real GUI vLLM notebook error has been returned and the correction is ready for pushed handoff. `notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb` reached Section 6, but the server exited before readiness because vLLM 0.23.0 saw `Model architectures ['LlavaMistralForCausalLM'] are not supported for now`; the server log showed the stale `microsoft/llava-med-v1.5-mistral-7b` checkpoint even though this branch's helper maps `llava_med_mistral_7b` to `chaoyinshe/llava-med-v1.5-mistral-7b-hf`. The notebook now defaults `REPO_BRANCH` to `codex/llava-vllm-runtime`, fetches/checks out that branch before imports, and asserts the LLaVA-vLLM mapping before server startup. Static validation passed locally; no Workbench/Jupyter runtime success has been claimed. Next after this correction is pushed: restart/clear the exact vLLM notebook and run only through Section 6.5.
 
 HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE LLaVA-Med task and the parent SSOT (`Documents/execplan_medical_workbench_runtime.md`, HEAD `080ec65`) points here. The SGLang abandonment is backed by LIVE Workbench evidence, not a hunch — do not reopen SGLang. On Workbench HEAD `080ec65` the SGLang server came up, every shim applied (`CLIPVisionConfig/MistralConfig positional-arg shim applied`, `LlamaTokenizer.image_processor (CLIP) shim applied`, `llava_mistral config shim OK ... pad_token_id= 2 vision_feature_layer= -2`), and the custom mistral chat template loaded with NO parse error (`Loading chat template from argument: .../llava_med_mistral_chat_template.json`). The template was the canonically-correct FastChat `mistral` shape, so the failure is NOT a template-tuning gap. §6.5 confirmed the image is spliced (prompt_tokens 371->949 = exactly 576 CLIP visual tokens; a short-prompt probe went 24->600), yet a non-committed 4-way diagnostic probe against the live endpoint returned: `[A full/greedy]=''`, `[B full/temp0.7]=''`, `[C short/greedy]=''`, `[D short/temp0.7]='image> '` (4 tokens). Across TWO templates (vicuna echoed the text instructions; mistral echoes the literal `<image>` placeholder) the model NEVER engages the image — the guessed HF-projector fields + hand-attached CLIP processor produce image embeddings the LM ignores. The probe and smoke output were throwaway (NOT committed); the SGLang notebook is unchanged at `080ec65`. Calibrate the new §6.5 vLLM smoke to hard-fail on exactly this signature (empty / 1-token EOS / `<image>`-placeholder echo / prompt echo). The user (returning ~5h after this handoff) explicitly chose the vLLM + HF-checkpoint route; begin at Milestone 1 (verify `chaoyinshe/llava-med-v1.5-mistral-7b-hf`).
 
@@ -26,6 +26,8 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 - HF structural metadata for `chaoyinshe/llava-med-v1.5-mistral-7b-hf` passed on 2026-07-01 via the official Hugging Face API: resolved revision `627be53734c667cbb1669608dac747a4485a22d7`, `architectures=["LlavaForConditionalGeneration"]`, `model_type="llava"`, `image_token_index=32000`, CLIP vision config, Mistral text config, processor/preprocessor/tokenizer files, safetensor index, and four safetensor shards.
 - The original `microsoft/llava-med-v1.5-mistral-7b` entry in `src/radle_medical_custom_runtime.py` is not the target for the vLLM run.
 - `src/radle_medical_custom_runtime.py` maps `llava_med_mistral_7b` to `model_id="chaoyinshe/llava-med-v1.5-mistral-7b-hf"` with `preferred_engine="vllm"` as of the Antigravity static edit slice.
+- The 2026-07-01 GUI run failed before `/v1/models` because the Workbench runtime imported a stale/default-branch helper and started `microsoft/llava-med-v1.5-mistral-7b`, which vLLM rejected as `LlavaMistralForCausalLM`.
+- `notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb` must fetch/check out `codex/llava-vllm-runtime` by default and assert `llava_med_mistral_7b -> chaoyinshe/llava-med-v1.5-mistral-7b-hf` via `vllm` before Section 6 starts.
 - Target notebook: `notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb`.
 - Run contract: `RUN_ID=llava_med_mistral_7b_medical_full_200_cases`, 200 cases, 263 images, `TEST_LIMIT=None`, `RESUME=True`, `MAX_OUTPUT_TOKENS=2048`.
 - vLLM server args must include `--limit-mm-per-prompt {"image": 5}` because case 156 has 5 images.
@@ -54,8 +56,12 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 - [x] (2026-07-01 02:47 +05:30, Codex/GPT-5) Verified `chaoyinshe/llava-med-v1.5-mistral-7b-hf` structurally through the official Hugging Face API without downloading full weights: revision `627be53734c667cbb1669608dac747a4485a22d7`, required processor/tokenizer/index/shard files present, `LlavaForConditionalGeneration`, `model_type="llava"`, `image_token_index=32000`, vision config, and text config.
 - [x] (2026-07-01 02:48 +05:30, Codex/GPT-5) Patched only the LLaVA runtime mapping so `llava_med_mistral_7b` resolves to the HF-format checkpoint under vLLM while keeping the stable model name.
 - [x] (2026-07-01 02:50 +05:30, Codex/GPT-5) Created `notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb` from `notebooks/RadLE_Medical_Workbench_Runtime.ipynb`, set the required LLaVA/vLLM full-run contract, and inserted a non-writing Section 6.5 smoke gate that requires parseable clinical JSON.
-- [ ] (next, Codex/GPT-5) Complete static validation, commit/push the approved Antigravity edit slice if auth permits, and return the receipt to the Codex app coordinator.
-- [ ] (next, user via Antigravity GUI + Codex app coordinator) Run the non-writing Section 6.5 benchmark-style smoke gate before any full run.
+- [x] (2026-07-01 02:50 +05:30, Codex/GPT-5) Completed static validation, committed, and pushed the first Antigravity edit slice as commit `7e52038` on branch `codex/llava-vllm-runtime`.
+- [x] (2026-07-01 09:38 +05:30, user via Antigravity GUI) Returned the first real vLLM notebook error from Section 6: `RuntimeError: OpenAI-compatible server exited before readiness with code 1`; the last server log lines included `Value error, Model architectures ['LlavaMistralForCausalLM'] are not supported for now`, and the log showed `microsoft/llava-med-v1.5-mistral-7b`.
+- [x] (2026-07-01 09:53 +05:30, Codex/GPT-5) Patched `notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb` so Section 1 fetches/checks out `codex/llava-vllm-runtime` by default and Sections 1, 3, and 4 fail early if the imported helper maps LLaVA to anything other than `chaoyinshe/llava-med-v1.5-mistral-7b-hf` through `vllm`.
+- [x] (2026-07-01 10:00 +05:30, Codex/GPT-5) Static validation passed: `py -3.11 -m py_compile src/radle_medical_custom_runtime.py`; notebook JSON loaded with 19 cells and 16 compiled code cells; branch checkout/mapping assertion checks passed; forbidden stale-route string search in the vLLM notebook returned no matches; `git diff --check` passed for touched files.
+- [ ] (next, Codex/GPT-5) Commit/push the correction slice and return the receipt to the Codex app coordinator.
+- [ ] (next, user via Antigravity GUI + Codex app coordinator) Restart/clear the vLLM notebook and run only through Section 6.5 before any full run.
 
 
 ## Surprises & Discoveries
@@ -64,8 +70,8 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
   Evidence: prompt_tokens expanded 371->949 (exactly 576 CLIP tokens; short prompt 24->600). 4-way live probe: `[A full/greedy]=''`, `[B full/temp0.7]=''`, `[C short/greedy]=''`, `[D short/temp0.7]='image> '`. Greedy and sampled both fail; sampling once emitted the literal placeholder. Tested at Workbench HEAD `080ec65` with all shims applied and the canonically-correct mistral chat template loaded (no parse error). Implication for this plan: the §6.5 vLLM smoke MUST assert a real clinical diagnosis, never just a prompt-token jump.
   Date/Author: 2026-07-01, user and Claude/Opus 4.8
 
-- Observation: The current runtime registry still points LLaVA at the abandoned path.
-  Evidence: `src/radle_medical_custom_runtime.py` maps `llava_med_mistral_7b` to `microsoft/llava-med-v1.5-mistral-7b` with `preferred_engine="sglang"`.
+- Observation: At the start of the first static edit slice, the runtime registry still pointed LLaVA at the abandoned path.
+  Evidence: before commit `7e52038`, `src/radle_medical_custom_runtime.py` mapped `llava_med_mistral_7b` to `microsoft/llava-med-v1.5-mistral-7b` with `preferred_engine="sglang"`.
   Date/Author: 2026-07-01, Codex/GPT-5
 
 - Observation: The old saved Morning export promoted a raw final despite pending repair targets.
@@ -75,6 +81,10 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 - Observation: The `hf` CLI is not installed in this Antigravity/Codex environment, so the HF gate used the official Hugging Face REST API and raw `config.json` endpoint instead.
   Evidence: `hf models info chaoyinshe/llava-med-v1.5-mistral-7b-hf --format json` failed with `hf : The term 'hf' is not recognized`; `Invoke-RestMethod https://huggingface.co/api/models/chaoyinshe/llava-med-v1.5-mistral-7b-hf` returned revision `627be53734c667cbb1669608dac747a4485a22d7` and the required file/config fields.
   Date/Author: 2026-07-01, Codex/GPT-5
+
+- Observation: The Workbench runtime can import stale repo code even when this local branch is correct, because the notebook bootstrap previously cloned/pulled without forcing `codex/llava-vllm-runtime`.
+  Evidence: the GUI run selected `SELECTED_MODEL_NAME="llava_med_mistral_7b"` and `SERVER_ENGINE="vllm"`, but the Section 6 server log showed vLLM starting `microsoft/llava-med-v1.5-mistral-7b` and rejecting `LlavaMistralForCausalLM` before `/v1/models`.
+  Date/Author: 2026-07-01, user and Codex/GPT-5
 
 
 ## Decision Log
@@ -103,6 +113,10 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
   Rationale: The coordinator packet requested that branch when repo state permits, and the checkout had unrelated dirty work that must not be folded into this slice.
   Date/Author: 2026-07-01, Codex/GPT-5
 
+- Decision: Force the notebook bootstrap to fetch/check out `codex/llava-vllm-runtime` and assert the LLaVA-vLLM mapping before starting the server.
+  Rationale: The first GUI vLLM error proved the runtime could otherwise start the stale Microsoft checkpoint and fail before readiness; the correction must make the imported helper observable and fail early if it is wrong.
+  Date/Author: 2026-07-01, user and Codex/GPT-5
+
 
 ## Revision Notes
 
@@ -110,11 +124,12 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 - v6 (2026-07-01 02:30 +05:30, Codex/GPT-5): Removed remaining fluff, added concrete repo orientation, exact implementation target files, validation commands, and guardrails from the Morning and Workbench evidence.
 - v7 (2026-07-01 02:34 +05:30, Codex/GPT-5): Tightened Section 6.5 smoke acceptance to require an actual clinical diagnosis; `"I don't know"` remains valid only for the full benchmark path.
 - v8 (2026-07-01 02:50 +05:30, Codex/GPT-5): Recorded the Antigravity coordinator packet execution: HF structural metadata passed, the LLaVA runtime mapping was patched to the HF-format checkpoint, the new vLLM notebook was created from the Workbench pattern, and GUI runtime proof remains pending.
+- v9 (2026-07-01 09:53 +05:30, Codex/GPT-5): Recorded the GUI Section 6 runtime defect and the correction: branch-pinned notebook bootstrap plus pre-server mapping assertions. Runtime proof remains pending and must come from a fresh GUI run through Section 6.5.
 
 
 ## Outcomes & Retrospective
 
-The static vLLM implementation slice has started and the checkpoint-first gate passed. The shared runtime mapping and new notebook now exist locally, but no Workbench/Jupyter runtime smoke or full run has been proven yet. The main reusable lesson is project-specific here: a smoke gate must prove a real benchmark-style JSON diagnosis, not just server readiness or image-token insertion.
+The first static vLLM implementation slice was pushed, but the first real GUI run found a Workbench checkout defect before `/v1/models`: the runtime started the stale Microsoft checkpoint and vLLM rejected its architecture. The correction now pins the notebook bootstrap to the pushed branch and asserts the selected mapping before server startup. No Workbench/Jupyter smoke or full run has been proven yet. The main reusable lesson is project-specific here: a smoke gate must prove a real benchmark-style JSON diagnosis, not just server readiness or image-token insertion, and remote notebook bootstraps must make the imported repo revision visible.
 
 
 ## Suggested Skills By Phase
