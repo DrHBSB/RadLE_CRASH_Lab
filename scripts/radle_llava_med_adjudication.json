@@ -1,0 +1,27 @@
+{
+  "run_label": "medical_full_200_cases_ollama",
+  "model_name": "llava_med_mistral_7b",
+  "adjudicator": "Dr. Hakikat Bir Singh Bhatti (radiologist)",
+  "date_utc": "2026-07-02",
+  "rationale": "The conservative prose failsafe (extract_json_safely) uses first-trigger-wins and on 3 cases captured a weaker finding phrase over a diagnosis the model NAMED elsewhere in the same response. These overrides recover the diagnosis from the model's OWN text; they do not add information. The RadLE prompt and image payload were unchanged; no re-inference was done. Trigger-priority tuning against the 200-case eval set was deliberately avoided (would fit the extractor to the test data).",
+  "overrides": [
+    {
+      "master_case_id": "43",
+      "from": "these tumors in both optic nerves",
+      "to": "bilateral optic nerve gliomas",
+      "model_quote": "The image shows a case of bilateral optic nerve gliomas. The axial T1-weighted MRI with contrast demonstrates the presence of these tumors in both optic nerves."
+    },
+    {
+      "master_case_id": "183",
+      "from": "small amount of ascites",
+      "to": "ovarian tumor",
+      "model_quote": "It shows a large mass in the right lower quadrant, which is likely an ovarian tumor."
+    },
+    {
+      "master_case_id": "196",
+      "from": "multiple cavitary lesions in the lungs",
+      "to": "pulmonary tuberculosis",
+      "model_quote": "The image shows a case of pulmonary tuberculosis... The CT scan reveals multiple cavitary lesions in the lungs, which are characteristic findings in patients with pulmonary tuberculosis."
+    }
+  ]
+}
