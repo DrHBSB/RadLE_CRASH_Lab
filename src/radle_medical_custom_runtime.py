@@ -314,6 +314,70 @@ def verify_vllm_importable() -> None:
         )
 
 
+def patch_vllm_rotary_flash_attn_fallback() -> None:
+    """Patch vLLM's optional FlashAttention rotary import to use native fallback."""
+    patch_code = r"""
+import importlib.util
+from pathlib import Path
+
+spec = importlib.util.find_spec("vllm.model_executor.layers.rotary_embedding.common")
+if spec is None or spec.origin is None:
+    raise SystemExit("Could not locate vLLM rotary common.py")
+
+path = Path(spec.origin)
+text = path.read_text(encoding="utf-8")
+needle = "\n".join([
+    "        self.apply_rotary_emb_flash_attn = None",
+    "        if not current_platform.is_cpu() and find_spec(\"flash_attn\") is not None:",
+    "            from flash_attn.ops.triton.rotary import apply_rotary",
+    "",
+    "            self.apply_rotary_emb_flash_attn = apply_rotary",
+    "",
+])
+replacement = "\n".join([
+    "        self.apply_rotary_emb_flash_attn = None",
+    "        if not current_platform.is_cpu() and find_spec(\"flash_attn\") is not None:",
+    "            try:",
+    "                from flash_attn.ops.triton.rotary import apply_rotary",
+    "            except ModuleNotFoundError as exc:",
+    "                if exc.name is None or not exc.name.startswith(\"flash_attn\"):",
+    "                    raise",
+    "                apply_rotary = None",
+    "",
+    "            if apply_rotary is not None:",
+    "                self.apply_rotary_emb_flash_attn = apply_rotary",
+    "",
+])
+
+if "except ModuleNotFoundError as exc:" in text:
+    print("vLLM rotary optional flash_attn patch already present:", path)
+elif needle in text:
+    path.write_text(text.replace(needle, replacement, 1), encoding="utf-8")
+    print("Patched vLLM rotary optional flash_attn fallback:", path)
+else:
+    raise SystemExit("Expected vLLM rotary flash_attn block not found in " + str(path))
+
+for pyc_path in path.parent.joinpath("__pycache__").glob("common*.pyc"):
+    pyc_path.unlink(missing_ok=True)
+"""
+    print("Preflight vLLM rotary optional flash_attn fallback patch...")
+    result = subprocess.run(
+        [sys.executable, "-c", patch_code],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.stdout.strip():
+        print(result.stdout.strip())
+    if result.stderr.strip():
+        print(result.stderr.strip())
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Failed to patch vLLM rotary optional flash_attn fallback before "
+            "server startup."
+        )
+
+
 def build_vllm_command(
     model_name: str,
     host: str = DEFAULT_HOST,
@@ -404,6 +468,7 @@ def start_model_server(
 
     if engine == "vllm":
         verify_vllm_importable()
+        patch_vllm_rotary_flash_attn_fallback()
         command = build_vllm_command(
             model_name=model_name,
             host=host,
