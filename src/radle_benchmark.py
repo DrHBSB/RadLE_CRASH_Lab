@@ -239,6 +239,19 @@ def extract_json_safely(raw_text):
     text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
     text = re.sub(r"```", "", text)
 
+    # Reasoning models (e.g. OctoMed) emit an internal trace in
+    # <think>...</think> BEFORE the final answer. The answer is only what follows
+    # the trace; the trace is full of hedged/rejected hypotheses that must never
+    # be mined as a diagnosis (the prose failsafe would otherwise grab a rejected
+    # differential). Keep only the text after the last </think>. An opened but
+    # unclosed <think> means the output was truncated mid-reasoning with no final
+    # answer -> no diagnosis. This is inert for models that never emit <think>
+    # (LLaVA-Med, cloud models), so their extraction is unchanged.
+    if re.search(r"</think\s*>", text, flags=re.IGNORECASE):
+        text = re.split(r"</think\s*>", text, flags=re.IGNORECASE)[-1].strip()
+    elif re.search(r"<think\b", text, flags=re.IGNORECASE):
+        return "PARSE_FAILED", "PARSE_FAILED"
+
     try:
         data = json.loads(text)
         if isinstance(data, dict):

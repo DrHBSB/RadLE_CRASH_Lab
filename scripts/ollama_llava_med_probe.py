@@ -32,6 +32,9 @@ import radle_benchmark  # noqa: E402
 
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 DEFAULT_MODEL = "z-uo/llava-med-v1.5-mistral-7b_q8_0"
+# Reasoning models (e.g. OctoMed emits <think>...</think>) can spend the whole
+# budget on the trace before the final answer -- raise PROBE_MAX_TOKENS for those.
+PROBE_MAX_TOKENS = int(os.environ.get("PROBE_MAX_TOKENS", "256"))
 
 
 def find_master_images():
@@ -76,7 +79,7 @@ def main():
                 model=model,
                 messages=[{"role": "user", "content": content}],
                 temperature=radle_benchmark.UNIVERSAL_TEMPERATURE,
-                max_tokens=256,
+                max_tokens=PROBE_MAX_TOKENS,
             )
         except Exception as exc:  # noqa: BLE001
             print("=" * 70)
