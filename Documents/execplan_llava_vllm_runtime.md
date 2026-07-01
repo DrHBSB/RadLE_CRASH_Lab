@@ -14,7 +14,7 @@ The pivot exists because the SGLang route proved image tokens were inserted but 
 
 ## Current State
 
-Current state (2026-07-01 10:56 +05:30, Codex/GPT-5): the GUI has now reached real Section 6 readiness for `chaoyinshe/llava-med-v1.5-mistral-7b-hf`: the vLLM rotary fallback patch applied, the server started, and `/v1/models` returned the correct model with `max_model_len=8192`. Section 6.5 then failed correctly on the next real defect: smoke case `156` with 5 images returned an empty raw response and only 1 completion token. No Workbench/Jupyter runtime success has been claimed. The current correction forces the LLaVA-vLLM server to use `--chat-template-content-format openai` and `--generation-config vllm`, records those args visibly in Section 4, and adds smoke finish-reason/prompt-token diagnostics. Next: commit and push this correction, then rerun only through Section 6.5 and stop before Section 7.
+Current state (2026-07-01 11:26 +05:30, Codex/GPT-5): the GUI is past Section 6 server readiness for `chaoyinshe/llava-med-v1.5-mistral-7b-hf`; `/v1/models` is correct. Section 6.5 still fails, now with clearer diagnostics: smoke case `156` has 5 images, `Smoke raw response:` is blank, `Smoke finish reason: stop`, `Smoke prompt tokens: 3255`, and `Smoke completion tokens: 1`. No Workbench/Jupyter runtime success has been claimed. The current correction adds a repo-controlled LLaVA-Mistral chat template at `src/templates/llava_med_mistral_vllm_chat_template.jinja`, points both the notebook and helper-level vLLM command at it via `--chat-template`, and keeps the existing OpenAI content-format plus vLLM generation defaults. Next: static-validate, commit, push, then rerun only through Section 6.5 and stop before Section 7.
 
 ### Rollercoaster So Far
 
@@ -25,7 +25,7 @@ Current state (2026-07-01 10:56 +05:30, Codex/GPT-5): the GUI has now reached re
 - The uninstall/probe cleanup was too weak because a `flash_attn` namespace remained visible; the notebook-only optional-import patch was also too weak because the open Jupyter notebook could run stale in-memory Section 6 cell contents after a git fast-forward.
 - The pushed state at `6050807` put the critical vLLM optional rotary fallback patch in the imported runtime helper. That was the first version that survived stale notebook cell text as long as Section 1 imported the fresh helper from the checked-out repo.
 - The latest GUI evidence proved the rotary fallback/server-readiness slice worked: `/v1/models` returned `chaoyinshe/llava-med-v1.5-mistral-7b-hf`, but Section 6.5 still failed because generation returned `Smoke raw response:` blank with `Smoke completion tokens: 1`.
-- The active hypothesis is now prompt/generation serving semantics, not server startup: force vLLM to treat the multimodal message as OpenAI structured content and ignore the checkpoint's sparse HF generation config by passing `--chat-template-content-format openai` and `--generation-config vllm`.
+- Forcing OpenAI structured content and vLLM generation defaults did not fix the immediate EOS. The active hypothesis is now the checkpoint's bundled Mistral chat template: it renders `[INST] ... [/INST]` but does not visibly prepend the Mistral beginning-of-sequence token. The current correction supplies a repo-owned template that does prepend `bos_token`.
 
 HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE LLaVA-Med task and the parent SSOT (`Documents/execplan_medical_workbench_runtime.md`, HEAD `080ec65`) points here. The SGLang abandonment is backed by LIVE Workbench evidence, not a hunch — do not reopen SGLang. On Workbench HEAD `080ec65` the SGLang server came up, every shim applied (`CLIPVisionConfig/MistralConfig positional-arg shim applied`, `LlamaTokenizer.image_processor (CLIP) shim applied`, `llava_mistral config shim OK ... pad_token_id= 2 vision_feature_layer= -2`), and the custom mistral chat template loaded with NO parse error (`Loading chat template from argument: .../llava_med_mistral_chat_template.json`). The template was the canonically-correct FastChat `mistral` shape, so the failure is NOT a template-tuning gap. §6.5 confirmed the image is spliced (prompt_tokens 371->949 = exactly 576 CLIP visual tokens; a short-prompt probe went 24->600), yet a non-committed 4-way diagnostic probe against the live endpoint returned: `[A full/greedy]=''`, `[B full/temp0.7]=''`, `[C short/greedy]=''`, `[D short/temp0.7]='image> '` (4 tokens). Across TWO templates (vicuna echoed the text instructions; mistral echoes the literal `<image>` placeholder) the model NEVER engages the image — the guessed HF-projector fields + hand-attached CLIP processor produce image embeddings the LM ignores. The probe and smoke output were throwaway (NOT committed); the SGLang notebook is unchanged at `080ec65`. Calibrate the new §6.5 vLLM smoke to hard-fail on exactly this signature (empty / 1-token EOS / `<image>`-placeholder echo / prompt echo). The user (returning ~5h after this handoff) explicitly chose the vLLM + HF-checkpoint route; begin at Milestone 1 (verify `chaoyinshe/llava-med-v1.5-mistral-7b-hf`).
 
@@ -44,11 +44,11 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 - vLLM 0.23.0 can still make `find_spec("flash_attn")` true through its internal virtual `flash_attn` package; Section 6 must patch only the installed vLLM optional rotary import to fall back when `flash_attn.ops.triton.rotary` is absent.
 - The open Antigravity/Jupyter notebook can execute stale in-memory cell contents after Section 1 fast-forwards the repo branch; critical server preflights must live in `src/radle_medical_custom_runtime.py`, not only in notebook cell text.
 - The post-helper-patch GUI run reached `/v1/models` successfully with `chaoyinshe/llava-med-v1.5-mistral-7b-hf`; startup is no longer the current blocker unless later GUI evidence regresses.
-- The latest Section 6.5 GUI failure is an empty smoke response for case `156` with 5 images and `completion_tokens=1`; this is still a hard failure, not runtime success.
+- The latest Section 6.5 GUI failure is an empty smoke response for case `156` with 5 images, `finish_reason=stop`, `prompt_tokens=3255`, and `completion_tokens=1`; this is still a hard failure, not runtime success.
 - Target notebook: `notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb`.
 - Run contract: `RUN_ID=llava_med_mistral_7b_medical_full_200_cases`, 200 cases, 263 images, `TEST_LIMIT=None`, `RESUME=True`, `MAX_OUTPUT_TOKENS=2048`.
 - vLLM server args must include `--limit-mm-per-prompt {"image": 5}` because case 156 has 5 images.
-- LLaVA-vLLM server args must include `--chat-template-content-format openai` and `--generation-config vllm` so vLLM renders the model's structured multimodal chat template and uses vLLM generation defaults.
+- LLaVA-vLLM server args must include `--chat-template src/templates/llava_med_mistral_vllm_chat_template.jinja`, `--chat-template-content-format openai`, and `--generation-config vllm` so vLLM renders a Mistral-shaped multimodal prompt with `bos_token` and uses vLLM generation defaults.
 - Use `MODEL_DTYPE="float16"` unless vLLM refuses it; if refused, stop and record evidence before changing dtype.
 - Keep the RadLE prompt and OpenAI-style image payload from `src/radle_benchmark.py`: text prompt plus base64 `data:` URL `image_url` blocks.
 - Do not add text-only controls, image perturbation controls, or extra experimental arms.
@@ -89,6 +89,8 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 - [x] (2026-07-01 10:48 +05:30, user via Antigravity GUI) Confirmed the GUI fast-forwarded from `fa126f2` to `6050807` and again verified the helper mapping `llava_med_mistral_7b -> chaoyinshe/llava-med-v1.5-mistral-7b-hf via vllm`.
 - [x] (2026-07-01 10:56 +05:30, user via Antigravity GUI) Confirmed Section 6 reached readiness: the vLLM rotary fallback patch applied, `/v1/models` returned `chaoyinshe/llava-med-v1.5-mistral-7b-hf`, then Section 6.5 failed on smoke case `156` with blank raw output and `completion_tokens=1`.
 - [x] (2026-07-01 10:56 +05:30, Codex/GPT-5) Patched the LLaVA-vLLM server defaults to force `--chat-template-content-format openai` and `--generation-config vllm`, and added Section 6.5 smoke diagnostics for finish reason and prompt tokens.
+- [x] (2026-07-01 11:26 +05:30, user via Antigravity GUI) Confirmed the post-`717a0ed`/coordinator-head GUI run still fails in Section 6.5: case `156`, 5 images, blank raw response, `finish_reason=stop`, `prompt_tokens=3255`, and `completion_tokens=1`.
+- [x] (2026-07-01 11:26 +05:30, Codex/GPT-5) Added a repo-controlled LLaVA-Mistral vLLM chat template with `bos_token`, wired it into notebook-visible `EXTRA_SERVER_ARGS`, and added the same `--chat-template` default in the runtime helper for stale-cell resilience.
 - [ ] (next, Codex/GPT-5) Complete static validation, commit/push the correction slice, and return the receipt to the Codex app coordinator.
 - [ ] (next, user via Antigravity GUI + Codex app coordinator) Pull the new commit, restart/clear the vLLM notebook, and run only through Section 6.5 before any full run.
 
@@ -129,6 +131,10 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 
 - Observation: Once the helper-level rotary fallback patch executed, vLLM reached `/v1/models` for the correct HF-format checkpoint, but the smoke generation still terminated immediately.
   Evidence: Section 6 printed `Endpoint ready: http://127.0.0.1:8000/v1/models` and returned `id: chaoyinshe/llava-med-v1.5-mistral-7b-hf`; Section 6.5 then printed `Smoke case: 156 (5 images)`, `Smoke raw response:` blank, `Smoke completion tokens: 1`, and raised `RuntimeError: LLaVA-vLLM smoke failed: empty response.`
+  Date/Author: 2026-07-01, user and Codex/GPT-5
+
+- Observation: OpenAI structured content format and vLLM generation defaults did not resolve the immediate EOS.
+  Evidence: after the pushed default-args fix, Section 6.5 printed `Smoke case: 156 (5 images)`, `Smoke raw response:` blank, `Smoke finish reason: stop`, `Smoke prompt tokens: 3255`, `Smoke completion tokens: 1`, then raised `RuntimeError: LLaVA-vLLM smoke failed: empty response.`
   Date/Author: 2026-07-01, user and Codex/GPT-5
 
 
@@ -182,6 +188,10 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
   Rationale: The HF checkpoint's chat template expects image blocks rendered before text from structured content, while the latest real failure is no longer server startup but immediate empty generation; making `--chat-template-content-format openai` and `--generation-config vllm` explicit removes two server-side ambiguities without changing the benchmark prompt or image payload.
   Date/Author: 2026-07-01, Codex/GPT-5
 
+- Decision: Override the LLaVA-Med Mistral chat template with a repo-controlled vLLM template that prepends `bos_token`.
+  Rationale: The latest request reaches the model with thousands of prompt tokens but stops immediately; the bundled HF template uses Mistral `[INST] ... [/INST]` framing but does not visibly include the Mistral beginning-of-sequence token. A repo-owned template preserves image-first/text-next ordering and adds the BOS token without changing the RadLE prompt or image payload.
+  Date/Author: 2026-07-01, Codex/GPT-5
+
 
 ## Revision Notes
 
@@ -196,11 +206,12 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 - v13 (2026-07-01 10:43 +05:30, Codex/GPT-5): Recorded the post-`fa126f2` stale-cell evidence and moved the vLLM optional-import fallback patch into the runtime helper server-start path. Runtime proof remains pending.
 - v14 (2026-07-01 10:48 +05:30, Codex/GPT-5): Added the rollercoaster timeline and recorded that GUI setup pulled `6050807` with the correct LLaVA-vLLM helper mapping. Runtime proof remains pending.
 - v15 (2026-07-01 10:56 +05:30, Codex/GPT-5): Recorded that Section 6 now reaches `/v1/models` with the correct model, while Section 6.5 fails on an empty one-token smoke response; added the OpenAI chat-template content-format and vLLM generation-default correction plus extra smoke diagnostics. Runtime proof remains pending.
+- v16 (2026-07-01 11:26 +05:30, Codex/GPT-5): Recorded the post-default-args empty response with `finish_reason=stop` and `prompt_tokens=3255`; added the repo-controlled LLaVA-Mistral chat template override with `bos_token`. Runtime proof remains pending.
 
 
 ## Outcomes & Retrospective
 
-The first static vLLM implementation slice was pushed, and the branch/mapping correction was proven in the GUI at commit `0b90a60`. The helper-level vLLM optional rotary FlashAttention fallback patch moved the run past server startup: the latest GUI evidence shows `/v1/models` returning `chaoyinshe/llava-med-v1.5-mistral-7b-hf`. The next unproven gate is still Section 6.5 runtime generation: the most recent smoke returned an empty response with one completion token, so the current correction forces the OpenAI structured chat-template path and vLLM generation defaults before another GUI smoke attempt. No Workbench/Jupyter smoke or full run has been proven yet. The main reusable lesson is project-specific here: a smoke gate must prove a real benchmark-style JSON diagnosis, not just server readiness or image-token insertion, and remote notebook bootstraps must make both the imported repo revision and stale-cell risk visible.
+The first static vLLM implementation slice was pushed, and the branch/mapping correction was proven in the GUI at commit `0b90a60`. The helper-level vLLM optional rotary FlashAttention fallback patch moved the run past server startup: the latest GUI evidence shows `/v1/models` returning `chaoyinshe/llava-med-v1.5-mistral-7b-hf`. The next unproven gate is still Section 6.5 runtime generation: the most recent smoke returned an empty response with `finish_reason=stop`, `prompt_tokens=3255`, and one completion token, so the current correction overrides the bundled Mistral chat template with a repo-controlled BOS-prefixed template. No Workbench/Jupyter smoke or full run has been proven yet. The main reusable lesson is project-specific here: a smoke gate must prove a real benchmark-style JSON diagnosis, not just server readiness or image-token insertion, and remote notebook bootstraps must make both the imported repo revision and stale-cell risk visible.
 
 
 ## Suggested Skills By Phase

@@ -186,6 +186,11 @@ MEDICAL_CUSTOM_RUNTIME_MODELS = [
 
 
 MODEL_BY_NAME = {model.name: model for model in MEDICAL_CUSTOM_RUNTIME_MODELS}
+LLAVA_MED_MISTRAL_CHAT_TEMPLATE_PATH = (
+    pathlib.Path(__file__).parent
+    / "templates"
+    / "llava_med_mistral_vllm_chat_template.jinja"
+)
 
 
 def _extend_args_if_missing(args: list[str], additions: list[str]) -> list[str]:
@@ -427,6 +432,8 @@ def build_vllm_command(
         command = _extend_args_if_missing(
             command,
             [
+                "--chat-template",
+                str(LLAVA_MED_MISTRAL_CHAT_TEMPLATE_PATH),
                 "--chat-template-content-format",
                 "openai",
                 "--generation-config",
