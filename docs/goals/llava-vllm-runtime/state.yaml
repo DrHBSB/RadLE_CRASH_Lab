@@ -87,7 +87,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/llava-vllm-runtime/"
     command: "node C:/Users/thehb/.agents/skills/goalbuddy/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/llava-vllm-runtime"
 
-active_task: T013
+active_task: T014
 
 tasks:
   - id: T001
@@ -536,7 +536,7 @@ tasks:
   - id: T013
     type: pm
     assignee: PM
-    status: active
+    status: done
     reasoning_hint: medium
     objective: "Collect the next external Antigravity GUI evidence after the open vLLM notebook is run through Section 6.5, or collect the first real error."
     inputs:
@@ -552,6 +552,50 @@ tasks:
       - "The returned Section #4/#6/#6.5 GUI outputs or first real error."
       - "A Judge task activation if evidence is returned."
       - "An Antigravity edit/push packet only if a concrete code/notebook defect is visible."
+    receipt:
+      result: done
+      decision: request_antigravity_edit
+      full_outcome_complete: false
+      summary: "Scrolled the live Antigravity notebook GUI and found the first real vLLM runtime error in Section #6 before /v1/models readiness. Sent the exact repair packet to the Antigravity Codex extension and required a committed, pushed fix plus fresh GUI evidence through Section #6.5."
+      evidence:
+        - "Screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-scroll-25-20260701-093759.png shows Section #6 with a failed cell."
+        - "Screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-scroll-30-20260701-093803.png shows vLLM startup, server exit, and the first traceback."
+        - "Screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-scroll-31-20260701-093803.png shows RuntimeError: OpenAI-compatible server exited before readiness with code 1."
+        - "Screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-prompt-sent-20260701-095009.png shows the repair packet received by the Antigravity extension."
+      exact_error:
+        - "RuntimeError: OpenAI-compatible server exited before readiness with code 1."
+        - "Server log: Value error, Model architectures ['LlavaMistralForCausalLM'] are not supported for now."
+      accepted_context:
+        - "Section #4 GUI output showed SELECTED_MODEL_NAME=llava_med_mistral_7b, SERVER_ENGINE=vllm, RUN_ID=llava_med_mistral_7b_medical_full_200_cases, full test limit, 200 expected cases, and 263 expected images."
+        - "Dependency/runtime helper frames showed two NVIDIA L4 GPUs, vLLM import OK at 0.23.0, and no earlier visible traceback."
+        - "Saved notebook JSON remained stale with no saved outputs, so GUI screenshots are the authoritative evidence surface for this review."
+      packet_sent_to_antigravity:
+        - "Fix the runtime/notebook defect with full access."
+        - "Do not run Section #7 full benchmark yet."
+        - "Commit and push branch codex/llava-vllm-runtime before claiming any update."
+        - "Return GUI evidence for Section #4 config, Section #6 /v1/models, and Section #6.5 raw response plus parsed diagnosis and likert_score, or the next exact traceback."
+      next_active_task: T014
+
+  - id: T014
+    type: pm
+    assignee: PM
+    status: active
+    reasoning_hint: medium
+    objective: "Collect the Antigravity pushed fix receipt and the next GUI rerun evidence after the Section #6 vLLM unsupported-architecture failure."
+    inputs:
+      - "T013 first-error receipt"
+      - "Antigravity Codex extension response, commit, push, diff, or PR link"
+      - "Fresh GUI evidence from notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb after rerunning through Section #6.5"
+    constraints:
+      - "Do not run notebook cells from the Codex app."
+      - "Do not claim runtime success from planning, code edits, server start logs alone, or unsent/unpushed changes."
+      - "Require committed and pushed Antigravity edits before accepting the update."
+      - "Do not approve Section #7/full-run instructions until Section #6.5 smoke evidence passes the rejection rules."
+      - "If the rerun shows another concrete error, route the exact traceback/log back to Antigravity and require another pushed fix."
+    expected_output:
+      - "Commit/push evidence for the Antigravity fix."
+      - "Fresh Section #4/#6/#6.5 GUI outputs or the next exact error."
+      - "Decision to request another fix, request a rerun, or activate a Judge review for smoke-pass evidence."
     receipt: null
 
   - id: T999
@@ -580,9 +624,10 @@ tasks:
 checks:
   dirty_fingerprint: unknown
   last_verification:
-    result: pass
-    task: T012
+    result: blocked_by_runtime_error
+    task: T013
     commands:
-      - "Reviewed screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t012-gui-review-20260701-032846.png"
-      - "Summarized notebook JSON outputs: all code cells execution_count empty and outputs=0"
-      - "Confirmed notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb is not dirty after read-only inspection"
+      - "Reviewed screenshots C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-scroll-01-20260701-093537.png through C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-scroll-31-20260701-093803.png"
+      - "Identified Section #6 RuntimeError: OpenAI-compatible server exited before readiness with code 1"
+      - "Identified server log rejection: Model architectures ['LlavaMistralForCausalLM'] are not supported for now"
+      - "Sent repair packet to Antigravity extension and verified receipt screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-prompt-sent-20260701-095009.png"
