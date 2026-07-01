@@ -54,6 +54,12 @@ MODELS = [
         },
     },
     {
+        "name": "claude_fable_5",
+        "id": "claude-fable-5",
+        "provider": "anthropic",
+        "extra": {"output_config": {"effort": "high"}},
+    },
+    {
         "name": "gemini_3_1_pro",
         "id": "gemini-3.1-pro-preview",
         "provider": "google",
@@ -1316,9 +1322,11 @@ def build_api_params(model, content_array, max_output_tokens, universal_temperat
         }
         if "thinking" in extra:
             params["thinking"] = extra["thinking"]
-            if "output_config" in extra:
-                params["output_config"] = extra["output_config"]
-            # temperature is incompatible with extended thinking
+        if "output_config" in extra:
+            params["output_config"] = extra["output_config"]
+        if "thinking" in extra or "output_config" in extra:
+            # Sampling parameters are incompatible with these Claude request modes.
+            pass
         else:
             params["temperature"] = universal_temperature
         return params
