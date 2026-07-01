@@ -14,7 +14,7 @@ The pivot exists because the SGLang route proved image tokens were inserted but 
 
 ## Current State
 
-Current state (2026-07-01 10:00 +05:30, Codex/GPT-5): the first real GUI vLLM notebook error has been returned and the correction is ready for pushed handoff. `notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb` reached Section 6, but the server exited before readiness because vLLM 0.23.0 saw `Model architectures ['LlavaMistralForCausalLM'] are not supported for now`; the server log showed the stale `microsoft/llava-med-v1.5-mistral-7b` checkpoint even though this branch's helper maps `llava_med_mistral_7b` to `chaoyinshe/llava-med-v1.5-mistral-7b-hf`. The notebook now defaults `REPO_BRANCH` to `codex/llava-vllm-runtime`, fetches/checks out that branch before imports, and asserts the LLaVA-vLLM mapping before server startup. Static validation passed locally; no Workbench/Jupyter runtime success has been claimed. Next after this correction is pushed: restart/clear the exact vLLM notebook and run only through Section 6.5.
+Current state (2026-07-01 10:13 +05:30, Codex/GPT-5): the post-`0b90a60` GUI run proved the branch/mapping fix worked (`Using repo commit: 0b90a60`; `llava_med_mistral_7b -> chaoyinshe/llava-med-v1.5-mistral-7b-hf via vllm`), then Section 6 failed before `/v1/models` because vLLM hit `ModuleNotFoundError: No module named 'flash_attn.ops'` while importing `flash_attn.ops.triton.rotary` during Mistral rotary embedding initialization. The notebook dependency cell now probes that exact path after vLLM install and uninstalls only a partial/incompatible `flash-attn`/`flash_attn` package so vLLM can use its fallback. Section 6.5 also now fails with a clear prerequisite error if Section 6 did not initialize `endpoint_client` and `models_payload`. No Workbench/Jupyter runtime success has been claimed. Next after this correction is pushed: restart/clear the exact vLLM notebook and run only through Section 6.5.
 
 HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE LLaVA-Med task and the parent SSOT (`Documents/execplan_medical_workbench_runtime.md`, HEAD `080ec65`) points here. The SGLang abandonment is backed by LIVE Workbench evidence, not a hunch — do not reopen SGLang. On Workbench HEAD `080ec65` the SGLang server came up, every shim applied (`CLIPVisionConfig/MistralConfig positional-arg shim applied`, `LlamaTokenizer.image_processor (CLIP) shim applied`, `llava_mistral config shim OK ... pad_token_id= 2 vision_feature_layer= -2`), and the custom mistral chat template loaded with NO parse error (`Loading chat template from argument: .../llava_med_mistral_chat_template.json`). The template was the canonically-correct FastChat `mistral` shape, so the failure is NOT a template-tuning gap. §6.5 confirmed the image is spliced (prompt_tokens 371->949 = exactly 576 CLIP visual tokens; a short-prompt probe went 24->600), yet a non-committed 4-way diagnostic probe against the live endpoint returned: `[A full/greedy]=''`, `[B full/temp0.7]=''`, `[C short/greedy]=''`, `[D short/temp0.7]='image> '` (4 tokens). Across TWO templates (vicuna echoed the text instructions; mistral echoes the literal `<image>` placeholder) the model NEVER engages the image — the guessed HF-projector fields + hand-attached CLIP processor produce image embeddings the LM ignores. The probe and smoke output were throwaway (NOT committed); the SGLang notebook is unchanged at `080ec65`. Calibrate the new §6.5 vLLM smoke to hard-fail on exactly this signature (empty / 1-token EOS / `<image>`-placeholder echo / prompt echo). The user (returning ~5h after this handoff) explicitly chose the vLLM + HF-checkpoint route; begin at Milestone 1 (verify `chaoyinshe/llava-med-v1.5-mistral-7b-hf`).
 
@@ -28,6 +28,8 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 - `src/radle_medical_custom_runtime.py` maps `llava_med_mistral_7b` to `model_id="chaoyinshe/llava-med-v1.5-mistral-7b-hf"` with `preferred_engine="vllm"` as of the Antigravity static edit slice.
 - The 2026-07-01 GUI run failed before `/v1/models` because the Workbench runtime imported a stale/default-branch helper and started `microsoft/llava-med-v1.5-mistral-7b`, which vLLM rejected as `LlavaMistralForCausalLM`.
 - `notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb` must fetch/check out `codex/llava-vllm-runtime` by default and assert `llava_med_mistral_7b -> chaoyinshe/llava-med-v1.5-mistral-7b-hf` via `vllm` before Section 6 starts.
+- The post-`0b90a60` GUI run proved the branch and mapping are correct, then failed before `/v1/models` on a partial/incompatible `flash_attn` package missing `flash_attn.ops.triton.rotary`.
+- `notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb` now must probe `flash_attn.ops.triton.rotary` after vLLM install and remove only the partial `flash-attn`/`flash_attn` package when that exact probe fails.
 - Target notebook: `notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb`.
 - Run contract: `RUN_ID=llava_med_mistral_7b_medical_full_200_cases`, 200 cases, 263 images, `TEST_LIMIT=None`, `RESUME=True`, `MAX_OUTPUT_TOKENS=2048`.
 - vLLM server args must include `--limit-mm-per-prompt {"image": 5}` because case 156 has 5 images.
@@ -60,7 +62,9 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 - [x] (2026-07-01 09:38 +05:30, user via Antigravity GUI) Returned the first real vLLM notebook error from Section 6: `RuntimeError: OpenAI-compatible server exited before readiness with code 1`; the last server log lines included `Value error, Model architectures ['LlavaMistralForCausalLM'] are not supported for now`, and the log showed `microsoft/llava-med-v1.5-mistral-7b`.
 - [x] (2026-07-01 09:53 +05:30, Codex/GPT-5) Patched `notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb` so Section 1 fetches/checks out `codex/llava-vllm-runtime` by default and Sections 1, 3, and 4 fail early if the imported helper maps LLaVA to anything other than `chaoyinshe/llava-med-v1.5-mistral-7b-hf` through `vllm`.
 - [x] (2026-07-01 10:00 +05:30, Codex/GPT-5) Static validation passed: `py -3.11 -m py_compile src/radle_medical_custom_runtime.py`; notebook JSON loaded with 19 cells and 16 compiled code cells; branch checkout/mapping assertion checks passed; forbidden stale-route string search in the vLLM notebook returned no matches; `git diff --check` passed for touched files.
-- [ ] (next, Codex/GPT-5) Commit/push the correction slice and return the receipt to the Codex app coordinator.
+- [x] (2026-07-01 10:13 +05:30, user via Antigravity GUI and Codex/GPT-5) Confirmed the post-`0b90a60` GUI run used the correct branch and mapping, then captured the new first server error before `/v1/models`: `ModuleNotFoundError: No module named 'flash_attn.ops'` from `flash_attn.ops.triton.rotary`.
+- [x] (2026-07-01 10:13 +05:30, Codex/GPT-5) Patched the LLaVA-vLLM dependency cell to probe `flash_attn.ops.triton.rotary` and uninstall only partial/incompatible `flash-attn`/`flash_attn`; patched Section 6.5 to require Section 6 `endpoint_client` and `/v1/models` state before smoke.
+- [ ] (next, Codex/GPT-5) Complete static validation, commit/push the correction slice, and return the receipt to the Codex app coordinator.
 - [ ] (next, user via Antigravity GUI + Codex app coordinator) Restart/clear the vLLM notebook and run only through Section 6.5 before any full run.
 
 
@@ -84,6 +88,10 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 
 - Observation: The Workbench runtime can import stale repo code even when this local branch is correct, because the notebook bootstrap previously cloned/pulled without forcing `codex/llava-vllm-runtime`.
   Evidence: the GUI run selected `SELECTED_MODEL_NAME="llava_med_mistral_7b"` and `SERVER_ENGINE="vllm"`, but the Section 6 server log showed vLLM starting `microsoft/llava-med-v1.5-mistral-7b` and rejecting `LlavaMistralForCausalLM` before `/v1/models`.
+  Date/Author: 2026-07-01, user and Codex/GPT-5
+
+- Observation: A partial or incompatible `flash_attn` package can crash vLLM 0.23.0 during LLaVA-Med Mistral startup before `/v1/models`.
+  Evidence: the post-`0b90a60` GUI server log entered Mistral rotary embedding initialization, then failed importing `flash_attn.ops.triton.rotary` with `ModuleNotFoundError: No module named 'flash_attn.ops'`; Section 6.5 then produced `NameError: endpoint_client is not defined` only because Section 6 had not completed.
   Date/Author: 2026-07-01, user and Codex/GPT-5
 
 
@@ -117,6 +125,10 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
   Rationale: The first GUI vLLM error proved the runtime could otherwise start the stale Microsoft checkpoint and fail before readiness; the correction must make the imported helper observable and fail early if it is wrong.
   Date/Author: 2026-07-01, user and Codex/GPT-5
 
+- Decision: Reuse the narrow FlashAttention cleanup pattern from the InternVL Workbench route for LLaVA-vLLM.
+  Rationale: vLLM only crashes because `flash_attn` is discoverable but lacks `flash_attn.ops.triton.rotary`; if that exact probe fails, uninstalling the partial package lets vLLM use its rotary fallback without adding a new experimental dependency or changing model semantics.
+  Date/Author: 2026-07-01, Codex/GPT-5
+
 
 ## Revision Notes
 
@@ -125,11 +137,12 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 - v7 (2026-07-01 02:34 +05:30, Codex/GPT-5): Tightened Section 6.5 smoke acceptance to require an actual clinical diagnosis; `"I don't know"` remains valid only for the full benchmark path.
 - v8 (2026-07-01 02:50 +05:30, Codex/GPT-5): Recorded the Antigravity coordinator packet execution: HF structural metadata passed, the LLaVA runtime mapping was patched to the HF-format checkpoint, the new vLLM notebook was created from the Workbench pattern, and GUI runtime proof remains pending.
 - v9 (2026-07-01 09:53 +05:30, Codex/GPT-5): Recorded the GUI Section 6 runtime defect and the correction: branch-pinned notebook bootstrap plus pre-server mapping assertions. Runtime proof remains pending and must come from a fresh GUI run through Section 6.5.
+- v10 (2026-07-01 10:13 +05:30, Codex/GPT-5): Recorded the post-branch-fix `flash_attn.ops.triton.rotary` startup failure and the notebook dependency-cell cleanup plus Section 6.5 prerequisite guard. Runtime proof remains pending.
 
 
 ## Outcomes & Retrospective
 
-The first static vLLM implementation slice was pushed, but the first real GUI run found a Workbench checkout defect before `/v1/models`: the runtime started the stale Microsoft checkpoint and vLLM rejected its architecture. The correction now pins the notebook bootstrap to the pushed branch and asserts the selected mapping before server startup. No Workbench/Jupyter smoke or full run has been proven yet. The main reusable lesson is project-specific here: a smoke gate must prove a real benchmark-style JSON diagnosis, not just server readiness or image-token insertion, and remote notebook bootstraps must make the imported repo revision visible.
+The first static vLLM implementation slice was pushed, and the branch/mapping correction was proven in the GUI at commit `0b90a60`. The next server failure is dependency-level: a discoverable but incomplete `flash_attn` package lacks `flash_attn.ops.triton.rotary` and crashes vLLM before `/v1/models`. The notebook now uses a narrow probe-and-cleanup before server startup and guards Section 6.5 against running after Section 6 fails. No Workbench/Jupyter smoke or full run has been proven yet. The main reusable lesson is project-specific here: a smoke gate must prove a real benchmark-style JSON diagnosis, not just server readiness or image-token insertion, and remote notebook bootstraps must make the imported repo revision visible.
 
 
 ## Suggested Skills By Phase
