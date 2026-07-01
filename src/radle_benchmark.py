@@ -148,6 +148,70 @@ def get_mime_type(path):
     return "image/jpeg"
 
 
+# Failsafe prose extraction (last resort) for models that describe instead of
+# emitting JSON -- e.g. LLaVA-Med via Ollama. Deliberately CONSERVATIVE: it only
+# fires on an explicit diagnostic commitment ("presence of X", "consistent with
+# X", ...) and rejects anything that is just modality/anatomy description or a
+# list of possibilities, so it never fabricates a diagnosis from a description.
+_PROSE_COMMIT_TRIGGERS = (
+    r"presence of",
+    r"consistent with",
+    r"compatible with",
+    r"suggestive of",
+    r"indicative of",
+    r"diagnostic of",
+    r"diagnosis of",
+    r"diagnosis is",
+    r"findings of",
+    r"most likely represents",
+    r"represents",
+    r"reveals",
+    r"demonstrates",
+)
+_PROSE_MODALITY_STOP = (
+    "ct", "computed tomography", "x-ray", "xray", "radiograph", "radiography",
+    "mri", "magnetic resonance", "ultrasound", "sonograph", "scan", "view",
+    "image", "coronal", "axial", "sagittal", "plane", "section", "projection",
+    "film", "structures", "abnormalities", "various conditions", "anatomy",
+    "the patient", "cavity", "region", "angiogram", "modality",
+)
+_PROSE_CONFIDENCE = (
+    ("very high confidence", 4),
+    ("high confidence", 3),
+    ("moderate confidence", 2),
+    ("very low confidence", 0),
+    ("low confidence", 1),
+)
+
+
+def _extract_prose_diagnosis(text):
+    """Return (diagnosis, likert) if prose states a committed diagnosis, else (None, None)."""
+    if not text:
+        return None, None
+    lowered = text.lower()
+    for trigger in _PROSE_COMMIT_TRIGGERS:
+        match = re.search(
+            trigger + r"\s+(?:a |an |the )?([A-Za-z][A-Za-z0-9 '\-/()]+?)(?:[.,;:\n]|$)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            continue
+        phrase = match.group(1).strip().strip("()").strip()
+        low = phrase.lower()
+        if not phrase or len(phrase.split()) > 8:
+            continue
+        if any(re.search(r"\b" + re.escape(stop) + r"\b", low) for stop in _PROSE_MODALITY_STOP):
+            continue
+        likert = None
+        for words, val in _PROSE_CONFIDENCE:
+            if words in lowered:
+                likert = val
+                break
+        return phrase, likert
+    return None, None
+
+
 def extract_json_safely(raw_text):
     """Extract diagnosis JSON while ignoring Markdown fences or reasoning text."""
     if raw_text is None:
@@ -243,6 +307,11 @@ def extract_json_safely(raw_text):
         score_raw = score_raw.strip().lower()
         likert = None if score_raw == "null" else score_raw
         return diag_raw, likert
+
+    # Last resort: pull a committed diagnosis out of descriptive prose.
+    prose_diag, prose_likert = _extract_prose_diagnosis(text)
+    if prose_diag:
+        return prose_diag, prose_likert
 
     return "PARSE_FAILED", "PARSE_FAILED"
 
