@@ -165,12 +165,11 @@ MEDICAL_CUSTOM_RUNTIME_MODELS = [
         name="llava_med_mistral_7b",
         model_id="chaoyinshe/llava-med-v1.5-mistral-7b-hf",
         preferred_engine="vllm",
-        request_extra_body={
-            "min_tokens": 16,
-            "skip_special_tokens": False,
-            "spaces_between_special_tokens": False,
-            "logit_bias": {"12": -100, "13": -100, "16": -100},
-        },
+        # No request_extra_body: probe B proved the model emits clean JSON with the
+        # real RadLE prompt and NO extra body. The earlier min_tokens/logit_bias
+        # guards were band-aids for the bad_words EOS bug (now removed) and were
+        # actively corrupting output (min_tokens forced prose past the diagnosis;
+        # logit_bias blocked newlines and collapsed list answers into "1. 1. 1.").
         notes=(
             "HF-format LLaVA-Med Mistral 7B checkpoint for vLLM; "
             "do not route the original Microsoft checkpoint through vLLM by config relabeling."
