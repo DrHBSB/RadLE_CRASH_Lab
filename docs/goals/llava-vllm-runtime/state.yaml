@@ -692,7 +692,7 @@ tasks:
 checks:
   dirty_fingerprint: unknown
   last_verification:
-    result: awaiting_clean_gui_rerun_after_chat_defaults_fix
+    result: waiting_for_kernel_restart_after_chat_defaults_fix
     task: T015
     commands:
       - "Observed Antigravity commit 6050807 Apply vLLM rotary fallback in runtime helper"
@@ -701,4 +701,6 @@ checks:
       - "Observed Antigravity commit 717a0ed Force LLaVA vLLM chat defaults"
       - "Ran py -3.11 -m py_compile src\\radle_medical_custom_runtime.py: pass"
       - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-after-717a0ed-current-20260701-110340.png; Antigravity reports runtime claims none and next GUI rerun is pull 717a0ed, restart/clear, run only through Section #6.5"
+      - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-continuation2-current-20260701-111132.png; GUI showed Cannot execute code, session has been disposed. Please try restarting the Kernel."
+      - "Verified git HEAD and origin remain c4f88acfabd72ee9061da29d635e9a4343fb0464, with product fix 717a0ed included underneath and no newer product commit"
       - "T015 remains active; no Section #7/full-run approval until clean GUI rerun evidence passes"
