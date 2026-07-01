@@ -87,7 +87,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/llava-vllm-runtime/"
     command: "node C:/Users/thehb/.agents/skills/goalbuddy/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/llava-vllm-runtime"
 
-active_task: T016
+active_task: T017
 
 tasks:
   - id: T001
@@ -699,7 +699,7 @@ tasks:
   - id: T016
     type: judge
     assignee: Judge
-    status: active
+    status: done
     reasoning_hint: high
     objective: "Review the fresh Antigravity GUI rerun after pulling/reloading 38134f8 or newer, stopping before Section #7, and decide whether Section #6.5 smoke passes or another exact error must be routed to Antigravity."
     inputs:
@@ -712,6 +712,58 @@ tasks:
       - "Do not approve Section #7 or the full benchmark until Section #6.5 smoke evidence passes."
       - "Reject server readiness alone, token-count growth alone, blank output, one-token output, prompt echo, <image>/image> echo, non-JSON output, missing diagnosis, I don't know, placeholder diagnosis, or invalid likert_score."
       - "Require visible Section #1 or setup evidence that the runtime is using commit 38134f8 or newer, Section #4 request extra body with the new keys, Section #6 /v1/models, and Section #6.5 raw/repr/char-length plus parsed JSON or exact traceback."
+      - "If another concrete notebook/runtime defect appears, route the exact traceback/log back to Antigravity and require another committed and pushed fix."
+    expected_output:
+      - "Decision: smoke_pass_proceed_to_full_run_instruction, request_gui_rerun, or request_antigravity_fix."
+      - "Evidence citations to exact GUI screenshots or pasted outputs."
+      - "Next active task matching the decision."
+    receipt:
+      result: done
+      decision: request_gui_rerun_after_pushed_whitespace_loop_fix
+      full_outcome_complete: false
+      summary: "Reviewed the fresh post-38134f8 GUI evidence and accepted it as a real Section #6.5 runtime failure, not success. The smoke output decoded to ordinary whitespace only: one leading space plus newline tokens, raw character length 2048, finish_reason=length, prompt_tokens=3256, completion_tokens=2048, and RuntimeError: LLaVA-vLLM smoke failed: empty response. Antigravity then committed and pushed 0eb8032 to block the observed control-whitespace loop with a model-scoped vLLM logit_bias and added whitespace-count diagnostics. Runtime success remains unproven until a fresh GUI rerun through Section #6.5 produces parseable clinical JSON."
+      gui_evidence_reviewed:
+        - "C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t016-current-20260701-1248.png showed post-38134f8 Section #6.5 output with Smoke raw response repr containing only whitespace, raw response char length 2048, finish_reason=length, prompt_tokens=3256, completion_tokens=2048, and the empty-response RuntimeError."
+        - "C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t016-after-wait-20260701-1250.png showed Antigravity correctly classifying the output as valid post-38134f8 evidence and a real smoke failure, not success."
+        - "C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t016-antigravity-editing-20260701-1252.png showed Antigravity verifying tokenizer control-token IDs and preparing the logit_bias fix."
+        - "C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t016-local-commit-not-pushed-20260701-1255.png showed Antigravity's pushed receipt for 0eb8032, runtime_claims: none, and next GUI instruction to rerun only through Section #6.5."
+      pushed_fix_accepted:
+        commit: "0eb8032654e038e9b7031240650287694fdccb24"
+        summary: "Block LLaVA vLLM whitespace loop"
+        remote_verified: "HEAD and origin/codex/llava-vllm-runtime both pointed to 0eb8032 during review"
+        files:
+          - "Documents/execplan_llava_vllm_runtime.md"
+          - "notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
+          - "src/radle_medical_custom_runtime.py"
+      static_validation:
+        - "py -3.11 -m py_compile src\\radle_medical_custom_runtime.py: pass"
+        - "Notebook JSON/code compile: pass, 19 cells, 16 code cells, outputs=0"
+        - "git diff --check HEAD~1 HEAD: pass"
+        - "Committed notebook and runtime config include logit_bias {'12': -100, '13': -100, '16': -100}."
+        - "Committed Section #6.5 prints Smoke raw response whitespace counts."
+      accepted_context:
+        - "The 0eb8032 correction blocks only the observed tokenizer control-whitespace token IDs for tab, newline, and carriage return; normal spaces remain allowed."
+        - "The full benchmark path continues to receive the model-scoped request extra body via active_model['extra'], so smoke and benchmark paths remain aligned if Section #7 is later approved."
+        - "An unstaged local notebook hunk remains outside the accepted pushed commit: a scorer-view rebuild in notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb. It was not staged or accepted as part of this runtime fix."
+        - "No Section #7/full benchmark approval has been given."
+      next_active_task: T017
+
+  - id: T017
+    type: judge
+    assignee: Judge
+    status: active
+    reasoning_hint: high
+    objective: "Review the fresh Antigravity GUI rerun after pulling/reloading 0eb8032 or newer, stopping before Section #7, and decide whether Section #6.5 smoke passes or another exact error must be routed to Antigravity."
+    inputs:
+      - "Antigravity pushed commit 0eb8032654e038e9b7031240650287694fdccb24 Block LLaVA vLLM whitespace loop."
+      - "The committed runtime/notebook request extra body must include min_tokens=16, skip_special_tokens=False, spaces_between_special_tokens=False, bad_words=['</s>', '<pad>'], and logit_bias {'12': -100, '13': -100, '16': -100}."
+      - "The committed notebook Section #6.5 must print Smoke raw response repr, Smoke raw response char length, and Smoke raw response whitespace counts."
+      - "Fresh Antigravity GUI evidence after restart/clear/reload/pull as needed and rerun only through Section #6.5."
+    constraints:
+      - "Do not run notebook cells from the Codex app."
+      - "Do not approve Section #7 or the full benchmark until Section #6.5 smoke evidence passes."
+      - "Reject server readiness alone, token-count growth alone, blank output, whitespace-only output, one-token output, prompt echo, <image>/image> echo, non-JSON output, missing diagnosis, I don't know, placeholder diagnosis, or invalid likert_score."
+      - "Require visible Section #1 or setup evidence that the runtime is using commit 0eb8032 or newer, Section #4 request extra body with logit_bias, Section #6 /v1/models, and Section #6.5 raw/repr/char-length/whitespace-count output plus parsed JSON or exact traceback."
       - "If another concrete notebook/runtime defect appears, route the exact traceback/log back to Antigravity and require another committed and pushed fix."
     expected_output:
       - "Decision: smoke_pass_proceed_to_full_run_instruction, request_gui_rerun, or request_antigravity_fix."
@@ -745,8 +797,8 @@ tasks:
 checks:
   dirty_fingerprint: unknown
   last_verification:
-    result: awaiting_post_38134f8_gui_rerun_with_raw_repr_and_char_length
-    task: T016
+    result: awaiting_post_0eb8032_gui_rerun_with_logit_bias_and_whitespace_counts
+    task: T017
     commands:
       - "Reviewed user-triggered rerun screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-after-user-rerun-20260701-113605.png; Section #6.5 still failed after 254631b with Smoke raw response blank, finish_reason=stop, prompt_tokens=3255, completion_tokens=1, and RuntimeError at Cell In[9], line 55: LLaVA-vLLM smoke failed: empty response."
       - "Sent reviewer failure packet to Antigravity and confirmed current status in C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-254631b-short-failure-packet-sent-20260701-113745.png; Antigravity treated the repeated prompt_tokens=3255/one-token EOS as a real defect, not success."
@@ -775,4 +827,15 @@ checks:
       - "Verified notebook Section #6.5 now contains Smoke raw response repr and Smoke raw response char length diagnostics, and runtime config includes min_tokens=16, skip_special_tokens=False, spaces_between_special_tokens=False, and bad_words=['</s>', '<pad>']."
       - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-current-20260701-1228.png; visible GUI output still lacks the new 38134f8 diagnostics and therefore is not accepted as post-38134f8 runtime proof."
       - "Sent the exact reviewer packet to Antigravity and confirmed in C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-38134f8-rerun-packet-sent-20260701-1234.png that Antigravity acknowledged the current visible output is stale pre-38134f8 execution, no product fix is needed from that packet, and the next GUI rerun must show commit 38134f8 or newer plus new raw/repr/char-length diagnostics."
-      - "T016 is active; no Section #7/full-run approval until a post-38134f8 Section #6.5 GUI rerun produces parseable clinical JSON diagnosis and valid likert_score."
+      - "Before the 0eb8032 whitespace-loop fix, T016 remained active with no Section #7/full-run approval until a post-38134f8 Section #6.5 GUI rerun produced parseable clinical JSON diagnosis and valid likert_score."
+      - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t016-current-20260701-1248.png; post-38134f8 Section #6.5 showed Smoke raw response repr containing only whitespace, Smoke raw response char length 2048, finish_reason=length, prompt_tokens=3256, completion_tokens=2048, and RuntimeError: LLaVA-vLLM smoke failed: empty response."
+      - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t016-after-wait-20260701-1250.png; Antigravity classified the output as a real whitespace-loop smoke failure and kept Section #7 blocked."
+      - "Reviewed C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t016-antigravity-editing-20260701-1252.png; Antigravity verified tokenizer control-whitespace IDs 12, 13, and 16 and prepared a logit_bias fix."
+      - "Observed Antigravity commit 0eb8032654e038e9b7031240650287694fdccb24 Block LLaVA vLLM whitespace loop; changed Documents/execplan_llava_vllm_runtime.md, notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb, and src/radle_medical_custom_runtime.py."
+      - "Verified HEAD and origin/codex/llava-vllm-runtime both pointed to 0eb8032."
+      - "Ran py -3.11 -m py_compile src\\radle_medical_custom_runtime.py: pass."
+      - "Notebook JSON/code compile passed: 19 cells, 16 code cells, outputs=0."
+      - "Ran git diff --check HEAD~1 HEAD: pass."
+      - "Verified committed runtime/notebook request extra body includes logit_bias {'12': -100, '13': -100, '16': -100}, and Section #6.5 prints Smoke raw response whitespace counts."
+      - "Ignored unstaged local notebook hunk in notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb that rebuilds the scorer view from repaired final; it is outside the accepted pushed 0eb8032 runtime fix and was not staged."
+      - "T017 is active; no Section #7/full-run approval until a post-0eb8032 Section #6.5 GUI rerun produces parseable clinical JSON diagnosis and valid likert_score."
