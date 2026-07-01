@@ -14,7 +14,7 @@ The pivot exists because the SGLang route proved image tokens were inserted but 
 
 ## Current State
 
-Current state (2026-07-01 12:37 +05:30, Codex/GPT-5): branch `codex/llava-vllm-runtime` reached a fresh GUI run at commit `38134f8`: Section 6 `/v1/models` returned `chaoyinshe/llava-med-v1.5-mistral-7b-hf`, and Section 6.5 proved the prior blank output was a whitespace loop, not stripped special tokens. The smoke response was one leading space plus newline tokens, `repr(...)` showed only whitespace, raw char length was `2048`, `finish_reason=length`, `prompt_tokens=3256`, and `completion_tokens=2048`. No Workbench/Jupyter runtime success has been claimed. This commit adds LLaVA-only vLLM `logit_bias` for the tokenizer control-whitespace IDs `12` (tab), `13` (newline), and `16` (carriage return), and Section 6.5 now prints whitespace counts. Next: pull this commit or newer, restart/clear if needed, run only through Section 6.5, and stop before Section 7.
+Current state (2026-07-01, Claude/Opus 4.8): PIVOT from token-hacking to root-cause diagnosis. The whitespace loop has survived every token-level band-aid (min_tokens, skip_special_tokens, bad_words, control-whitespace logit_bias). Image tokens ARE spliced (`prompt_tokens=3256`) but the model emits only whitespace to the cap — the SAME "model ignores the image" signature SGLang showed across two templates. Rather than block more token IDs, this change adds a non-writing text-only diagnostic (new Section 6.4) that runs BEFORE the image smoke and prints raw output for three text-only requests (clean params, the real RadLE JSON task, and the smoke's own extra_body). This finally splits the two fused failure modes: (a) if plain text ALSO whitespaces, the fault is the LM decode path / chat template / `--generation-config vllm` and is fixable here; (b) if plain text answers coherently but images still whitespace, the fault is the image pathway of the `chaoyinshe` HF conversion (projector weights) and is a checkpoint decision for the user, not a token trick. No server args changed in this push so the single GUI run gives a clean signal. Next: pull, restart/clear if needed, run Section 6 to readiness, then Section 6.4 (read the three probes), then Section 6.5. Stop before Section 7 and report the 6.4 output.
 
 ### Rollercoaster So Far
 
@@ -101,7 +101,8 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 - [x] (2026-07-01 12:18 +05:30, Codex/GPT-5) Updated the LLaVA-only request extra body to `min_tokens=16`, `skip_special_tokens=False`, `spaces_between_special_tokens=False`, and `bad_words=['</s>', '<pad>']`; Section 6.5 now prints the unstripped raw response, a `repr(...)` preview, and raw character length.
 - [x] (2026-07-01 12:34 +05:30, user via Antigravity GUI) Confirmed the post-`38134f8` Section 6.5 diagnostics ran: request extra body included `skip_special_tokens=False`, `spaces_between_special_tokens=False`, and `bad_words=['</s>', '<pad>']`; raw response was one leading space plus newline tokens, `repr(...)` showed only whitespace, raw char length was `2048`, `finish_reason=length`, `prompt_tokens=3256`, and `completion_tokens=2048`.
 - [x] (2026-07-01 12:37 +05:30, Codex/GPT-5) Added vLLM `logit_bias` for this tokenizer's control-whitespace token IDs `12`, `13`, and `16`, and added Section 6.5 whitespace-count diagnostics.
-- [ ] (next, user via Antigravity GUI + Codex app coordinator) Pull this commit or newer, restart/clear the vLLM notebook if needed, and run only through Section 6.5 before any full run.
+- [x] (2026-07-01, Claude/Opus 4.8) Pivoted from token-hacking to diagnosis: added non-writing Section 6.4 text-only probe (clean params, RadLE JSON task, smoke extra_body) before the 6.5 image smoke to split LM/template fault from image-pathway/checkpoint fault. No server args changed. Set aside the unrelated §7 promote scorer-rebuild edit (stashed) so this push stays diagnostic-only.
+- [ ] (next, user via Workbench Jupyter) Pull, restart/clear if needed, run Section 6 to readiness, then Section 6.4, then Section 6.5. Report the three 6.4 probe outputs. Stop before Section 7.
 
 
 ## Surprises & Discoveries
@@ -224,6 +225,10 @@ HANDOFF NOTE (2026-07-01, Claude/Opus 4.8 -> Codex): this plan is now the ACTIVE
 - Decision: Block only control-whitespace token IDs after the post-`38134f8` whitespace-loop proof.
   Rationale: Hugging Face tokenizer metadata for `chaoyinshe/llava-med-v1.5-mistral-7b-hf` identifies the base tokenizer as `LlamaTokenizer`; raw tokenizer JSON maps tab `<0x09>` to `12`, newline `<0x0A>` to `13`, and carriage return `<0x0D>` to `16`. vLLM accepts OpenAI `logit_bias` as string token IDs and clamps values to `[-100, 100]`. Blocking these control-whitespace tokens targets the observed newline loop without blocking normal spaces needed inside diagnosis text.
   Date/Author: 2026-07-01, Codex/GPT-5
+
+- Decision: Stop escalating token-level suppression; add a text-only diagnostic to root-cause the whitespace loop before any further change.
+  Rationale: min_tokens, skip_special_tokens/spaces_between_special_tokens, bad_words, and control-whitespace logit_bias have all failed to produce a real diagnosis, and blocking newlines only risks shifting the loop onto spaces. The loop is the same "image not driving generation" signature seen under SGLang, so it may be a broken image pathway in the `chaoyinshe` HF conversion rather than anything a token trick can fix. A non-writing text-only probe (Section 6.4) is the cheapest experiment that separates an LM/template/generation-config fault (plain text also degenerates -> fixable here) from an image-pathway/checkpoint fault (plain text is coherent but images break -> user decision on the checkpoint). Keeping server args unchanged in this push ensures the single GUI run yields an uncontaminated signal.
+  Date/Author: 2026-07-01, Claude/Opus 4.8
 
 
 ## Revision Notes

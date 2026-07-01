@@ -797,7 +797,7 @@ tasks:
 checks:
   dirty_fingerprint: unknown
   last_verification:
-    result: awaiting_post_0eb8032_gui_rerun_with_logit_bias_and_whitespace_counts
+    result: blocked_awaiting_post_0eb8032_gui_rerun_with_logit_bias_and_whitespace_counts
     task: T017
     commands:
       - "Reviewed user-triggered rerun screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-after-user-rerun-20260701-113605.png; Section #6.5 still failed after 254631b with Smoke raw response blank, finish_reason=stop, prompt_tokens=3255, completion_tokens=1, and RuntimeError at Cell In[9], line 55: LLaVA-vLLM smoke failed: empty response."
@@ -849,3 +849,8 @@ checks:
       - "Captured C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t017-antigravity-printwindow-20260701-1324.png via direct Antigravity window capture; the visible panel still instructs the next GUI run to pull 0eb8032 or newer, run only through Section #6.5, and stop before Section #7."
       - "No fresh post-0eb8032 Section #6.5 output is visible yet: the notebook pane still shows the prior whitespace-loop failure, and there is still no visible Section #4 logit_bias request body or Section #6.5 whitespace-count/parsed-output result from a rerun."
       - "T017 remains active; no Section #7/full-run approval until a post-0eb8032 GUI rerun produces parseable clinical JSON diagnosis and valid likert_score."
+      - "Verified HEAD and origin/codex/llava-vllm-runtime both pointed to coordinator commit 18e52936979e1f4f60fb738a8252b0297521c080."
+      - "GoalBuddy checker passed before blocking with active_task T017 and no warnings."
+      - "Captured C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-t017-blocked-evidence-20260701-1336.png via direct Antigravity window capture; the visible panel still instructs the next GUI run to pull 0eb8032 or newer, run only through Section #6.5, and stop before Section #7."
+      - "No fresh post-0eb8032 Section #6.5 output is visible after three consecutive continuation checks; the notebook pane still shows the prior whitespace-loop failure, and there is still no visible Section #4 logit_bias request body or Section #6.5 whitespace-count/parsed-output result from a rerun."
+      - "T017 is blocked on external GUI evidence; no Section #7/full-run approval until a post-0eb8032 GUI rerun produces parseable clinical JSON diagnosis and valid likert_score."
