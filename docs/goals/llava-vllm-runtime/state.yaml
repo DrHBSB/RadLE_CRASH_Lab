@@ -87,7 +87,7 @@ visual_board:
     url: "http://goalbuddy.localhost:41737/llava-vllm-runtime/"
     command: "node C:/Users/thehb/.agents/skills/goalbuddy/surfaces/local-goal-board/scripts/local-goal-board.mjs --goal docs/goals/llava-vllm-runtime"
 
-active_task: T014
+active_task: T015
 
 tasks:
   - id: T001
@@ -579,7 +579,7 @@ tasks:
   - id: T014
     type: pm
     assignee: PM
-    status: active
+    status: done
     reasoning_hint: medium
     objective: "Collect the Antigravity pushed fix receipt and the next GUI rerun evidence after the Section #6 vLLM unsupported-architecture failure."
     inputs:
@@ -596,6 +596,62 @@ tasks:
       - "Commit/push evidence for the Antigravity fix."
       - "Fresh Section #4/#6/#6.5 GUI outputs or the next exact error."
       - "Decision to request another fix, request a rerun, or activate a Judge review for smoke-pass evidence."
+    receipt:
+      result: done
+      decision: request_gui_rerun
+      full_outcome_complete: false
+      summary: "Accepted two committed and pushed Antigravity fixes after the first Section #6 unsupported-architecture failure, then captured the next GUI blockers. Commit 0b90a60 fixed the branch/checkpoint mapping path. A subsequent corrected-file GUI run reached Section #6.5 but exposed endpoint_client as a knock-on undefined name after Section #6 did not complete, and Antigravity traced the root server failure to partial flash-attn state. Commit 5dfe0bf added the flash-attn cleanup/probe and a clearer Section #6.5 prerequisite guard. Runtime success remains unproven until a clean GUI rerun through Section #6.5 shows /v1/models and valid smoke JSON."
+      pushed_fixes:
+        - commit: "0b90a60ad3e51ba2407c7e26046accdb77f60625"
+          summary: "Fix LLaVA vLLM notebook branch checkout"
+          remote_verified: "origin/codex/llava-vllm-runtime pointed to 0b90a60 during review"
+          files:
+            - "Documents/execplan_llava_vllm_runtime.md"
+            - "notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
+        - commit: "5dfe0bf83fb32bccea060325bf9a63800d20d26d"
+          summary: "Handle partial flash-attn in LLaVA vLLM notebook"
+          remote_verified: "origin/codex/llava-vllm-runtime pointed to 5dfe0bf after fetch"
+          files:
+            - "Documents/execplan_llava_vllm_runtime.md"
+            - "notebooks/RadLE_Medical_Workbench_LLaVA_vLLM_Runtime.ipynb"
+      gui_evidence_reviewed:
+        - "C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-rerun-current-20260701-100427.png showed a stale /home/jupyter/RadLE_CRASH_Lab checkout at commit 080ec65 and the old Microsoft/SGLang mapping."
+        - "C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-rerun-scroll-13-20260701-100705.png and codex-llava-rerun-scroll-14-20260701-100706.png showed Section #6 failing from the stale Microsoft model path with model type llava_mistral not recognized."
+        - "C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-correct-file-current-20260701-101242.png showed the corrected mapping to chaoyinshe but Section #6.5 failed with NameError: name 'endpoint_client' is not defined."
+        - "C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-after-endpoint-client-20260701-101421.png showed Antigravity identifying the root Section #6 server error as ModuleNotFoundError: No module named 'flash_attn.ops' and preparing a pushed fix."
+        - "C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-after-5dfe0bf-current-20260701-101619.png showed Antigravity pushed evidence for 5dfe0bf and requested a clean rerun only through Section #6.5."
+      accepted_context:
+        - "Corrected setup evidence after 0b90a60: notebook on codex/llava-vllm-runtime, repo commit 0b90a60, helper mapping llava_med_mistral_7b -> chaoyinshe/llava-med-v1.5-mistral-7b-hf via vllm, vLLM import 0.23.0, Section #4 config retained RUN_ID=llava_med_mistral_7b_medical_full_200_cases with 200 cases and 263 images."
+        - "The endpoint_client NameError is not an acceptable smoke failure or success signal because it occurs after Section #6 did not initialize a client."
+        - "The flash-attn fix is static/push evidence only; it does not prove /v1/models or Section #6.5 smoke success."
+      commands:
+        - cmd: "git fetch origin codex/llava-vllm-runtime; git rev-parse HEAD; git rev-parse origin/codex/llava-vllm-runtime"
+          status: "pass_5dfe0bf_head_equals_origin"
+        - cmd: "git show --name-status --stat --oneline --decorate 5dfe0bf83fb32bccea060325bf9a63800d20d26d"
+          status: pass
+        - cmd: "git diff --check HEAD"
+          status: pass_warnings_only_unrelated_line_endings
+      next_active_task: T015
+
+  - id: T015
+    type: judge
+    assignee: Judge
+    status: active
+    reasoning_hint: high
+    objective: "Review the clean GUI rerun after pushed commit 5dfe0bf, stopping before Section #7, and decide whether Section #6.5 smoke passes or another exact error must be routed to Antigravity."
+    inputs:
+      - "Commit 5dfe0bf pushed to origin/codex/llava-vllm-runtime"
+      - "Fresh Antigravity GUI notebook evidence after restart, clear outputs, and rerun only through Section #6.5"
+      - "Visible Section #4 config output, Section #6 vLLM startup and /v1/models response, and Section #6.5 raw/parsed smoke output or first traceback"
+    constraints:
+      - "Do not run notebook cells from the Codex app."
+      - "Do not approve Section #7 or the full benchmark until Section #6.5 smoke evidence passes."
+      - "Reject server readiness alone, token-count growth alone, blank output, one-token output, prompt echo, <image>/image> echo, non-JSON output, missing diagnosis, I don't know, placeholder diagnosis, or invalid likert_score."
+      - "If another concrete notebook/runtime defect appears, route the exact traceback/log back to Antigravity and require another committed and pushed fix."
+    expected_output:
+      - "Decision: smoke_pass_proceed_to_full_run_instruction, request_gui_rerun, or request_antigravity_fix."
+      - "Evidence citations to the exact GUI screenshots or pasted outputs."
+      - "Next active task matching the decision."
     receipt: null
 
   - id: T999
@@ -624,10 +680,10 @@ tasks:
 checks:
   dirty_fingerprint: unknown
   last_verification:
-    result: blocked_by_runtime_error
-    task: T013
+    result: awaiting_clean_gui_rerun_after_pushed_fix
+    task: T015
     commands:
-      - "Reviewed screenshots C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-scroll-01-20260701-093537.png through C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-scroll-31-20260701-093803.png"
-      - "Identified Section #6 RuntimeError: OpenAI-compatible server exited before readiness with code 1"
-      - "Identified server log rejection: Model architectures ['LlavaMistralForCausalLM'] are not supported for now"
-      - "Sent repair packet to Antigravity extension and verified receipt screenshot C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-antigravity-prompt-sent-20260701-095009.png"
+      - "Verified origin/codex/llava-vllm-runtime equals 5dfe0bf83fb32bccea060325bf9a63800d20d26d"
+      - "Reviewed GUI evidence through C:\\Users\\thehb\\Pictures\\Screenshots\\codex-llava-after-5dfe0bf-current-20260701-101619.png"
+      - "Accepted pushed flash-attn cleanup fix as edit evidence only"
+      - "Awaiting clean Antigravity GUI rerun through Section #6.5 before any Section #7/full-run approval"
