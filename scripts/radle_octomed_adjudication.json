@@ -1,0 +1,23 @@
+{
+  "run_label": "medical_full_200_cases_ollama",
+  "model_name": "octomed_7b",
+  "adjudicator": "Dr. Hakikat Bir Singh Bhatti (radiologist)",
+  "date_utc": "2026-07-02",
+  "rationale": "OctoMed emitted valid RadLE JSON but on two cases phrased a genuine decline-to-commit as 'None of the above' / 'None' (likert null) instead of the canonical 'I don't know'. The model's OWN reasoning explicitly declines in both cases, so these are abstentions, not diagnoses and not repairable failures (re-inference would not help and would break parity). The radiologist ruled both as abstentions. Diagnosis is normalized to 'I don't know' with likert null; the RadLE prompt and image payload were unchanged and no re-inference was done. This recovers the model's own intent from its own text; it does not add information. Separately, 26 cases where OctoMed wrote 'I don't know' with a curly apostrophe (U+2019) are canonicalized to the straight-quote spelling by a generic is_abstention_variant rule in apply_octomed_cleanup.py (glyph normalization, not a per-case judgment), so they are not listed here.",
+  "overrides": [
+    {
+      "master_case_id": "82",
+      "from": "None of the above",
+      "to": "I don't know",
+      "likert_to": null,
+      "model_quote": "Given these findings... the pattern is not classic for a single definitive condition... Therefore, based on this single image slice alone, I cannot confidently assign a specific diagnosis with high confidence."
+    },
+    {
+      "master_case_id": "187",
+      "from": "None",
+      "to": "I don't know",
+      "likert_to": null,
+      "model_quote": "The overall pattern does not strongly favor a specific diagnosis... Given that this is just one image without additional clinical data..., I cannot definitively diagnose a specific condition."
+    }
+  ]
+}
