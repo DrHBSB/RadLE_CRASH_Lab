@@ -7,14 +7,15 @@ path works cleanly for this vision tower. That lowers image-conditioning risk
 relative to InternVL (a genuinely new architecture), but this probe still has
 to pass before any full run -- never trust a green server.
 
-THE REAL RISK for this model is VRAM/placement, not vision conditioning: a 32B
-model at Q8 is roughly 32 GB for the LM alone plus a (32B-scale) mmproj file
-plus KV cache, call it 35-40 GB. The VM has 2x NVIDIA L4 (23 GB each, 46 GB
-combined). Do NOT drop to a lower quant just because it doesn't fit on ONE
-GPU -- Ollama/llama.cpp can split layers across both L4s automatically. Watch
-`nvidia-smi` (a second terminal, `watch -n 2 nvidia-smi`) while this probe's
-first request loads the model, and confirm memory is actually used on BOTH
-GPU0 and GPU1 before concluding anything about fit.
+CURRENT BOX = single A100-SXM4-40GB (radle-pro-a100-*). Lingshu Q8 (~34 GB LM
++ mmproj + KV cache at num_ctx=8192) fits on the ONE GPU with a few GB to
+spare. Pass criterion here: watch `nvidia-smi` while this probe's first request
+loads the model and confirm ~37 GB on the single A100 with NO OOM -- there is NO
+multi-GPU split to look for on this box (that was the retired 2x L4). If it OOMs
+near 40 GB, lower num_ctx slightly (rebuild the Modelfile) rather than dropping
+quant. HISTORICAL: on the retired 2x L4 (23 GB each) Q8 fit only by splitting
+across both cards over PCIe (~6 tok/s); the A100's single-GPU placement is why
+we migrated.
 
 Setup on the VM (once):
     cd ~/RadLE_CRASH_Lab && git pull
@@ -25,12 +26,11 @@ Setup on the VM (once):
     ollama create lingshu-32b-8k -f /tmp/Lingshu8k.Modelfile
     # ollama serves an OpenAI-compatible endpoint at http://localhost:11434/v1
 
-Confirmed on this VM (2026-07-02): Q8 DOES fit split across both L4s (`ollama ps`
-showed 100% GPU, 44GB combined; nvidia-smi showed 22530 MiB on GPU0 / 20664 MiB
-on GPU1). With the raw tag's default 32768 context, GPU0 had only ~504 MiB free
-and the first image's CLIP compute buffer OOM'd. The Modelfile-derived
+The context cap is mandatory regardless of box: with the raw tag's default 32768
+context the vision (CLIP) compute buffer OOMs. The Modelfile-derived
 `lingshu-32b-8k` (num_ctx=8192, matching vLLM's MAX_MODEL_LEN=8192 proven for
-OctoMed/InternVL) loads cleanly and ran all 5 probe cases with real headroom.
+OctoMed/InternVL) is what loads cleanly. (First proven on the 2x L4 box
+2026-07-02; the single A100 has more headroom.)
 
 Run (default cases mirror the InternVL/OctoMed probe set):
     python scripts/ollama_lingshu_probe.py
@@ -41,8 +41,8 @@ trace), raise the token budget so the trace doesn't eat the whole probe:
     PROBE_MAX_TOKENS=1024 python scripts/ollama_lingshu_probe.py
 
 Interpretation:
-  * Real, DIFFERENT diagnoses per image -> vision path works; proceed to the
-    VRAM/split check (if not already confirmed) and then the shakedown run.
+  * Real, DIFFERENT diagnoses per image -> vision path works; confirm the
+    single-A100 fit (~37 GB, no OOM) and proceed to the shakedown run.
   * Empty / identical / degenerate -> do not proceed; treat like the LLaVA-Med
     HF-checkpoint failure and investigate before any full run.
 """
@@ -92,7 +92,7 @@ def main():
     print("Model:", model)
     print("num_ctx cap:", PROBE_NUM_CTX)
     print("Watch nvidia-smi in another terminal NOW -- the first request below")
-    print("triggers the model load and is the real VRAM/multi-GPU-split test.")
+    print("triggers the model load; on the A100 expect ~37 GB on the one GPU, no OOM.")
     idx = radle_benchmark.build_image_index(str(folder))
 
     from openai import OpenAI

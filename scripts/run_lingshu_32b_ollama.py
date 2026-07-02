@@ -10,21 +10,16 @@ quants, e.g. Q6_K/Q5_K_M) as a fallback ONLY if Q8 does not fit.
 IMPORTANT model-specific facts (prove/watch before trusting a full run):
   * The image-conditioning probe (scripts/ollama_lingshu_probe.py) MUST pass
     before this script is used.
-  * VRAM is the real risk, not vision conditioning. Q8 is a ~35-40 GB
-    footprint (LM + mmproj + KV cache) against 2x L4 = 46 GB combined. Do NOT
-    jump to a lower quant just because it doesn't fit on ONE GPU -- confirm
-    via `nvidia-smi` that Ollama actually splits layers across BOTH GPUs
-    before concluding Q8 doesn't fit. Only fall back to Q6_K/Q5_K_M
-    (i1-GGUF) if Q8 genuinely does not fit even split across both GPUs, and
-    record that quant step-down explicitly in the run's manifest metadata
-    (methods-section parity note) -- don't let it pass silently the way
-    LLaVA-Med/OctoMed/InternVL were all q8. If even a reasonable quant does
-    not fit, STOP and flag back for a bigger/different GCP instance rather
-    than degrading further (e.g. do not drop to Q4).
-  * Unknown whether Lingshu emits a reasoning trace like OctoMed's
-    <think>...</think>. MAX_OUTPUT_TOKENS is raised to 8192 (matches
-    OctoMed/InternVL) as a precaution; the shared extract_json_safely
-    trace-strip is guarded and stays inert if no <think> tag is present.
+  * CURRENT BOX = single A100-SXM4-40GB. Q8 (~34 GB LM + mmproj + KV cache at
+    num_ctx=8192, ~37 GB total) fits on the ONE GPU with a few GB to spare --
+    confirm ~37 GB, no OOM, no split on `nvidia-smi`. If it OOMs near 40 GB,
+    lower num_ctx slightly (rebuild the Modelfile) rather than dropping quant;
+    if a quant step-down were ever needed, record it explicitly in the run's
+    manifest metadata (all prior models were q8). HISTORICAL: on the retired
+    2x L4 (23 GB each) Q8 fit only by splitting across both cards over PCIe
+    (~6 tok/s) -- the A100's single-GPU placement is why we migrated.
+  * The shared extract_json_safely <think>-strip is guarded and stays inert
+    if Lingshu does not emit a reasoning trace (it emits its JSON directly).
   * Temperature stays at UNIVERSAL_TEMPERATURE (0.01) for manuscript parity,
     NOT any model-card-recommended sampling. Record the q8 (or fallback)
     quant as a serving difference in the methods section.
@@ -101,10 +96,24 @@ def dataset_root():
 
 
 def main():
+    # Accept BOTH --limit=N and --limit N, and REJECT anything unrecognized.
+    # (The old startswith("--limit=") silently dropped "--limit 8" -> a full
+    #  200-case run instead of a shakedown. Fail loud instead of surprising.)
     test_limit = None
-    for arg in sys.argv[1:]:
+    args = sys.argv[1:]
+    i = 0
+    while i < len(args):
+        arg = args[i]
         if arg.startswith("--limit="):
             test_limit = int(arg.split("=", 1)[1])
+        elif arg == "--limit":
+            if i + 1 >= len(args):
+                raise SystemExit("--limit requires a value, e.g. --limit 8 or --limit=8")
+            test_limit = int(args[i + 1])
+            i += 1
+        else:
+            raise SystemExit(f"Unrecognized argument: {arg!r}. Use --limit=N (or --limit N).")
+        i += 1
 
     ds = dataset_root()
     run_id = f"{MODEL_NAME}_{RUN_LABEL}"
