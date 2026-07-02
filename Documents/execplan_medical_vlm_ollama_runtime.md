@@ -48,7 +48,7 @@ user's machine. Next model = InternVL via Ollama.
 **LLaVA-Med run COMPLETE and PROMOTED.**
 The full 200-case run finished, was adjudicated, promoted (raw->final,
 sha256 b6ebbba9...), and public tables were exported. Outputs downloaded to the
-user's machine at `RadLE Stats/llava_med_ollama_outputs/`.
+user's machine at `RadLE v2/results/llava_med_ollama_outputs/`.
 
 Final result: **16/200 committed diagnoses, 184 genuine abstentions** (52
 deterministic-empty generations + 132 considered descriptions), **0 Likert
@@ -84,7 +84,7 @@ trace) -- this is the reference pattern for future reasoning-model VLMs. Scripts
 `promote_octomed.py`. Stats pipeline (`radle_v2_stats.py` + `radle_llm_judge.py`)
 VERIFIED Likert-independent for classification -> OctoMed numbers are trustworthy.
 Outputs relayed off the VM (GCS) and downloaded to the user's machine at
-`RadLE Stats/octomed_ollama_outputs/`; local final CSV sha256 verified identical
+`RadLE v2/results/octomed_ollama_outputs/`; local final CSV sha256 verified identical
 (8a584634...c291ee), 200 rows / 114 diagnoses / 86 abstentions / 0 empty. Only the
 LLM-judge accuracy step remains (run the stats pipeline vs ground truth when wanted).
 
@@ -203,7 +203,7 @@ Two open threads carried out of this run (neither blocks the LLaVA-Med promotion
   attempt/abstention by text, independent of Likert -> OctoMed scored correctly.
 - [x] RUN COMPLETE. OctoMed-7B (Ollama q8): 114/200 committed diagnoses, 86
   abstentions, mean Likert 3.34. Promoted clean (sha256 8a584634...c291ee),
-  public tables exported, outputs relayed to `RadLE Stats/octomed_ollama_outputs/`
+  public tables exported, outputs relayed to `RadLE v2/results/octomed_ollama_outputs/`
   (local sha verified). Remaining: LLM-judge accuracy vs ground truth when wanted.
 
 
