@@ -61,7 +61,11 @@ def main():
     likert_col = f"Likert_{MODEL_NAME}"
     print("Raw CSV:", raw_csv)
 
-    df = pd.read_csv(raw_csv, dtype={"Master_Case_ID": str})
+    # Read everything as strings with NA-coercion OFF: pandas' default na_values
+    # include "None"/"null"/"NA", which would silently turn a literal model answer
+    # like {"diagnosis": "None"} into NaN (case 187) and break the sidecar 'from'
+    # check. All-string also avoids dtype coercion when we blank the float Likert.
+    df = pd.read_csv(raw_csv, dtype=str, keep_default_na=False)
     df["Master_Case_ID"] = df["Master_Case_ID"].apply(rb.normalize_case_id)
     if diag_col not in df.columns:
         raise SystemExit(f"Missing column {diag_col}")
