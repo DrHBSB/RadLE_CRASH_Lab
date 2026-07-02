@@ -75,6 +75,11 @@ MODELS = [
         "extra": None,
     },
     {
+        "name": "grok_4_3",
+        "id": "x-ai/grok-4.3",
+        "extra": None,
+    },
+    {
         "name": "qwen_3_7_plus",
         "id": "qwen/qwen3.7-plus",
         "extra": None,
@@ -92,6 +97,11 @@ MODELS = [
     {
         "name": "mistral_large_3_2512",
         "id": "mistralai/mistral-large-2512",
+        "extra": None,
+    },
+    {
+        "name": "minimax_m3",
+        "id": "minimax/minimax-m3",
         "extra": None,
     },
     {
