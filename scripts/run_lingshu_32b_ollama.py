@@ -43,14 +43,17 @@ IMPORTANT model-specific facts (prove/watch before trusting a full run):
     RadLE's actual need (same image payload + prompt that already fit OctoMed/
     InternVL at MAX_MODEL_LEN=8192). This is a serving-parameter cap, not a
     prompt/quant/temperature change -- it does not affect parity.
-  * OUTPUT FORMAT WARNING (2026-07-02 probe): Lingshu tends to emit MULTIPLE
-    JSON objects per response -- it commits a diagnosis, adds a "Note", then
-    emits a SECOND JSON that often abstains ("I don't know"). extract_json_safely
-    takes the LAST valid JSON (radle_benchmark.py:285), so a commit-then-abstain
-    response is recorded as an abstention, undercounting the model (seen on probe
-    cases 8 and 45). Do NOT hand-tune the shared extractor against this eval set.
-    Run raw, then adjudicate the multi-JSON cases with the radiologist via a
-    sidecar (same pattern as LLaVA-Med/OctoMed) -- see the execplan.
+  * OUTPUT FORMAT NOTE (2026-07-02 probe): Lingshu tends to emit MULTIPLE JSON
+    objects per response -- it commits a diagnosis, adds a "Note", then emits a
+    SECOND JSON that often abstains ("I don't know"). extract_json_safely takes
+    the LAST valid JSON (radle_benchmark.py:285), so a commit-then-abstain
+    response is recorded as an abstention. Per user (radiologist) ruling
+    2026-07-02, this is CORRECT and intended: the model's FINAL word counts, so
+    if it walks itself back to "I don't know" that is a genuine abstention. Do
+    NOT change the extractor to take-first, and do NOT build an adjudication
+    sidecar to "recover" these -- the take-last behavior is the chosen scoring
+    semantics. Lingshu therefore runs the standard raw -> audit -> promote path
+    with no special handling (same as InternVL).
 
 Usage:
     python scripts/run_lingshu_32b_ollama.py            # full 200-case run

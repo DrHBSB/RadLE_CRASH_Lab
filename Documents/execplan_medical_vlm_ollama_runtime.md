@@ -40,10 +40,38 @@ OpenAI-compatible GGUF endpoint). The same pattern generalizes to future open mo
 
 ## Current State
 
-Current state (2026-07-02, Claude/Opus 4.8): **Two models COMPLETE and PROMOTED —
-LLaVA-Med and OctoMed-7B.** OctoMed is the latest (details below); LLaVA-Med was
-first. Both full 200-case runs are promoted with outputs relayed off the VM to the
-user's machine. Next model = InternVL via Ollama.
+Current state (2026-07-02, Claude/Opus 4.8): **Three models COMPLETE and PROMOTED —
+LLaVA-Med, OctoMed-7B, InternVL3.5-8B.** InternVL is the latest (details below).
+All three full 200-case runs are promoted with outputs relayed off the VM to the
+user's machine. Next models = **Lingshu-32B** and **RadFM** — see the "Next Models"
+section below before starting either; neither is a drop-in repeat of the InternVL
+recipe (Lingshu needs a quant decision, RadFM likely can't use Ollama at all).
+
+**InternVL3.5-8B via Ollama: COMPLETE and PROMOTED (2026-07-02, Claude/Opus 4.8).**
+Full 200-case run on the first candidate tag (`hf.co/mradermacher/InternVL3_5-8B-GGUF:Q8_0`),
+clean on the first pass — no cleanup or adjudication sidecar needed, unlike LLaVA-Med
+and OctoMed. Image-conditioning probe passed on cases 1/8/78/12/45 (distinct,
+image-specific outputs). Result: **177/200 committed diagnoses, 23 clean "I don't
+know" abstentions, 0 parse failures**, mean Likert 3.33 over the 177 (matches
+OctoMed's 3.34), mean_reasoning_tokens=0.0 (InternVL answers directly, no `<think>`
+trace despite having a documented "thinking mode" — the existing trace-strip in
+`extract_json_safely` stayed inert, as designed). Audit came back 200/200 accepted
+on the first try; `scripts/promote_internvl_ollama.py` promoted raw -> final
+(sha256 `23a285d0...4095`) and exported public tables with no override needed.
+Outputs relayed off the VM via the GCS transfer bucket and downloaded to
+`RadLE v2/results/internvl_ollama_outputs/`; local sha256 verified identical.
+Scripts: `run_internvl_ollama.py`, `promote_internvl_ollama.py` (structurally a
+parametrized copy of `promote_octomed.py`, verified line-by-line against the real
+`radle_benchmark` function signatures before running). Only the LLM-judge accuracy
+step remains (run the stats pipeline vs ground truth when wanted) — same open item
+as OctoMed.
+
+Known latent issue (not yet fixed, doesn't affect OctoMed/InternVL results): both
+`promote_octomed.py` and `promote_internvl_ollama.py` call `audit_benchmark_output`
+without passing `max_output_tokens`, so the truncation check silently uses the
+module default (16384) instead of each run's actual cap (8192). Harmless so far
+because neither run's completions came anywhere near 8192 tokens, but should be
+fixed before trusting the truncation check on a future model with longer outputs.
 
 **LLaVA-Med run COMPLETE and PROMOTED.**
 The full 200-case run finished, was adjudicated, promoted (raw->final,
@@ -205,6 +233,23 @@ Two open threads carried out of this run (neither blocks the LLaVA-Med promotion
   abstentions, mean Likert 3.34. Promoted clean (sha256 8a584634...c291ee),
   public tables exported, outputs relayed to `RadLE v2/results/octomed_ollama_outputs/`
   (local sha verified). Remaining: LLM-judge accuracy vs ground truth when wanted.
+- [x] (2026-07-02) InternVL3.5-8B (Ollama q8 + mmproj, `hf.co/mradermacher/InternVL3_5-8B-GGUF:Q8_0`):
+  image-conditioning probe passed (cases 1/8/78/12/45 distinct/image-specific) on
+  the FIRST candidate tag, no fallback tag needed. Full 200-case run clean on the
+  first pass: 177 committed / 23 "I don't know", 0 parse failures, mean Likert 3.33,
+  mean_reasoning_tokens=0.0 (answers directly, trace-strip stayed inert).
+- [x] (2026-07-02) InternVL audit: 200/200 accepted on first audit, no cleanup or
+  adjudication sidecar needed (unlike LLaVA-Med and OctoMed).
+- [x] RUN COMPLETE. InternVL3.5-8B (Ollama q8): promoted via
+  `scripts/promote_internvl_ollama.py` (verified against real `radle_benchmark`
+  signatures before running), sha256 `23a285d0...4095`, public tables exported,
+  outputs relayed to `RadLE v2/results/internvl_ollama_outputs/` (local sha
+  verified byte-for-byte). Remaining: LLM-judge accuracy vs ground truth when wanted.
+- [ ] (found, not fixed) `promote_octomed.py` and `promote_internvl_ollama.py` both
+  call `audit_benchmark_output` without `max_output_tokens`, so the truncation
+  check silently uses the module default (16384) instead of each run's actual cap
+  (8192). Harmless for these two runs (no completion came close to 8192 tokens) but
+  should be fixed before trusting the truncation check on a longer-output model.
 
 
 ## Surprises & Discoveries
@@ -258,6 +303,25 @@ Two open threads carried out of this run (neither blocks the LLaVA-Med promotion
   be best-of-N cherry-picking, not the transport-failure recovery Morning did. The
   only levers that could change the empties (temperature/prompt/image) break
   manuscript parity. Date/Author: 2026-07-02, user + Claude/Opus 4.8.
+- Decision: Cap Lingshu-32B's context via a Modelfile-derived model
+  (`lingshu-32b-8k`, `PARAMETER num_ctx 8192`), NOT via extra_body.
+  Rationale: proven on the VM 2026-07-02 -- Ollama's OpenAI-compatible endpoint
+  (/v1/chat/completions) ignores `options.num_ctx` in extra_body, so an uncapped
+  load uses the GGUF default 32768 context, leaving GPU0 with ~504 MiB free
+  (22530/23034 MiB) and OOMing on the first image's CLIP compute buffer (pinned
+  to GPU0). The Modelfile cap loads cleanly and ran all 5 probe cases. Q8 DOES
+  fit split across both L4s (100% GPU, ~44GB combined); NO quant step-down and
+  NO new VM are needed for Lingshu. Date/Author: 2026-07-02, user + Claude/Opus 4.8.
+- Decision: For Lingshu's multi-JSON responses (commits a diagnosis, then emits
+  a second JSON abstaining), the model's FINAL JSON counts -- i.e. take-last, the
+  existing `extract_json_safely` behavior (radle_benchmark.py:285). A
+  commit-then-abstain response is a genuine abstention.
+  Rationale: the model's final word is authoritative; taking its most
+  confident-sounding earlier statement would be cherry-picking. This is already
+  the standard extractor behavior, so Lingshu runs the normal raw -> audit ->
+  promote path with NO Lingshu-specific sidecar, NO take-first exception, and NO
+  extractor change. Preserve raw output so the behavior stays auditable.
+  Date/Author: 2026-07-02, user (radiologist) + Claude/Opus 4.8.
 
 
 ## Recipe: add a NEW open medical VLM (reference for future models / Codex)
@@ -292,6 +356,83 @@ Two open threads carried out of this run (neither blocks the LLaVA-Med promotion
 5. **Audit -> repair -> promote -> export** under the standard Workbench guardrails.
    Do not promote with pending repair targets/integrity warnings unless the user
    overrides. Record any serving/quantization difference in the methods section.
+
+
+## Next Models: Lingshu-32B and RadFM (2026-07-02)
+
+Neither of these is a drop-in repeat of the InternVL recipe. Read this before
+starting either.
+
+### Lingshu-32B
+
+- **Architecture:** built on **Qwen2.5-VL-32B-Instruct** — the SAME base
+  architecture as OctoMed-7B (Qwen2.5-VL-7B), which already proved the Ollama
+  GGUF+mmproj path works cleanly for this vision tower. This lowers the
+  image-conditioning risk relative to InternVL (a genuinely new architecture);
+  still run the full probe (Recipe step 1), don't skip it on the strength of the
+  architecture family alone.
+- **GGUF availability:** `mradermacher/Lingshu-32B-GGUF` (standard) and
+  `mradermacher/Lingshu-32B-i1-GGUF` (imatrix quants) both exist on Hugging Face.
+- **THE real risk here is VRAM, not vision conditioning.** A 32B model at Q8 is
+  roughly 32 GB for the LM alone, plus the (larger, 32B-scale) vision projector
+  mmproj file, plus KV cache for an 8k context and image tokens — call it
+  35-40 GB realistic footprint. The VM has 2x NVIDIA L4 (23 GB each, 46 GB
+  combined) — see `Documents/runtime_provenance_contract_radle_medical.md` for
+  the verified instance spec (`medical-master-radfm`, `g2-standard-24`,
+  zone `northamerica-northeast2-b`).
+  - **Do NOT jump straight to a lower quant to make it fit on one GPU.** Ollama/
+    llama.cpp can automatically split a model's layers across multiple GPUs when
+    it doesn't fit on one. Q8 (parity with every other model run so far) may well
+    fit across BOTH L4s combined. Try Q8 first; watch `nvidia-smi` during
+    `ollama pull` + first load to confirm it actually spreads across both GPUs
+    rather than OOMing on GPU0.
+  - Only fall back to a lower quant (Q6_K / Q5_K_M from the i1-GGUF repo) if Q8
+    genuinely does not fit even split across both GPUs. If a quant step-down is
+    needed, say so explicitly in the run's manifest metadata (methods-section
+    parity note) — don't let it pass silently the way LLaVA-Med/OctoMed/InternVL
+    were all q8.
+  - **If it still doesn't fit even at a reasonable quant, don't silently
+    degrade the model further** (e.g. don't drop to Q4 just to squeeze it onto
+    this VM). Stop and flag it back to the user — a bigger/different GCP
+    instance is a cheap, fast option (e.g. an A100 40GB single-GPU instance, or
+    more L4s on a larger `g2-standard-*`), and swapping VMs does not cost any
+    methodology integrity, whereas quantizing a 32B model down to Q4 to fit a
+    small GPU does.
+- **Recipe steps 2-5 unchanged**: characterize output format, run via a copy of
+  `run_octomed_ollama.py` -> `run_lingshu_32b_ollama.py`, audit -> promote -> export.
+- No handoff doc written yet for Lingshu; write one (modeled on
+  `Documents/handoff_internvl_ollama_next_session.md`) once the VRAM question is
+  resolved on the VM, so it records the actual quant/placement decision made.
+
+### RadFM
+
+- **This is NOT a Qwen2.5-VL/InternVL-style architecture and almost certainly
+  cannot go through the Ollama recipe at all.** RadFM (`chaoyi-wu/RadFM`, paper:
+  arXiv:2308.02463 / Nature Communications 2025) is a bespoke research codebase:
+  a custom `MultiLLaMAForCausalLM` class with a custom embedding layer
+  (`RadFM/my_embedding_layer.py`) that fuses 2D/3D medical scan encodings into a
+  LLaMA-based LM. It is not a standard HF `transformers` vision-language
+  architecture, and there is no GGUF conversion of it anywhere (checked HF search
+  2026-07-02 — none exists). llama.cpp/Ollama has no support for this
+  architecture's custom fusion mechanism.
+- `Documents/execplan_medical_workbench_runtime.md` already flagged this back on
+  2026-06-30: "RadFM is a high-priority research target, but it is not part of
+  the current simple notebook roster. It should enter this contract only through
+  a separate adapter/runtime section that states how its image inputs, prompts,
+  server interface, and output schema are mapped into RadLE."
+- **Do not attempt to force RadFM through this Ollama execplan's recipe.** Before
+  any run plan can be written, someone needs to do a research spike: read the
+  actual `chaoyi-wu/RadFM` repo, determine whether native-transformers inference
+  (their own custom model code, likely run via their published inference script,
+  not vLLM/Ollama) is the only viable serving path, and how their expected input
+  format (their embedding layer takes a specific multi-image + text-interleaved
+  format) maps onto the standard RadLE `build_content_array` payload without
+  breaking manuscript parity. This is closer to the original LLaVA-Med
+  native-transformers probe (`scripts/llava_med_hf_probe.py`) than to anything in
+  this Ollama recipe.
+- No handoff doc written for RadFM yet — writing one now would either be wrong
+  (implying an Ollama path that doesn't exist) or empty. The research spike above
+  needs to happen first.
 
 
 ## Concrete Steps And Commands
@@ -338,5 +479,14 @@ Local static checks (repo root, this machine):
 - `Documents/execplan_llava_vllm_runtime.md` — the retired vLLM/HF rollercoaster and
   the evidence the HF checkpoint is dead. Read for history; do not reopen the route.
 - `Documents/execplan_medical_workbench_runtime.md` — parent SSOT for the medical
-  Workbench (SGLang abandonment, guardrails).
-- `Documents/handoff_llava_vllm_next_session.md` — lean session pointer.
+  Workbench (SGLang abandonment, guardrails, verified VM/instance spec).
+- `Documents/runtime_provenance_contract_radle_medical.md` — the authoritative VM
+  spec (instance `medical-master-radfm`, `g2-standard-24`, 2x NVIDIA L4, zone
+  `northamerica-northeast2-b`, project `crashlab-synthetic`), GCS dataset/results
+  roots, and the original note flagging RadFM as needing a separate adapter.
+- `Documents/handoff_llava_vllm_next_session.md` — lean session pointer (retired
+  vLLM route).
+- `Documents/handoff_internvl_ollama_next_session.md` — retired now that InternVL
+  is complete/promoted; kept for the recipe walkthrough evidence.
+- See "Next Models: Lingshu-32B and RadFM" above for the current active pointers
+  (no standalone handoff docs written yet for either — see that section for why).
