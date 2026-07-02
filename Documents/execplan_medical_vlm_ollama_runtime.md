@@ -65,8 +65,23 @@ What was built and proven this run:
 
 The Ollama recipe here is now the reference for future open medical VLMs.
 
-Next model: **OctoMed-7B via Ollama** — see
-`Documents/handoff_octomed_ollama_next_session.md`.
+**OctoMed-7B via Ollama: COMPLETE and PROMOTED (2026-07-02, Claude/Opus 4.8).**
+Full 200-case run, cleaned to a genuinely clean 200/200 audit (NO guardrail
+override, unlike LLaVA-Med), promoted raw->final (sha256 8a584634...c291ee) and
+public tables exported. Result: **114 committed diagnoses / 86 abstentions**,
+mean Likert 3.34 over the 114. OctoMed emits proper RadLE JSON + Likert after a
+`<think>` trace, so it audits cleanly and dodges the no-Likert stats bug.
+Key reusable discovery: reasoning VLMs need a `<think>...</think>` strip in
+`extract_json_safely` (else the prose failsafe mines rejected hypotheses from the
+trace) -- this is the reference pattern for future reasoning-model VLMs. Scripts:
+`run_octomed_ollama.py`, `audit_octomed.py`, `apply_octomed_cleanup.py` +
+`radle_octomed_adjudication.json` (82/187 radiologist-ruled abstentions),
+`promote_octomed.py`. Stats pipeline (`radle_v2_stats.py` + `radle_llm_judge.py`)
+VERIFIED Likert-independent for classification -> OctoMed numbers are trustworthy.
+
+Next model: **InternVL via Ollama** — see
+`Documents/handoff_internvl_ollama_next_session.md` (and the retired
+`handoff_octomed_ollama_next_session.md` for the OctoMed recipe just proven).
 
 Two open threads carried out of this run (neither blocks the LLaVA-Med promotion):
 - **Stats classifier**: the public export summary mis-buckets prose-only/no-Likert

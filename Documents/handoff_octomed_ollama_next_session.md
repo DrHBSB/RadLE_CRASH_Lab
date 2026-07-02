@@ -2,7 +2,18 @@
 
 Read the actual files fresh; this is a pointer, not a summary to trust blindly.
 
-## STATUS 2026-07-02 (Claude/Opus 4.8) — integration PROVEN, full run underway
+## STATUS 2026-07-02 (Claude/Opus 4.8) — COMPLETE and PROMOTED (this file now historical)
+- Full run: **114 committed diagnoses / 86 abstentions**; cleaned to a clean
+  200/200 audit with NO guardrail override; promoted raw->final (sha256
+  8a584634...c291ee); public tables exported. Public summary: valid=1.0,
+  abstention=0.43, mean Likert 3.34. Cleanup: 26 curly-apostrophe abstentions
+  canonicalized + cases 82/187 ("None of the above"/"None") radiologist-ruled as
+  abstentions (`scripts/radle_octomed_adjudication.json`,
+  `scripts/apply_octomed_cleanup.py`, `scripts/promote_octomed.py`).
+- Stats pipeline verified Likert-independent -> OctoMed numbers trustworthy.
+- Next model = InternVL via Ollama (`handoff_internvl_ollama_next_session.md`).
+
+## (historical) STATUS — integration PROVEN, full run underway
 - GGUF WITH vision projector confirmed: `mradermacher/OctoMed-7B-GGUF` ships
   `OctoMed-7B.mmproj-Q8_0.gguf`; pulled as `hf.co/mradermacher/OctoMed-7B-GGUF:Q8_0`.
 - Image conditioning PROVEN (5/5 distinct, correct, image-specific outputs).
