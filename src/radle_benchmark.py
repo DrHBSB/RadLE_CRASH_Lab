@@ -95,8 +95,8 @@ MODELS = [
         "extra": None,
     },
     {
-        "name": "glm_4_6v",
-        "id": "z-ai/glm-4.6v",
+        "name": "glm_5v_turbo",
+        "id": "z-ai/glm-5v-turbo",
         "extra": {"reasoning": {"enabled": True}},
     },
     {
