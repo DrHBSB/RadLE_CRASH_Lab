@@ -66,15 +66,6 @@ MODELS = [
         "extra": {"thinking_level": "high"},
     },
     {
-        "name": "grok_4_20",
-        # Vision-only: Grok 4.20 silently drops the image whenever any reasoning
-        # parameter is set (effort/enabled, any provider or the -multi-agent slug),
-        # producing blind hallucinated diagnoses. Reasoning must stay OFF for it to
-        # see images. Verified via OpenRouter probe 2026-06-13.
-        "id": "x-ai/grok-4.20",
-        "extra": None,
-    },
-    {
         "name": "grok_4_3",
         "id": "x-ai/grok-4.3",
         "extra": None,
@@ -1255,21 +1246,6 @@ def audit_benchmark_output(
     return result
 
 
-def is_grok_xhigh_rejection(model, error_text):
-    """Detect likely rejection of reasoning.effort='xhigh' on base Grok 4.20."""
-    text = str(error_text).lower()
-    return (
-        model["name"] == "grok_4_20"
-        and "error code: 400" in text
-        and (
-            "reasoning" in text
-            or "effort" in text
-            or "unsupported" in text
-            or "parameter" in text
-        )
-    )
-
-
 def uses_native_openai(model):
     """Return True for models that should bypass OpenRouter."""
     return model.get("provider") == "openai"
@@ -1463,7 +1439,7 @@ def call_model(
     universal_temperature=UNIVERSAL_TEMPERATURE,
     max_retries=3,
 ):
-    """Call one model with transport retries and Grok xhigh fallback."""
+    """Call one model with transport retries."""
     api_params = build_api_params(
         model,
         content_array,
@@ -1490,13 +1466,6 @@ def call_model(
             break
         except Exception as exc:
             last_error = str(exc)
-
-            if is_grok_xhigh_rejection(model, last_error) and not grok_fallback_used:
-                print("    Grok xhigh rejected; falling back to reasoning.enabled=True.")
-                api_params["extra_body"] = {"reasoning": {"enabled": True}}
-                grok_fallback_used = True
-                response = None
-                continue
 
             fatal_patterns = [
                 "error code: 404",
@@ -1641,7 +1610,7 @@ def extract_result(response, latency, api_params, grok_fallback_used, model):
             _logged_request_extra(model, api_params),
             ensure_ascii=False,
         ),
-        f"Grok_Fallback_Used_{name}": grok_fallback_used if name == "grok_4_20" else "",
+        f"Grok_Fallback_Used_{name}": grok_fallback_used if name.startswith("grok_") else "",
         f"OpenRouter_Response_Model_{name}": getattr(response, "model", ""),
         f"Usage_JSON_{name}": json.dumps(
             make_json_safe(getattr(response, "usage", None)),
@@ -1672,7 +1641,7 @@ def failed_result(error, model, api_params=None, grok_fallback_used=False):
             _logged_request_extra(model, api_params) if api_params else None,
             ensure_ascii=False,
         ),
-        f"Grok_Fallback_Used_{name}": grok_fallback_used if name == "grok_4_20" else "",
+        f"Grok_Fallback_Used_{name}": grok_fallback_used if name.startswith("grok_") else "",
         f"OpenRouter_Response_Model_{name}": "",
         f"Usage_JSON_{name}": "",
         f"Raw_Response_{name}": full_error[:2000],
