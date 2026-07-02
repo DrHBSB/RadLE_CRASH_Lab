@@ -28,6 +28,16 @@ IMPORTANT model-specific facts (prove/watch before trusting a full run):
   * Temperature stays at UNIVERSAL_TEMPERATURE (0.01) for manuscript parity,
     NOT any model-card-recommended sampling. Record the q8 (or fallback)
     quant as a serving difference in the methods section.
+  * OLLAMA_NUM_CTX caps the context window via Ollama's `options.num_ctx`
+    (same mechanism as vLLM's MAX_MODEL_LEN=8192 used for OctoMed/InternVL).
+    Confirmed on this VM (2026-07-02): with no cap, Ollama loads the GGUF's
+    default 32768-token context, reserving an 8192 MiB combined KV cache and
+    leaving GPU0 with only ~504 MiB free (22530/23034 MiB used) -- razor-thin
+    headroom for a 200-case run with real images. Capping at 8192 (RadLE's
+    actual need: same image payload + prompt that already fit OctoMed/InternVL
+    at 8192) shrinks the KV cache to ~1/4 size and frees real headroom. This is
+    a serving-parameter cap, not a prompt/quant/temperature change -- it does
+    not affect parity.
 
 Usage:
     python scripts/run_lingshu_32b_ollama.py            # full 200-case run
@@ -49,6 +59,7 @@ OLLAMA_MODEL = os.environ.get(
 MODEL_NAME = "lingshu_32b"
 RUN_LABEL = "medical_full_200_cases_ollama"
 MAX_OUTPUT_TOKENS = 8192
+OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
 EXPECTED_CASES = 200
 EXPECTED_IMAGES = 263
 
@@ -73,6 +84,7 @@ def main():
     print("Master images:", paths["master_images_folder"])
     print("Raw CSV:", paths["raw_results_csv"])
     print("Ollama endpoint:", OLLAMA_BASE_URL, "| model:", OLLAMA_MODEL)
+    print("Ollama num_ctx cap:", OLLAMA_NUM_CTX)
 
     idx = rb.build_image_index(paths["master_images_folder"])
     all_cases = sorted(idx.keys(), key=rb.numeric_case_sort_key)
@@ -88,7 +100,11 @@ def main():
     from openai import OpenAI
 
     client = OpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
-    model_config = {"name": MODEL_NAME, "id": OLLAMA_MODEL, "extra": None}
+    model_config = {
+        "name": MODEL_NAME,
+        "id": OLLAMA_MODEL,
+        "extra": {"options": {"num_ctx": OLLAMA_NUM_CTX}},
+    }
 
     df = rb.run_benchmark(
         client=client,

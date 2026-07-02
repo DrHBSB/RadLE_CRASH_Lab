@@ -21,6 +21,14 @@ Setup on the VM (once):
     ollama pull hf.co/mradermacher/Lingshu-32B-GGUF:Q8_0
     # ollama serves an OpenAI-compatible endpoint at http://localhost:11434/v1
 
+Confirmed on this VM (2026-07-02): Q8 DOES fit split across both L4s (`ollama ps`
+showed 100% GPU, 44GB combined; nvidia-smi showed 22530 MiB on GPU0 / 20664 MiB
+on GPU1). But with no context cap, GPU0 had only ~504 MiB free -- razor-thin for
+a 200-case run. This probe caps `num_ctx` to OLLAMA_NUM_CTX (default 8192,
+matching the vLLM MAX_MODEL_LEN=8192 already proven sufficient for OctoMed/
+InternVL's identical image payload) via Ollama's `options` extension so the
+real run has actual headroom, not just a lucky fit.
+
 Run (default cases mirror the InternVL/OctoMed probe set):
     python scripts/ollama_lingshu_probe.py
     python scripts/ollama_lingshu_probe.py <model_tag> 1 8 78 12 45
@@ -50,6 +58,9 @@ DEFAULT_MODEL = os.environ.get(
 # Reasoning models (e.g. OctoMed emits <think>...</think>) can spend the whole
 # budget on the trace before the final answer -- raise PROBE_MAX_TOKENS for those.
 PROBE_MAX_TOKENS = int(os.environ.get("PROBE_MAX_TOKENS", "256"))
+# Caps Ollama's context window (same role as vLLM's MAX_MODEL_LEN=8192) so KV
+# cache doesn't eat the VRAM headroom needed for a 200-case run.
+PROBE_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
 
 
 def find_master_images():
@@ -75,6 +86,7 @@ def main():
     print("Master images folder:", folder)
     print("Ollama endpoint:", OLLAMA_BASE_URL)
     print("Model:", model)
+    print("num_ctx cap:", PROBE_NUM_CTX)
     print("Watch nvidia-smi in another terminal NOW -- the first request below")
     print("triggers the model load and is the real VRAM/multi-GPU-split test.")
     idx = radle_benchmark.build_image_index(str(folder))
@@ -97,6 +109,7 @@ def main():
                 messages=[{"role": "user", "content": content}],
                 temperature=radle_benchmark.UNIVERSAL_TEMPERATURE,
                 max_tokens=PROBE_MAX_TOKENS,
+                extra_body={"options": {"num_ctx": PROBE_NUM_CTX}},
             )
         except Exception as exc:  # noqa: BLE001
             print("=" * 70)
