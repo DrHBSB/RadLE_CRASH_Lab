@@ -76,7 +76,16 @@ OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 OLLAMA_MODEL = os.environ.get("OLLAMA_LINGSHU_MODEL", "lingshu-32b-8k")
 MODEL_NAME = "lingshu_32b"
 RUN_LABEL = "medical_full_200_cases_ollama"
-MAX_OUTPUT_TOKENS = 8192
+# Generation budget (resource cap, NOT a parity param). OctoMed used 8192 to fit
+# a legitimate <think> reasoning trace; Lingshu emits its answer JSON FIRST and
+# short (<200 output tokens observed on the shakedown), with NO <think> trace to
+# protect. At 8192 its known repetition tendency (see OUTPUT FORMAT NOTE) lets a
+# looping case grind for ~20 min at ~6 tok/s, burning tokens the take-last
+# extractor discards anyway. 2048 leaves ~10x headroom over the largest observed
+# real answer while capping a loop to ~5 min. Scored answers are unchanged
+# (take-last is stable). Env-overridable. Document this per-model budget in the
+# methods section alongside the q8 quant and num_ctx cap.
+MAX_OUTPUT_TOKENS = int(os.environ.get("LINGSHU_MAX_OUTPUT_TOKENS", "2048"))
 OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
 EXPECTED_CASES = 200
 EXPECTED_IMAGES = 263
