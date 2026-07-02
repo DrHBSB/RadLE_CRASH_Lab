@@ -19,15 +19,18 @@ GPU0 and GPU1 before concluding anything about fit.
 Setup on the VM (once):
     cd ~/RadLE_CRASH_Lab && git pull
     ollama pull hf.co/mradermacher/Lingshu-32B-GGUF:Q8_0
+    # Bake the context cap into a derived model -- the OpenAI endpoint ignores
+    # extra_body num_ctx, so this Modelfile is the ONLY thing that caps context:
+    printf 'FROM hf.co/mradermacher/Lingshu-32B-GGUF:Q8_0\nPARAMETER num_ctx 8192\n' > /tmp/Lingshu8k.Modelfile
+    ollama create lingshu-32b-8k -f /tmp/Lingshu8k.Modelfile
     # ollama serves an OpenAI-compatible endpoint at http://localhost:11434/v1
 
 Confirmed on this VM (2026-07-02): Q8 DOES fit split across both L4s (`ollama ps`
 showed 100% GPU, 44GB combined; nvidia-smi showed 22530 MiB on GPU0 / 20664 MiB
-on GPU1). But with no context cap, GPU0 had only ~504 MiB free -- razor-thin for
-a 200-case run. This probe caps `num_ctx` to OLLAMA_NUM_CTX (default 8192,
-matching the vLLM MAX_MODEL_LEN=8192 already proven sufficient for OctoMed/
-InternVL's identical image payload) via Ollama's `options` extension so the
-real run has actual headroom, not just a lucky fit.
+on GPU1). With the raw tag's default 32768 context, GPU0 had only ~504 MiB free
+and the first image's CLIP compute buffer OOM'd. The Modelfile-derived
+`lingshu-32b-8k` (num_ctx=8192, matching vLLM's MAX_MODEL_LEN=8192 proven for
+OctoMed/InternVL) loads cleanly and ran all 5 probe cases with real headroom.
 
 Run (default cases mirror the InternVL/OctoMed probe set):
     python scripts/ollama_lingshu_probe.py
@@ -52,9 +55,10 @@ sys.path.insert(0, str(REPO / "src"))
 import radle_benchmark  # noqa: E402
 
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-DEFAULT_MODEL = os.environ.get(
-    "OLLAMA_LINGSHU_MODEL", "hf.co/mradermacher/Lingshu-32B-GGUF:Q8_0"
-)
+# Default to the Modelfile-derived model with num_ctx=8192 baked in. The raw
+# GGUF tag loads at 32768 context and OOMs on the first image (the OpenAI
+# endpoint ignores extra_body num_ctx). Create it once (see module docstring).
+DEFAULT_MODEL = os.environ.get("OLLAMA_LINGSHU_MODEL", "lingshu-32b-8k")
 # Reasoning models (e.g. OctoMed emits <think>...</think>) can spend the whole
 # budget on the trace before the final answer -- raise PROBE_MAX_TOKENS for those.
 PROBE_MAX_TOKENS = int(os.environ.get("PROBE_MAX_TOKENS", "256"))

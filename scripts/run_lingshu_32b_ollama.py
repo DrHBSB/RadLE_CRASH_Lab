@@ -28,16 +28,29 @@ IMPORTANT model-specific facts (prove/watch before trusting a full run):
   * Temperature stays at UNIVERSAL_TEMPERATURE (0.01) for manuscript parity,
     NOT any model-card-recommended sampling. Record the q8 (or fallback)
     quant as a serving difference in the methods section.
-  * OLLAMA_NUM_CTX caps the context window via Ollama's `options.num_ctx`
-    (same mechanism as vLLM's MAX_MODEL_LEN=8192 used for OctoMed/InternVL).
-    Confirmed on this VM (2026-07-02): with no cap, Ollama loads the GGUF's
-    default 32768-token context, reserving an 8192 MiB combined KV cache and
-    leaving GPU0 with only ~504 MiB free (22530/23034 MiB used) -- razor-thin
-    headroom for a 200-case run with real images. Capping at 8192 (RadLE's
-    actual need: same image payload + prompt that already fit OctoMed/InternVL
-    at 8192) shrinks the KV cache to ~1/4 size and frees real headroom. This is
-    a serving-parameter cap, not a prompt/quant/temperature change -- it does
-    not affect parity.
+  * CONTEXT CAP IS MANDATORY and MUST be baked in via a Modelfile -- Ollama's
+    OpenAI-compatible endpoint (/v1/chat/completions) IGNORES options.num_ctx
+    passed in extra_body (proven on this VM 2026-07-02: an extra_body num_ctx
+    request still loaded the default 32768 context and OOM'd on the first image;
+    a Modelfile-derived model with the cap baked in loaded cleanly and ran all
+    5 probe cases). With no cap, Ollama loads the GGUF's default 32768-token
+    context, reserving an 8192 MiB combined KV cache and leaving GPU0 with only
+    ~504 MiB free (22530/23034 MiB) -- then the image's CLIP compute buffer
+    (pinned to GPU0) OOMs. Create the capped model ONCE on the VM:
+        printf 'FROM hf.co/mradermacher/Lingshu-32B-GGUF:Q8_0\nPARAMETER num_ctx 8192\n' > /tmp/Lingshu8k.Modelfile
+        ollama create lingshu-32b-8k -f /tmp/Lingshu8k.Modelfile
+    then run this script against the derived tag (the default below). 8192 is
+    RadLE's actual need (same image payload + prompt that already fit OctoMed/
+    InternVL at MAX_MODEL_LEN=8192). This is a serving-parameter cap, not a
+    prompt/quant/temperature change -- it does not affect parity.
+  * OUTPUT FORMAT WARNING (2026-07-02 probe): Lingshu tends to emit MULTIPLE
+    JSON objects per response -- it commits a diagnosis, adds a "Note", then
+    emits a SECOND JSON that often abstains ("I don't know"). extract_json_safely
+    takes the LAST valid JSON (radle_benchmark.py:285), so a commit-then-abstain
+    response is recorded as an abstention, undercounting the model (seen on probe
+    cases 8 and 45). Do NOT hand-tune the shared extractor against this eval set.
+    Run raw, then adjudicate the multi-JSON cases with the radiologist via a
+    sidecar (same pattern as LLaVA-Med/OctoMed) -- see the execplan.
 
 Usage:
     python scripts/run_lingshu_32b_ollama.py            # full 200-case run
@@ -53,9 +66,11 @@ import radle_benchmark as rb  # noqa: E402
 import radle_medical_custom_runtime as mrt  # noqa: E402
 
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-OLLAMA_MODEL = os.environ.get(
-    "OLLAMA_LINGSHU_MODEL", "hf.co/mradermacher/Lingshu-32B-GGUF:Q8_0"
-)
+# Default to the Modelfile-derived model with num_ctx=8192 baked in. The raw
+# GGUF tag (hf.co/mradermacher/Lingshu-32B-GGUF:Q8_0) loads at 32768 context and
+# OOMs on the first image -- do NOT point this at the raw tag. Create the derived
+# model first (see docstring), then optionally override OLLAMA_LINGSHU_MODEL.
+OLLAMA_MODEL = os.environ.get("OLLAMA_LINGSHU_MODEL", "lingshu-32b-8k")
 MODEL_NAME = "lingshu_32b"
 RUN_LABEL = "medical_full_200_cases_ollama"
 MAX_OUTPUT_TOKENS = 8192
