@@ -40,7 +40,12 @@ OpenAI-compatible GGUF endpoint). The same pattern generalizes to future open mo
 
 ## Current State
 
-Current state (2026-07-02, Claude/Opus 4.8): **LLaVA-Med run COMPLETE and PROMOTED.**
+Current state (2026-07-02, Claude/Opus 4.8): **Two models COMPLETE and PROMOTED —
+LLaVA-Med and OctoMed-7B.** OctoMed is the latest (details below); LLaVA-Med was
+first. Both full 200-case runs are promoted with outputs relayed off the VM to the
+user's machine. Next model = InternVL via Ollama.
+
+**LLaVA-Med run COMPLETE and PROMOTED.**
 The full 200-case run finished, was adjudicated, promoted (raw->final,
 sha256 b6ebbba9...), and public tables were exported. Outputs downloaded to the
 user's machine at `RadLE Stats/llava_med_ollama_outputs/`.
@@ -78,6 +83,10 @@ trace) -- this is the reference pattern for future reasoning-model VLMs. Scripts
 `radle_octomed_adjudication.json` (82/187 radiologist-ruled abstentions),
 `promote_octomed.py`. Stats pipeline (`radle_v2_stats.py` + `radle_llm_judge.py`)
 VERIFIED Likert-independent for classification -> OctoMed numbers are trustworthy.
+Outputs relayed off the VM (GCS) and downloaded to the user's machine at
+`RadLE Stats/octomed_ollama_outputs/`; local final CSV sha256 verified identical
+(8a584634...c291ee), 200 rows / 114 diagnoses / 86 abstentions / 0 empty. Only the
+LLM-judge accuracy step remains (run the stats pipeline vs ground truth when wanted).
 
 Next model: **InternVL via Ollama** — see
 `Documents/handoff_internvl_ollama_next_session.md` (and the retired
@@ -180,6 +189,22 @@ Two open threads carried out of this run (neither blocks the LLaVA-Med promotion
   diagnoses, 184 genuine abstentions (52 deterministic-empty + 132 descriptions),
   0 self-confidence scores. Reportable capability result; do not "improve" via
   retries/prompt changes (parity). Remaining: transfer outputs off the VM.
+- [x] (2026-07-02) OctoMed-7B (Ollama q8 + mmproj): proved GGUF has vision
+  projector, proved image conditioning (5/5 distinct), proved output format
+  (`<think>` then RadLE JSON + Likert). Added guarded `<think>`-strip to
+  `extract_json_safely` (commit 5ae5e51) after showing the trace corrupted
+  extraction (rejected "meningioma" beat final "glioblastoma"). Shakedown 8/8,
+  full 200-case run: 114 committed / 86 abstentions.
+- [x] (2026-07-02) OctoMed cleanup: 26 curly-apostrophe abstentions canonicalized
+  by rule + cases 82/187 ("None of the above"/"None") radiologist-ruled as
+  abstentions (`apply_octomed_cleanup.py` + `radle_octomed_adjudication.json`).
+  Re-audit: clean 200/200 accepted, NO override.
+- [x] (2026-07-02) Verified `radle_v2_stats.py` + `radle_llm_judge.py` classify
+  attempt/abstention by text, independent of Likert -> OctoMed scored correctly.
+- [x] RUN COMPLETE. OctoMed-7B (Ollama q8): 114/200 committed diagnoses, 86
+  abstentions, mean Likert 3.34. Promoted clean (sha256 8a584634...c291ee),
+  public tables exported, outputs relayed to `RadLE Stats/octomed_ollama_outputs/`
+  (local sha verified). Remaining: LLM-judge accuracy vs ground truth when wanted.
 
 
 ## Surprises & Discoveries

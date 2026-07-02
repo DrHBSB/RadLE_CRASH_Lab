@@ -11,6 +11,9 @@ Read the actual files fresh; this is a pointer, not a summary to trust blindly.
   abstentions (`scripts/radle_octomed_adjudication.json`,
   `scripts/apply_octomed_cleanup.py`, `scripts/promote_octomed.py`).
 - Stats pipeline verified Likert-independent -> OctoMed numbers trustworthy.
+- Outputs relayed off the VM (GCS) to `RadLE Stats/octomed_ollama_outputs/`;
+  local final CSV sha256 verified identical (8a584634...c291ee). Only the
+  LLM-judge accuracy step vs ground truth remains (run when wanted).
 - Next model = InternVL via Ollama (`handoff_internvl_ollama_next_session.md`).
 
 ## (historical) STATUS — integration PROVEN, full run underway
