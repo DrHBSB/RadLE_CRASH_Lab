@@ -2,10 +2,15 @@
 """Promote the Lingshu-32B Ollama run to final + public tables.
 
 Structurally a parametrized copy of promote_internvl_ollama.py. Guarded:
-re-audits first and REFUSES to promote unless all 200 cells are accepted. If
-Lingshu leaves repair targets (e.g. a truncated case with no complete JSON ->
-PARSE_FAILED), handle them via the standard audit/repair or an adjudication
-sidecar BEFORE promoting -- do not override blindly.
+re-audits first and refuses to promote if any cell is non-accepted, EXCEPT for a
+narrowly documented single-cell override (PROMOTE_OVERRIDE_CASES). A flagged case
+passes ONLY if it is in that allowlist AND fails for the expected invalid-likert
+reason AND still carries a committed (non-empty) diagnosis; every other
+non-accepted cell (e.g. a truncated case with no complete JSON -> PARSE_FAILED)
+still blocks and must be handled via the standard audit/repair path first. The
+override mutates NO data -- the raw cell is frozen and the override + rationale is
+recorded in the final manifest (see PROMOTE_OVERRIDE_CASES for the case-119
+ruling: out-of-range likert kept as-is, treated as blank-weight by the scorer).
 
 KEY DIFFERENCE vs the InternVL/OctoMed promote scripts: this passes
 max_output_tokens=MAX_OUTPUT_TOKENS (1024) to audit_benchmark_output. The other
@@ -28,7 +33,8 @@ a non-issue for scoring; a truncated case with NO complete JSON correctly falls
 through to PARSE_FAILED -> repair target (not a silent accept).
 
 Steps:
-  1. Re-audit raw CSV (with the real 1024 cap); assert 200/200 accepted.
+  1. Re-audit raw CSV (with the real 1024 cap); require all cells accepted
+     except the documented single-cell override(s).
   2. promote_final_results: raw -> final + manifest.
   3. export_public_release_tables: final -> public_release/ (no diagnoses/raw).
   4. Print the public model summary + final sha256.
@@ -60,6 +66,28 @@ RUN_LABEL = "medical_full_200_cases_ollama"
 # audit's truncation check reflects the actual cap, not the module default.
 MAX_OUTPUT_TOKENS = int(os.environ.get("LINGSHU_MAX_OUTPUT_TOKENS", "1024"))
 
+# Documented single-cell guardrail override (user + radiologist ruling 2026-07-03).
+# Case 119 spiraled into a repetition loop whose self-confidence counter ratcheted
+# PAST the 0-4 Likert scale (recorded raw value 8), so the audit correctly flags it
+# invalid_or_missing_likert. Per ruling the raw cell is FROZEN -- NOT repaired, NOT
+# converted to an abstention: the committed diagnosis is retained as a genuine
+# attempt, and the out-of-range likert is treated by the scorer as unmeasured
+# (blank weighted score -- invalidate-not-clamp, a pre-registered general rule for
+# any value outside 0-4, NOT a case-119 patch). This override only lets promotion
+# proceed; it changes no data. It is NARROW: a flagged case is allowed through ONLY
+# if it fails for the expected invalid-likert reason AND still has a committed
+# (non-empty, non-PARSE_FAILED) diagnosis -- any other failure still blocks.
+PROMOTE_OVERRIDE_CASES = {
+    "119": (
+        "Out-of-range likert (raw=8) from a degenerate repetition spiral confirmed "
+        "non-convergent at 8192 ctx (scripts/probe_lingshu_highcap_case.py). "
+        "Diagnosis retained as an attempt; likert treated as blank-weight by the "
+        "scorer (invalidate-not-clamp). Raw cell frozen, not repaired/abstained."
+    ),
+}
+OVERRIDE_REASON_SUBSTR = "invalid_or_missing_likert"
+_NON_DIAG_TOKENS = {"", "nan", "none", "parse_failed", "json_missing_key"}
+
 
 def dataset_root():
     root = os.environ.get("RADLE_LOCAL_DATASET_ROOT") or str(
@@ -89,17 +117,45 @@ def main():
     audit = res["audit"]
     n_accepted = int((audit["bucket"] == "accepted").sum())
     print(f"Pre-promote audit: {n_accepted}/{len(audit)} accepted (cap={MAX_OUTPUT_TOKENS})")
-    if n_accepted != len(audit):
+
+    # Partition non-accepted cells into (a) documented single-cell overrides and
+    # (b) everything else. Only (a) is allowed through; any (b) blocks promotion.
+    non_accepted = audit[audit["bucket"] != "accepted"]
+    overridden = []
+    unexpected = []
+    for _, r in non_accepted.iterrows():
+        cid = str(r["Master_Case_ID"])
+        cell_status = str(r.get("status", ""))
+        diag = str(r.get("diagnosis", "")).strip()
+        allowlisted = cid in PROMOTE_OVERRIDE_CASES
+        reason_ok = OVERRIDE_REASON_SUBSTR in cell_status
+        has_diag = diag.lower() not in _NON_DIAG_TOKENS
+        if allowlisted and reason_ok and has_diag:
+            overridden.append({"case": cid, "status": cell_status, "diagnosis": diag})
+        else:
+            unexpected.append({"case": cid, "status": cell_status, "diagnosis": diag})
+
+    if unexpected:
+        print("\nNon-accepted cells OUTSIDE the documented override -> BLOCKING:")
         print(
-            audit[audit["bucket"] != "accepted"][
-                ["Master_Case_ID", "bucket", "status", "diagnosis", "likert"]
-            ].to_string(index=False)
+            non_accepted[non_accepted["Master_Case_ID"].astype(str).isin(
+                [u["case"] for u in unexpected]
+            )][["Master_Case_ID", "bucket", "status", "diagnosis", "likert"]].to_string(index=False)
         )
-        raise SystemExit("Refusing to promote: not all cells accepted.")
+        raise SystemExit("Refusing to promote: non-accepted cells outside the documented override.")
+
+    if overridden:
+        print("\nSINGLE-CELL GUARDRAIL OVERRIDE(S) APPLIED (documented; raw data unchanged):")
+        for o in overridden:
+            print(f"  case {o['case']}: status={o['status']} diag={o['diagnosis']!r}")
+            print(f"    -> {PROMOTE_OVERRIDE_CASES[o['case']]}")
 
     status = res["status_summary"].set_index("status")["cells"].to_dict()
     n_diag = int(status.get("accepted_clean_diagnosis", 0))
     n_idk = int(status.get("accepted_i_dont_know", 0))
+    # Committed attempts held under override (e.g. 119) are accepted diagnoses for
+    # accuracy but sit outside the accepted bucket, so add them to the attempt count.
+    n_diag_override = sum(1 for o in overridden if o["diagnosis"].lower() not in _NON_DIAG_TOKENS)
 
     # 2. Promote raw -> final with a rich manifest.
     metadata = {
@@ -136,8 +192,32 @@ def main():
             "FINAL JSON counts, so a commit-then-abstain response is a genuine "
             "abstention. No adjudication sidecar or take-first exception was used."
         ),
-        "audit_result": "200/200 accepted (no guardrail override needed)",
-        "committed_diagnoses": n_diag,
+        "audit_result": (
+            f"{n_accepted}/{len(audit)} accepted"
+            + (
+                f"; {len(overridden)} documented single-cell override(s): "
+                + ", ".join(o["case"] for o in overridden)
+                if overridden
+                else " (no guardrail override needed)"
+            )
+        ),
+        "guardrail_override": (
+            {
+                "cases": {o["case"]: PROMOTE_OVERRIDE_CASES[o["case"]] for o in overridden},
+                "rationale": (
+                    "Raw cells frozen per user + radiologist ruling 2026-07-03: the "
+                    "committed diagnosis is kept as an attempt and the out-of-range "
+                    "likert is treated as unmeasured (blank weighted score, "
+                    "invalidate-not-clamp). No data was mutated; the override only "
+                    "permits promotion past the all-accepted guard."
+                ),
+            }
+            if overridden
+            else None
+        ),
+        "committed_diagnoses": n_diag + n_diag_override,
+        "committed_diagnoses_accepted": n_diag,
+        "committed_diagnoses_under_override": n_diag_override,
         "abstentions_i_dont_know": n_idk,
         "cleanup_ref": None,
         "adjudication_ref": None,
@@ -154,7 +234,10 @@ def main():
     print("  final_csv:", paths["final_results_csv"])
     print("  manifest :", paths["final_manifest_json"])
     print("  sha256   :", manifest["sha256"])
-    print(f"  split    : {n_diag} committed diagnoses / {n_idk} abstentions")
+    print(
+        f"  split    : {n_diag + n_diag_override} committed diagnoses "
+        f"({n_diag} accepted + {n_diag_override} under override) / {n_idk} abstentions"
+    )
 
     # 3. Export public release tables from the final CSV.
     rb.export_public_release_tables(
