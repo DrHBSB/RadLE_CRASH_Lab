@@ -26,3 +26,9 @@ artifacts/
 *.dcm
 *.nii
 *.nii.gz
+
+# Vendored third-party checkout kept locally for the custom-runtime work (re-clonable).
+vllm_0_23_0/
+
+# Local RadLE data export (wide 18-model source + ground-truth key stay in Google Drive).
+deliverables/
