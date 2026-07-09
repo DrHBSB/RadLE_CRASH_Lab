@@ -10,7 +10,7 @@ RadLE collaborators in the United States have legitimate Meta Model API access a
 
 ## Current State
 
-Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The Morning integration is published as `b0a1ba5` on `codex/morning-meta-muse-spark-append`. `src/radle_benchmark.py` has explicit Meta client dispatch for benchmark and repair calls, and `notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb` is configured for the serial Grok/GPT56/Muse append into `Runs/radle_v2/raw/results.csv`. Next: after the active Grok/GPT run stops, open the new notebook, rerun setup/import/config, and let resume skip accepted cells before making only the missing calls.
+Current state (2026-07-10 02:24 +05:30, Codex/GPT-5): The client-factory state lock is resolved locally. The copied Morning notebook now invokes the helper's actual `make_openai_client()` API and has a local attribute assertion for it; the helper factory probe and all notebook-cell parse checks passed. Next: publish the two-file correction, then rerun the imports cell in Colab before any benchmark cell.
 
 ## Locked Facts
 
@@ -23,6 +23,7 @@ Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The Morning integration is
 - `gpt_5_6_sol_pro` is the verified Morning model name for `openai/gpt-5.6-sol-pro`; the prepared combined Grok/GPT branch is `codex/gpt56-openrouter-smoke` at `8feeb7b`.
 - Before this integration, the dispatcher routed only native Anthropic, Google, and OpenAI clients; `muse_spark_1_1` would otherwise have fallen through to Morning's OpenRouter client.
 - The dispatcher now accepts optional `meta_client` in `run_benchmark`, `run_targeted_repair`, and `call_model`; only models marked `provider="meta_model_api"` use it, and their provider column is `Meta Model API`.
+- The Meta helper's public factory is `make_openai_client(api_key=None, base_url=None)`, not `create_client()`.
 
 ## Do Not Revisit
 
@@ -51,6 +52,9 @@ Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The Morning integration is
 - [x] (2026-07-10 01:55 +05:30, Codex/GPT-5) Passed `py -3.11 -m py_compile` for both Python modules, parsed all nine notebook code cells, passed `git diff --check`, and passed a no-network fake-client Meta dispatch probe through `call_model`.
 - [x] (2026-07-10 01:55 +05:30, Codex/GPT-5) Committed the prepared integration branch as `b0a1ba5 Integrate Meta Muse Spark into Morning append`; Colab execution remains deferred until the active Grok/GPT process is no longer writing the shared CSV.
 - [x] (2026-07-10 01:55 +05:30, Codex/GPT-5) Pushed `codex/morning-meta-muse-spark-append` to origin. Use the branch-pinned integration notebook only after the active writer stops.
+- [x] (2026-07-10 02:24 +05:30, Codex/GPT-5) Resolved the client-factory state lock by replacing the invalid `create_client()` call with `make_openai_client()` and adding an explicit helper-attribute guard in the imports cell.
+- [x] (2026-07-10 02:24 +05:30, Codex/GPT-5) Passed `py_compile`, a fake-key helper factory probe, notebook JSON/AST parsing, obsolete-call absence check, and `git diff --check`.
+- [ ] (2026-07-10 02:24 +05:30, Codex/GPT-5) Publish the two-file factory correction to `codex/morning-meta-muse-spark-append` before rerunning Colab imports.
 
 ## Surprises & Discoveries
 
@@ -65,6 +69,12 @@ Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The Morning integration is
   Date/Author: 2026-07-10, Codex/GPT-5
 - Observation: The collaborator's full probe response had `finish_reason: stop`, `message.content: {"diagnosis":"probe_ok","likert_score":0}`, model `muse-spark-1.1`, and `completion_tokens_details.reasoning_tokens: 380`.
   Evidence: User-pasted Colab response JSON from `chat.completions.create(... max_tokens=512 ...)`.
+  Date/Author: 2026-07-10, Codex/GPT-5
+- Observation: The copied Morning imports cell called `create_client()`, but the helper defines `make_openai_client()`.
+  Contradicting artifact: `notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb` line in Colab invoked `radle_meta_model_api_runtime.create_client()`.
+  Missed verification: the no-network dispatch probe exercised `call_model()` but did not assert that every notebook helper attribute exists.
+  User view: after confirmed checkout `49bf0d6`, Colab raised `AttributeError: module 'radle_meta_model_api_runtime' has no attribute 'create_client'` at the imports cell.
+  Evidence: User-pasted Colab traceback and local helper definition at `src/radle_meta_model_api_runtime.py:65`.
   Date/Author: 2026-07-10, Codex/GPT-5
 
 ## Decision Log
@@ -87,6 +97,9 @@ Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The Morning integration is
 - Decision: Promote Meta to a native client path in `radle_benchmark.py` and use one serial Morning process for all three models.
   Rationale: This makes the benchmark and targeted repair paths select the right client for every model while retaining one shared, resumable CSV. A new branch prevents concurrent writers from changing the active Grok/GPT append.
   Date/Author: 2026-07-10, Codex/GPT-5
+- Decision: Use the helper's existing `make_openai_client()` API rather than introducing a second alias.
+  Rationale: The standalone runner already exposes and uses that factory. Correcting the notebook consumer is narrower and makes the visible integration call match the helper's documented implementation.
+  Date/Author: 2026-07-10, Codex/GPT-5
 
 ## Revision Notes
 
@@ -98,6 +111,7 @@ Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The Morning integration is
 - v6 (2026-07-10, Codex/GPT-5): Recorded the implemented native Meta dispatch, copied three-model Morning notebook, static validation, and no-network dispatcher proof.
 - v7 (2026-07-10, Codex/GPT-5): Recorded the local integration commit and retained the active-writer wait condition for Colab execution.
 - v8 (2026-07-10, Codex/GPT-5): Reconciled the amended commit hash and recorded publication of the follow-on Morning integration branch.
+- v9 (2026-07-10, Codex/GPT-5): Recorded the user-observed client-factory mismatch, its local validation, and the branch publication pending state.
 
 ## Outcomes & Retrospective
 
