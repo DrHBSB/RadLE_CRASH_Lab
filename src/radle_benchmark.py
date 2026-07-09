@@ -45,6 +45,12 @@ MODELS = [
         "extra": {"reasoning_effort": "high"},
     },
     {
+        "name": "gpt_5_6_sol_pro",
+        "id": "openai/gpt-5.6-sol-pro",
+        "extra": {"reasoning": {"effort": "high"}},
+        "provider_routing": {"only": ["OpenAI"], "allow_fallbacks": False},
+    },
+    {
         "name": "claude_4_8_opus",
         "id": "claude-opus-4-8",
         "provider": "anthropic",
