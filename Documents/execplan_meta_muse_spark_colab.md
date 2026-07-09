@@ -10,7 +10,7 @@ RadLE collaborators in the United States have legitimate Meta Model API access a
 
 ## Current State
 
-Current state (2026-07-10 00:56 +05:30, Codex/GPT-5): The additive helper module and Colab Pro notebook exist, local validation passed, and branch `codex/meta-muse-spark-colab` has been pushed to GitHub with only this task's files. Next: collaborator should open `notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb` from that branch in Colab Pro, add `GITHUB_TOKEN` and `MODEL_API_KEY` or `META_MODEL_API_KEY` secrets, and run the 1-case smoke.
+Current state (2026-07-10 01:05 +05:30, Codex/GPT-5): The additive helper module and Colab Pro notebook exist, local validation passed, and branch `codex/meta-muse-spark-colab` has been pushed to GitHub. A collaborator text probe succeeded with `muse-spark-1.1` and showed the first built-in probe budget was too small because the response used 380 hidden reasoning tokens before emitting JSON. Next: collaborator should rerun setup/import after pulling the branch and proceed to the 1-case smoke.
 
 ## Locked Facts
 
@@ -33,6 +33,7 @@ Current state (2026-07-10 00:56 +05:30, Codex/GPT-5): The additive helper module
 - [x] (2026-07-10 00:46 +05:30, Codex/GPT-5) Added `notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb`.
 - [x] (2026-07-10 00:49 +05:30, Codex/GPT-5) Validated Python syntax, notebook JSON/code-cell parsing, output cleanliness, fixed-string secret-prefix scan, and helper import/config without a Meta API key.
 - [x] (2026-07-10 00:56 +05:30, Codex/GPT-5) Published `codex/meta-muse-spark-colab` to GitHub without absorbing unrelated dirty files.
+- [x] (2026-07-10 01:05 +05:30, Codex/GPT-5) Raised the helper text-probe token budget to 512 after collaborator evidence showed 128 could return empty content.
 
 ## Surprises & Discoveries
 
@@ -44,6 +45,9 @@ Current state (2026-07-10 00:56 +05:30, Codex/GPT-5): The additive helper module
   Date/Author: 2026-07-10, Codex/GPT-5
 - Observation: A normal `git commit` would have risked capturing unrelated staged work, so the publish used a temporary Git index and `git commit-tree`.
   Evidence: The isolated commit stat was exactly `Documents/execplan_meta_muse_spark_colab.md`, `notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb`, and `src/radle_meta_model_api_runtime.py`; `git push -u origin codex/meta-muse-spark-colab` created the remote branch.
+  Date/Author: 2026-07-10, Codex/GPT-5
+- Observation: The collaborator's full probe response had `finish_reason: stop`, `message.content: {"diagnosis":"probe_ok","likert_score":0}`, model `muse-spark-1.1`, and `completion_tokens_details.reasoning_tokens: 380`.
+  Evidence: User-pasted Colab response JSON from `chat.completions.create(... max_tokens=512 ...)`.
   Date/Author: 2026-07-10, Codex/GPT-5
 
 ## Decision Log
