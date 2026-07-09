@@ -10,7 +10,7 @@ RadLE collaborators in the United States have legitimate Meta Model API access a
 
 ## Current State
 
-Current state (2026-07-10 01:44 +05:30, Codex/GPT-5): The audit-schema state lock is resolved locally. The notebook now reads `audit`, `repair_targets`, and `no_paid_cleanup`, with local syntax and helper-contract validation passing. Next: publish only the notebook and this living plan to `codex/meta-muse-spark-colab`; the collaborator can then rerun the setup cell and the existing scorer/audit cell without repeating the paid benchmark call.
+Current state (2026-07-10 01:44 +05:30, Codex/GPT-5): The audit-schema correction is published in `6460d22` on `codex/meta-muse-spark-colab`. The collaborator should rerun the GitHub setup cell, then rerun the existing scorer/audit cell only; the already-written one-case raw CSV remains valid and does not need another paid call. Success now prints rows, repair targets, no-paid cleanup targets, and displays dataset/bucket summaries without `KeyError`.
 
 ## Locked Facts
 
@@ -37,7 +37,7 @@ Current state (2026-07-10 01:44 +05:30, Codex/GPT-5): The audit-schema state loc
 - [x] (2026-07-10 01:05 +05:30, Codex/GPT-5) Raised the helper text-probe token budget to 512 after collaborator evidence showed 128 could return empty content.
 - [x] (2026-07-10 01:44 +05:30, Codex/GPT-5) Resolved the audit-schema state lock by changing the audit display cell to count the `audit`, `repair_targets`, and `no_paid_cleanup` DataFrames and show dataset/bucket summaries.
 - [x] (2026-07-10 01:44 +05:30, Codex/GPT-5) Validated all 10 notebook code cells with `ast.parse` and called `audit_benchmark_output()` against a one-row local fixture; observed audit display counts `1 0 0`.
-- [ ] (2026-07-10 01:44 +05:30, Codex/GPT-5) Publish the narrow notebook and plan correction to `codex/meta-muse-spark-colab` without staging unrelated worktree changes.
+- [x] (2026-07-10 01:44 +05:30, Codex/GPT-5) Published the narrow notebook and plan correction as `6460d22 Fix Meta Muse Spark audit display schema` using an isolated Git index; no unrelated worktree files were staged.
 
 ## Surprises & Discoveries
 
@@ -52,9 +52,6 @@ Current state (2026-07-10 01:44 +05:30, Codex/GPT-5): The audit-schema state loc
   Date/Author: 2026-07-10, Codex/GPT-5
 - Observation: The collaborator's full probe response had `finish_reason: stop`, `message.content: {"diagnosis":"probe_ok","likert_score":0}`, model `muse-spark-1.1`, and `completion_tokens_details.reasoning_tokens: 380`.
   Evidence: User-pasted Colab response JSON from `chat.completions.create(... max_tokens=512 ...)`.
-  Date/Author: 2026-07-10, Codex/GPT-5
-- Observation: The 1-case smoke result is valid, but the notebook audit display is stale against the helper schema. Contradicting artifact: `notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb` reads `audit["row_count"]` and `audit["no_paid_cleanup_targets"]`; source evidence: `src/radle_benchmark.py::audit_benchmark_output()` returns `audit`, `repair_targets`, and `no_paid_cleanup` instead. Missed verification: the notebook code cells were syntax-checked but the audit cell was not exercised against a real return object. User view: Colab raised `KeyError: 'row_count'` immediately after writing and displaying the valid scorer CSV.
-  Evidence: User-pasted Colab traceback and local source inspection of `src/radle_benchmark.py` lines 1239-1251.
   Date/Author: 2026-07-10, Codex/GPT-5
 
 ## Decision Log
@@ -76,12 +73,15 @@ Current state (2026-07-10 01:44 +05:30, Codex/GPT-5): The audit-schema state loc
 
 - v1 (2026-07-10, Codex/GPT-5): Initial plan created for the Meta Muse Spark Colab Pro runner.
 - v2 (2026-07-10, Codex/GPT-5): Recorded the Colab-discovered audit display schema mismatch, state-lock resolution, local reproduction, and the narrow consumer-only correction.
+- v3 (2026-07-10, Codex/GPT-5): Compacted the resolved audit mismatch into Locked Facts and recorded publication commit `6460d22`.
 
 ## Outcomes & Retrospective
 
-Completed additive local validation. Full top-to-bottom notebook execution remains pending because it requires the collaborator's Colab Pro runtime, private RadLE dataset, GitHub token if needed, and Meta Model API key.
+Completed additive local validation, collaborator text probe, and collaborator one-case benchmark execution. The one-case result showed native Meta provider routing, diagnosis `Left carotid cavernous fistula`, Likert `4`, `1361` prompt tokens, `950` output tokens, `919` reasoning tokens, and `8.3` seconds latency. The stale audit display was corrected in `6460d22`; full top-to-bottom notebook execution remains pending because it requires the collaborator's Colab Pro runtime, private RadLE dataset, GitHub token if needed, and Meta Model API key.
 
 The task branch was published as `codex/meta-muse-spark-colab`. The implementation commit was `3f17f03 Add Meta Muse Spark Colab runner`, followed by plan-only publication updates.
+
+No reusable skill change is proposed: this was a repository-specific stale consumer key rather than a cross-project workflow gap.
 
 ## Suggested Skills By Phase
 
