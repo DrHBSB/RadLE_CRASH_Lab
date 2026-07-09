@@ -80,7 +80,7 @@ def make_openai_client(
     return OpenAI(base_url=resolved_base_url, api_key=resolved_key)
 
 
-def text_probe(client, model_id: str = MODEL_ID, max_tokens: int = 128) -> str:
+def text_probe(client, model_id: str = MODEL_ID, max_tokens: int = 512) -> str:
     """Make a small text-only call to verify key, endpoint, and model access."""
     response = client.chat.completions.create(
         model=model_id,
