@@ -18,7 +18,7 @@ Success is observable when each committed admission has a sealed input manifest,
 
 ## Current State
 
-Current state (2026-07-10 04:54 +05:30, Codex/GPT-5): Milestone 2 is implemented, locally validated, staged, and second-wave scout findings have been folded into this plan in clean worktree `C:/tmp/radle_v2_incremental_admission`. Configs, judge prompt evidence, terminal-state policy, roster, helper module, CLI `check-config`, static fixtures, and synthetic fixture generator exist; `py_compile`, unit tests, config receipt, no-live-path scan, JSON parse, fixture tracking, and staged diff hygiene checks pass. Next: commit or otherwise preserve the Milestone 1-2 checkpoint, then implement Milestone 3 as a real append-only transaction adapter rather than reusing the permissive wide appender as-is.
+Current state (2026-07-10 05:02 +05:30, Codex/GPT-5): Milestone 1-2 foundation is committed as checkpoint `fdbe56b` on branch `codex/radle-v2-incremental-admission` in clean worktree `C:/tmp/radle_v2_incremental_admission`. Configs, judge prompt evidence, terminal-state policy, roster, helper module, CLI `check-config`, static fixtures, synthetic fixture generator, runtime integration, and scout-informed ExecPlan updates are preserved. Next: implement Milestone 3 as a real append-only transaction adapter rather than reusing the permissive wide appender as-is.
 
 ## Locked Facts
 
@@ -53,6 +53,7 @@ Current state (2026-07-10 04:54 +05:30, Codex/GPT-5): Milestone 2 is implemented
 - Live reads from `C:/Users/thehb/Documents/RadLE Stats` are prohibited. The hash-pinned repo-local imported scoring key may be judge context only and never final authority.
 - Public candidate generation is allowed only after private final-master commitment. Actual publication requires a separate recorded privacy approval.
 - Milestone 2 configs are frozen with these current hashes: roster `2D6DCC6AEF35B1EB38E80D35A0F7407363D080A26119351FEC9AA27AE2EB122C`, judges `E7EB33CE809EE30E593228B57641CF77186DB5E5EE060E08C69B85549DD6B3EC`, terminal states `129D3AB04FE4103E17460097C4116E5497D35654EF0E72ED0AE3BC24A2D37267`, base authority `4608DFAAC21EC7BC0435F15E7A8B6223B6FF250E6718CBFF6C8E718E9BB884E5`, unit fixture `C783A3EF23072FDA099C0AAE58EE14B70D9F9927EDB79CC3DBA8A8EDD96767B7`.
+- Checkpoint commit `fdbe56b` contains Milestone 1 runtime integration plus Milestone 2 config/test foundation.
 - The checked-in judge prompt file hash is `545989BB6BE331E469D05722F8437A2F88D6D6E381D64F345CB6C899D73458CE`; it derives from dirty-primary evidence script blob `930ae988f1e0a33c068053e75bd4abe1b644fb7a` / source SHA256 `C1017B55826D6842E22D443B14FAECD5E4978CCE612D973DBEBD628AD2FF0A60`.
 - Blank Likert on exact or approved-typo IDK remains IDK0. Blank Likert on any non-IDK committed diagnosis is `invalid_likert` and scores zero; it must not enter paid judge review.
 - `tests/tmp/` is ignored scratch space; static fixtures under `tests/fixtures/radle_incremental_admission/` are intentionally unignored despite the repo-wide CSV ignore rule.
@@ -82,6 +83,7 @@ Current state (2026-07-10 04:54 +05:30, Codex/GPT-5): Milestone 2 is implemented
 - [x] (2026-07-10 04:16 +05:30, Codex/GPT-5) Created clean integration worktree `C:/tmp/radle_v2_incremental_admission`, preserved the runtime ref, and copied the three planning documents with matching hashes.
 - [x] (2026-07-10 04:40 +05:30, Codex/GPT-5) Snapshot and path-review branch/runtime inputs; preserved only required current blobs, ran validations, and stored independent stronger review receipt.
 - [x] (2026-07-10 04:54 +05:30, Codex/GPT-5) Add roster, judge, terminal-state, and base-authority configs; extract/freeze judge prompt evidence; add config validator, CLI `check-config`, static terminal-state fixture, and synthetic fixture generator. Local validation passes with 11 terminal fixture rows.
+- [x] (2026-07-10 05:02 +05:30, Codex/GPT-5) Committed the Milestone 1-2 foundation checkpoint as `fdbe56b` (`Add RadLE v2 incremental admission foundation`).
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Implement package projection, validation, long-delta creation, exact matching, and dry-run adjudication.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Implement judge evidence, radiologist overlay validation, scored-delta finalization, immutable append, and independent audit.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Make IDK0 Score1000/Score2000 and panel contracts roster/manifest-derived and prove them on synthetic admissions.
@@ -212,6 +214,7 @@ Current state (2026-07-10 04:54 +05:30, Codex/GPT-5): Milestone 2 is implemented
 - v4 (2026-07-10 04:40 +05:30, Codex/GPT-5): recorded Milestone 1 runtime integration, validations, independent review receipt, copied runtime blob IDs, and the notebook `REPO_REF` caveat before Milestone 2.
 - v5 (2026-07-10 04:54 +05:30, Codex/GPT-5): recorded Milestone 2 implementation and validation; integrated scout findings for Milestones 3-6; locked blank-Likert behavior; added config/fixture hashes and next staging gate.
 - v6 (2026-07-10 04:54 +05:30, Codex/GPT-5): integrated second-wave scout findings for dynamic IDK0/public candidates, external package gating, and Grok vertical-slice readiness; clarified that Milestone 8 is config-ready only until Milestones 3-5 exist.
+- v7 (2026-07-10 05:02 +05:30, Codex/GPT-5): recorded checkpoint commit `fdbe56b` and advanced Current State to Milestone 3 implementation.
 
 ## Outcomes & Retrospective
 
@@ -1113,6 +1116,7 @@ Record short literal proof here as execution proceeds:
     Milestone 2 config hashes: roster=2D6DCC6AEF35B1EB38E80D35A0F7407363D080A26119351FEC9AA27AE2EB122C; judges=E7EB33CE809EE30E593228B57641CF77186DB5E5EE060E08C69B85549DD6B3EC; terminal_states=129D3AB04FE4103E17460097C4116E5497D35654EF0E72ED0AE3BC24A2D37267; base_authority=4608DFAAC21EC7BC0435F15E7A8B6223B6FF250E6718CBFF6C8E718E9BB884E5; unit_fixture=C783A3EF23072FDA099C0AAE58EE14B70D9F9927EDB79CC3DBA8A8EDD96767B7
     Milestone 2 judge prompt/source: prompt_file_sha256=545989BB6BE331E469D05722F8437A2F88D6D6E381D64F345CB6C899D73458CE; source_script_git_blob=930ae988f1e0a33c068053e75bd4abe1b644fb7a; source_script_sha256=C1017B55826D6842E22D443B14FAECD5E4978CCE612D973DBEBD628AD2FF0A60
     Milestone 2 validation: py_compile PASS for src/radle_incremental_admission.py and scripts/radle_v2_incremental_admission.py; unittest PASS `Ran 4 tests`; check-config PASS with fixture_rows=11 and active/excluded/pending counts 15/3/3; prohibited live-path rg returned exit 1; JSON_PARSE=PASS; synthetic fixture generator emitted SYNTHETIC_FIXTURE_ROOT=tests\tmp\synthetic_admission; git add --dry-run showed static unit fixture addable and tests/tmp ignored; git ls-files --error-unmatch tests/fixtures/radle_incremental_admission/unit_cases.csv PASS; git diff --cached --check PASS
+    checkpoint commit: fdbe56b Add RadLE v2 incremental admission foundation
     parent wide path/SHA/shape:
     parent final-long path/SHA/shape:
     roster manifest SHA:
