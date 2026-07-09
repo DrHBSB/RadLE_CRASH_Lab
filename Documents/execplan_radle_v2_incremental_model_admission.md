@@ -18,7 +18,7 @@ Success is observable when each committed admission has a sealed input manifest,
 
 ## Current State
 
-Current state (2026-07-10 05:19 +05:30, Codex/GPT-5): Milestone 4 local/synthetic dual-judge routing is implemented and validated, not yet committed. The CLI supports `scripts/radle_v2_dual_judge_delta.py --dry-run` for call math and `--synthetic` for deterministic local judge evidence; judge evidence writes request payloads, append-only-style cache, normalized judge results, agreement locks, routing audit, five-column radiologist queue, evidence index, and a read-only `--phase judge` audit. Real paid OpenRouter calls remain blocked; the script refuses non-dry-run/non-synthetic execution. Next: stage and commit Milestone 4, then implement Milestone 5 finalization and immutable final-long-master append.
+Current state (2026-07-10 05:20 +05:30, Codex/GPT-5): Milestone 4 local/synthetic dual-judge routing is implemented, validated, and committed as `d36938d`. The CLI supports `scripts/radle_v2_dual_judge_delta.py --dry-run` for call math and `--synthetic` for deterministic local judge evidence; judge evidence writes request payloads, append-only-style cache, normalized judge results, agreement locks, routing audit, five-column radiologist queue, evidence index, and a read-only `--phase judge` audit. Real paid OpenRouter calls remain blocked; the script refuses non-dry-run/non-synthetic execution. Next: implement Milestone 5 finalization, radiologist overlay validation, scored delta creation, and immutable final-long-master append.
 
 ## Locked Facts
 
@@ -63,6 +63,7 @@ Current state (2026-07-10 05:19 +05:30, Codex/GPT-5): Milestone 4 local/syntheti
 - Milestone 3 prepare/projection is implemented locally: `project-one-model` produces a one-model package with `results.csv`, `source_manifest.json`, and `SHA256SUMS`; `prepare` writes a content-addressed staging tree with required prepared outputs; prepared audit validates row counts and terminal-state counts.
 - Checkpoint commit `99eb087` contains Milestone 3 prepared admission staging.
 - Milestone 4 synthetic judge routing is implemented locally: dry-run computes call ceilings; synthetic mode writes judge evidence sidecars and a five-column `radiologist_queue.csv`; judge audit validates counts and prompt non-leakage. Real paid judge calls are still not implemented.
+- Checkpoint commit `d36938d` contains Milestone 4 synthetic dual-judge/radiologist routing.
 
 ## Do Not Revisit
 
@@ -90,6 +91,7 @@ Current state (2026-07-10 05:19 +05:30, Codex/GPT-5): Milestone 4 local/syntheti
 - [x] (2026-07-10 05:11 +05:30, Codex/GPT-5) Implement package projection, prepared-stage validation, ground-truth snapshot, parent wide/long reconciliation, long-delta creation, terminal-state routing, judge worklist, and read-only prepared audit.
 - [x] (2026-07-10 05:13 +05:30, Codex/GPT-5) Committed Milestone 3 as `99eb087` (`Implement prepared incremental admission staging`).
 - [x] (2026-07-10 05:19 +05:30, Codex/GPT-5) Implement local/synthetic judge evidence generation, dry-run call math, agreement locks, radiologist queue routing, and read-only judge evidence audit.
+- [x] (2026-07-10 05:20 +05:30, Codex/GPT-5) Committed Milestone 4 as `d36938d` (`Add synthetic dual judge routing`).
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Implement radiologist overlay validation, scored-delta finalization, immutable append, and independent audit.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Make IDK0 Score1000/Score2000 and panel contracts roster/manifest-derived and prove them on synthetic admissions.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Stop at the external-results gate and record required package paths/hashes.
@@ -239,6 +241,7 @@ Current state (2026-07-10 05:19 +05:30, Codex/GPT-5): Milestone 4 local/syntheti
 - v8 (2026-07-10 05:11 +05:30, Codex/GPT-5): recorded Milestone 3 prepare/projection implementation, validation receipts, and the remaining boundary between prepared staging and scored/finalized admission.
 - v9 (2026-07-10 05:13 +05:30, Codex/GPT-5): recorded Milestone 3 commit `99eb087` and advanced Current State to Milestone 4.
 - v10 (2026-07-10 05:19 +05:30, Codex/GPT-5): recorded Milestone 4 local/synthetic judge routing, evidence sidecars, judge audit, and paid-call boundary.
+- v11 (2026-07-10 05:20 +05:30, Codex/GPT-5): recorded Milestone 4 commit `d36938d` and advanced Current State to Milestone 5.
 
 ## Outcomes & Retrospective
 
@@ -1147,6 +1150,7 @@ Record short literal proof here as execution proceeds:
     checkpoint commit: fdbe56b Add RadLE v2 incremental admission foundation
     checkpoint commit: 18afdc5 Record incremental admission checkpoint state
     checkpoint commit: 99eb087 Implement prepared incremental admission staging
+    checkpoint commit: d36938d Add synthetic dual judge routing
     Milestone 3 CLI dry-run: project-one-model printed PROJECTION_STATE=DRY_RUN_VALIDATED with row_count=200 and selected_field_count=19; prepare printed INTAKE_ID=5bce784a17cd85b17863c2578cfd5c571a5f297b00ce6200f5af7e8698351190 and TRANSACTION_STATE=DRY_RUN_VALIDATED
     Milestone 3 prepared audit: py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root tests/tmp/synthetic_admission/output_cli/5bce784a17cd85b17863c2578cfd5c571a5f297b00ce6200f5af7e8698351190 --phase prepared --no-write printed RESULT=PASS with row_counts new_model_long_delta=200, judge_worklist=194
     Milestone 3 validation: py_compile PASS for core/CLI/audit/fixture/tests; unittest PASS `Ran 10 tests`; check-config PASS; prohibited live-path rg returned exit 1
