@@ -71,6 +71,11 @@ MODELS = [
         "extra": None,
     },
     {
+        "name": "grok_4_5",
+        "id": "x-ai/grok-4.5",
+        "extra": None,
+    },
+    {
         "name": "qwen_3_7_plus",
         "id": "qwen/qwen3.7-plus",
         "extra": None,
