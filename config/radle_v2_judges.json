@@ -1,0 +1,27 @@
+{
+  "schema_version": "radle_v2_judges.v1",
+  "base_url": "https://openrouter.ai/api/v1",
+  "temperature": 0,
+  "timeout_seconds": 90,
+  "max_retries": 6,
+  "concurrency": 6,
+  "review_on_any_flag": true,
+  "judges": [
+    {
+      "judge_key": "gemini",
+      "requested_model_id": "google/gemini-3.1-pro-preview"
+    },
+    {
+      "judge_key": "glm",
+      "requested_model_id": "z-ai/glm-5.2"
+    }
+  ],
+  "prompt_file": "config/radle_v2_dual_judge_prompt_v1.txt",
+  "source_evidence": {
+    "description": "SYSTEM_PROMPT extracted from scripts/radle_dual_judge_review.py evidence; the old script itself is not imported because it contains obsolete hard-coded inputs.",
+    "source_script_git_blob": "930ae988f1e0a33c068053e75bd4abe1b644fb7a",
+    "source_script_sha256": "C1017B55826D6842E22D443B14FAECD5E4978CCE612D973DBEBD628AD2FF0A60",
+    "extracted_prompt_sha256_without_file_newline": "c7c53bc2a49695c4e18699643c9c166a536b27a08a6f7961c5ef3edccef26009",
+    "prompt_file_sha256": "545989BB6BE331E469D05722F8437A2F88D6D6E381D64F345CB6C899D73458CE"
+  }
+}

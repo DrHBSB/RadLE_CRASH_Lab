@@ -1,0 +1,101 @@
+{
+  "reviewer_model": "GPT-5 Codex",
+  "reviewer_identity": "independent read-only runtime integration reviewer",
+  "reviewed_utc": "2026-07-09T23:08:06.0653850Z",
+  "runtime_sha": "8029ad46d90b7bc8ab67af1e805ffaa2619b85a2",
+  "base_sha": "3a8c38ea880c5fbdda5a418181703faadb53e3bb",
+  "reviewed_diff_sha256": "dbeddb9ad3fdbc261733a313a7c9c48f8d5454270ae4bba5f46676b156d2ceec",
+  "reviewed_blob_ids": {
+    "origin/main:src/radle_benchmark.py": "6b6cc03901ce7bc262ea3b885a4467690d30ff87",
+    "worktree:src/radle_benchmark.py": "b8e0bbea69ce8dd01696495618cf1405838f16cf",
+    "worktree:src/radle_meta_model_api_runtime.py": "511eaf27669c04db5451dca7a81c67c675585f7d",
+    "worktree:notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb": "d5082d1d75005cf1c688e9ae320b38500359b5a3",
+    "worktree:notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb": "58a4774d9dd78cfb8a328b08e6329a5f1217dc02",
+    "worktree:Documents/execplan_radle_v2_incremental_model_admission.md": "453b6d56055cb0a0cac62add38be6b4d5bcad67e",
+    "worktree:Documents/radle_v2_incremental_model_pipeline_requirements_study.md": "89277ffc2cf98180c461801c2bb1c6f6d1148fcd",
+    "worktree:Documents/requirements_radle_v2_incremental_model_admission.md": "30313d497d8b656453e0e750499d2332186489a4"
+  },
+  "exact_path_allowlist": [
+    "src/radle_benchmark.py",
+    "src/radle_meta_model_api_runtime.py",
+    "notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb",
+    "notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb",
+    "Documents/execplan_radle_v2_incremental_model_admission.md",
+    "Documents/radle_v2_incremental_model_pipeline_requirements_study.md",
+    "Documents/requirements_radle_v2_incremental_model_admission.md"
+  ],
+  "validation_outputs": {
+    "git_status_short_branch": [
+      "## codex/radle-v2-incremental-admission...origin/main",
+      " M src/radle_benchmark.py",
+      "?? Documents/execplan_radle_v2_incremental_model_admission.md",
+      "?? Documents/radle_v2_incremental_model_pipeline_requirements_study.md",
+      "?? Documents/requirements_radle_v2_incremental_model_admission.md",
+      "?? notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb",
+      "?? notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb",
+      "?? src/radle_meta_model_api_runtime.py"
+    ],
+    "git_diff_name_status_origin_main": [
+      "M\tsrc/radle_benchmark.py"
+    ],
+    "git_diff_stat_origin_main": "src/radle_benchmark.py | 59 ++++++++++++++++++++++++++++++++++++++++++++++----",
+    "git_diff_numstat_origin_main": "55\t4\tsrc/radle_benchmark.py",
+    "git_diff_check": "exit 0; no whitespace errors reported; git warned LF will be replaced by CRLF next time Git touches src/radle_benchmark.py",
+    "diff_sha256_command_result": "dbeddb9ad3fdbc261733a313a7c9c48f8d5454270ae4bba5f46676b156d2ceec",
+    "runtime_ref_blob_match": {
+      "src/radle_meta_model_api_runtime.py": true,
+      "notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb": true,
+      "notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb": true
+    },
+    "reviewer_syntax_checks": [
+      "AST_PARSE_OK radle_benchmark.py",
+      "AST_PARSE_OK radle_meta_model_api_runtime.py",
+      "JSON_PARSE_OK RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb",
+      "JSON_PARSE_OK RadLE_Meta_Muse_Spark_ColabPro.ipynb"
+    ],
+    "reviewer_routing_probe": {
+      "GROK_PROVIDER": {
+        "only": [
+          "xAI"
+        ],
+        "allow_fallbacks": false
+      },
+      "GPT_PROVIDER": {
+        "only": [
+          "OpenAI"
+        ],
+        "allow_fallbacks": false
+      },
+      "GPT_EXTRA_KEYS": [
+        "provider",
+        "reasoning"
+      ],
+      "ROUTE_GROK_GENERIC": "generic",
+      "ROUTE_META": "meta",
+      "MODEL_COUNT": 12
+    },
+    "stale_notebook_ref_grep": {
+      "pattern": "49bf0d6|codex/llava-vllm-runtime",
+      "matches": []
+    },
+    "notebook_repo_refs_observed": {
+      "notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb": "REPO_REF = \"codex/morning-meta-muse-spark-append\"",
+      "notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb": "REPO_REF = os.environ.get(\"RADLE_REPO_REF\", \"codex/meta-muse-spark-colab\")"
+    },
+    "main_agent_observed_validation": [
+      "py -3.11 -m py_compile src/radle_benchmark.py src/radle_meta_model_api_runtime.py exited 0",
+      "py -3.11 -m json.tool notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb exited 0",
+      "py -3.11 -m json.tool notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb exited 0",
+      "rg found expected grok_4_5, gpt_5_6_sol_pro, muse_spark_1_1 hits in source/helper/notebooks",
+      "main route probe printed META_CLIENT_ROUTE=PASS and MODEL_COUNT=12"
+    ]
+  },
+  "verdict": "pass",
+  "rationale": "Milestone 1 is acceptable to stage later as a path-scoped runtime integration slice. The tracked diff is limited to src/radle_benchmark.py and only adds the two new OpenRouter model entries, OpenRouter provider-routing packaging, Meta Model API client selection, provider labeling, and meta_client propagation through benchmark and repair calls. The untracked helper and notebooks match the preserved runtime ref by blob ID. No parser, scoring, repair semantics, VLM/Ollama runtime files, or broad GoalBuddy history were imported into the runtime diff. Grok 4.5 and GPT 5.6 are provider-locked through OpenRouter extra_body.provider, while Muse routes through the Meta helper/client path.",
+  "blocking_findings": [],
+  "non_blocking_notes": [
+    "Both notebooks still default to historical branch names rather than codex/radle-v2-incremental-admission. The old llava branch/SHA stale refs are absent, and the notebooks include stale-module guards; however, before an actual Colab execution from the integration branch, override or update REPO_REF so the checkout is unambiguous and non-drifting.",
+    "Planning documents intentionally mention historical refs, including 49bf0d6, codex/llava-vllm-runtime, and the GoalBuddy deletion risk. Status and diff evidence show these are narrative planning references, not imported runtime paths.",
+    "Git emitted local environment warnings about inaccessible global ignore and LF-to-CRLF normalization for src/radle_benchmark.py. These did not affect the reviewed diff hash or diff-check result."
+  ]
+}

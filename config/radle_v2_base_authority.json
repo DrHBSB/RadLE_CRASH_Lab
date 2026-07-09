@@ -1,0 +1,30 @@
+{
+  "schema_version": "radle_v2_base_authority.v1",
+  "base_combined_wide": {
+    "path": "results/radle_v2_combined/final/RadLE_v2_results_final.csv",
+    "rows": 200,
+    "columns": 291,
+    "sha256": "7D9CE5C66FBECB6FF9B72EDB6676CA8CE4F9E5E3DCAF621610437A703EFDE17F"
+  },
+  "base_final_long_master": {
+    "path": "outputs/radle_v2_stats/final_scoring_radiologist_20260706_001147/radle_v2_final_long_master.csv",
+    "rows": 6000,
+    "columns": 20,
+    "sha256": "7641BACC91B1AE9EDACA3249507E31A75924624FA8C232685C835AF1524F51ED"
+  },
+  "base_blinding_key": {
+    "path": "outputs/radle_v2_stats/blinding_key_blinded_combined.csv",
+    "sha256": "09EBF4562EB541B59930930C70D5D6D1E3AF76373C49EA1F4F17C1AB471AB633",
+    "labels": "Candidate A through Candidate AD"
+  },
+  "requirements": {
+    "requirements_radle_v2_incremental_model_admission.md": "322751F4388E305D7B2BCA056A320F643FBC5F951663C4F2DE4CB27C995F098E",
+    "radle_v2_incremental_model_pipeline_requirements_study.md": "1CA43BE159B59042A01CCD6B939C4CCC8B71D03851684F621BE6E8E0599376ED"
+  },
+  "case_fingerprint": {
+    "case_triplet_sha256": "d65221a441c5687cd44d11df689072969d6bbe69089ab0eacaf84cb69ab28dd7",
+    "image_count": 263,
+    "case_count": 200
+  },
+  "model_roster_sha256": "2D6DCC6AEF35B1EB38E80D35A0F7407363D080A26119351FEC9AA27AE2EB122C"
+}

@@ -1,0 +1,94 @@
+{
+  "schema_version": "radle_v2_terminal_states.v1",
+  "normalizer_version": "radle_exact_v1",
+  "normalizer_rules": [
+    "convert input to text",
+    "Unicode NFKC normalization",
+    "case-fold",
+    "replace Unicode punctuation, apostrophes, and hyphens with one space",
+    "collapse whitespace",
+    "trim"
+  ],
+  "forbidden_normalizer_rules": [
+    "stemming",
+    "token reordering",
+    "token deletion",
+    "stop-word removal",
+    "acronym expansion",
+    "synonyms",
+    "edit distance",
+    "LLM calls"
+  ],
+  "idk_exact_normalized": [
+    "i don t know"
+  ],
+  "idk_approved_typo_normalized": [
+    "idon t know"
+  ],
+  "failure_markers_normalized": [
+    "api error",
+    "parse failed",
+    "json missing key",
+    "null error",
+    "error",
+    "provider returned error"
+  ],
+  "invalid_likert_rules": [
+    "valid committed Likert values are integral 0 through 4",
+    "Likert 8 is invalid and scores zero",
+    "blank Likert is allowed only for exact or approved-typo IDK terminal states",
+    "blank Likert on any non-IDK committed diagnosis is invalid_likert"
+  ],
+  "mandatory_radiologist_rules": [
+    {
+      "rule_id": "case_164_diffuse_esophageal_spasm_conflict",
+      "Master_Case_ID": "164",
+      "diagnosis_normalized": "diffuse esophageal spasm",
+      "action": "radiologist"
+    }
+  ],
+  "states": [
+    {
+      "state": "provider_or_parse_failure",
+      "precedence": 10,
+      "correctness_action": "zero",
+      "judge_required": false
+    },
+    {
+      "state": "invalid_likert",
+      "precedence": 20,
+      "correctness_action": "zero",
+      "judge_required": false
+    },
+    {
+      "state": "idk_exact",
+      "precedence": 30,
+      "correctness_action": "zero",
+      "judge_required": false
+    },
+    {
+      "state": "idk_approved_typo",
+      "precedence": 40,
+      "correctness_action": "zero",
+      "judge_required": false
+    },
+    {
+      "state": "canonical_exact",
+      "precedence": 50,
+      "correctness_action": "one",
+      "judge_required": false
+    },
+    {
+      "state": "mandatory_radiologist",
+      "precedence": 60,
+      "correctness_action": "radiologist",
+      "judge_required": false
+    },
+    {
+      "state": "judge_required",
+      "precedence": 70,
+      "correctness_action": "dual_judge",
+      "judge_required": true
+    }
+  ]
+}

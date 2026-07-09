@@ -19,6 +19,12 @@ artifacts/
 *.xlsx
 *.jsonl
 
+# Checked-in synthetic unit fixtures for the incremental-admission contract.
+!tests/fixtures/radle_incremental_admission/**/*.csv
+!tests/fixtures/radle_incremental_admission/**/*.jsonl
+!tests/fixtures/radle_incremental_admission/**/*.txt
+tests/tmp/
+
 # Medical image exports or local dataset copies should not be committed.
 *.jpg
 *.jpeg
