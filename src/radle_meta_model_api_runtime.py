@@ -144,6 +144,7 @@ def run_meta_model_benchmark(
     model_config = get_model_config()
     df = radle_benchmark.run_benchmark(
         client=client,
+        meta_client=client,
         image_folder=str(image_folder),
         output_csv=str(output_csv),
         test_limit=test_limit,

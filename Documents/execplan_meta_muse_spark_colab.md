@@ -10,7 +10,7 @@ RadLE collaborators in the United States have legitimate Meta Model API access a
 
 ## Current State
 
-Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The one-case Muse Spark smoke gate is complete and clean: the resumed run made zero new API calls, audit integrity found one expected case with no duplicates/missing/extra cases, and the sole cell is `accepted` with zero repair or cleanup targets. Next: when the collaborator is ready to incur full-run API cost, change to a distinct full-run label and `TEST_LIMIT = None`, run the benchmark, audit the resulting full CSV, then consider repair and promotion in order.
+Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The Morning integration is committed locally in the clean follow-on branch `codex/morning-meta-muse-spark-append`. `src/radle_benchmark.py` now has explicit Meta client dispatch for benchmark and repair calls, and `notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb` is configured for the serial Grok/GPT56/Muse append into `Runs/radle_v2/raw/results.csv`. Next: push the branch; after the active Grok/GPT run stops, open the new notebook, rerun setup/import/config, and let resume skip accepted cells before making only the missing calls.
 
 ## Locked Facts
 
@@ -20,6 +20,9 @@ Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The one-case Muse Spark sm
 - The Muse Spark run is collaborator-run under legitimate Meta developer access; no region bypass, proxy, VPN, or fake-location behavior belongs in this notebook.
 - `audit_benchmark_output()` returns tabular `audit`, `repair_targets`, and `no_paid_cleanup` entries; its API does not include `row_count` or `no_paid_cleanup_targets`.
 - The smoke run at `Runs/muse_spark_1_1_meta_muse_spark_1case/` is a valid one-case artifact only: audit reported `rows=1`, `unique_cases=1`, one `accepted` bucket cell, and zero repair or cleanup targets.
+- `gpt_5_6_sol_pro` is the verified Morning model name for `openai/gpt-5.6-sol-pro`; the prepared combined Grok/GPT branch is `codex/gpt56-openrouter-smoke` at `8feeb7b`.
+- Before this integration, the dispatcher routed only native Anthropic, Google, and OpenAI clients; `muse_spark_1_1` would otherwise have fallen through to Morning's OpenRouter client.
+- The dispatcher now accepts optional `meta_client` in `run_benchmark`, `run_targeted_repair`, and `call_model`; only models marked `provider="meta_model_api"` use it, and their provider column is `Meta Model API`.
 
 ## Do Not Revisit
 
@@ -27,6 +30,7 @@ Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The one-case Muse Spark sm
 - Do not paste or persist the API key in the notebook. See Decision Log 2026-07-10.
 - Do not modify existing dirty notebooks for this task. See Decision Log 2026-07-10.
 - Do not promote or export the one-case smoke output as a full benchmark result. See Decision Log 2026-07-10.
+- Do not edit or rerun the active `codex/gpt56-openrouter-smoke` Morning process concurrently. See Decision Log 2026-07-10.
 
 ## Progress
 
@@ -41,6 +45,12 @@ Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The one-case Muse Spark sm
 - [x] (2026-07-10 01:44 +05:30, Codex/GPT-5) Validated all 10 notebook code cells with `ast.parse` and called `audit_benchmark_output()` against a one-row local fixture; observed audit display counts `1 0 0`.
 - [x] (2026-07-10 01:44 +05:30, Codex/GPT-5) Published the narrow notebook and plan correction as `6460d22 Fix Meta Muse Spark audit display schema` using an isolated Git index; no unrelated worktree files were staged.
 - [x] (2026-07-10 01:55 +05:30, Codex/GPT-5) Received collaborator Colab audit evidence: resumed one-case run made `0` API calls; `rows=1`, `unique_cases=1`, no duplicate/missing/extra IDs, `accepted=1`, `repair_targets=0`, and `no_paid_cleanup_targets=0`.
+- [x] (2026-07-10 01:55 +05:30, Codex/GPT-5) Created clean worktree `C:\\tmp\\radle_morning_meta_append` and branch `codex/morning-meta-muse-spark-append` from `8feeb7b`; cherry-picked the validated Meta runner commits through `e4f2e84` without touching the active GPT/Grok branch.
+- [x] (2026-07-10 01:55 +05:30, Codex/GPT-5) Added Meta client dispatch to `src/radle_benchmark.py` and updated `src/radle_meta_model_api_runtime.py` to pass its direct client through that path.
+- [x] (2026-07-10 01:55 +05:30, Codex/GPT-5) Copied the active-branch Morning notebook into `notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb`, pinned it to the follow-on branch, and configured a three-model serial resume run plus matching audit, repair, and export lists.
+- [x] (2026-07-10 01:55 +05:30, Codex/GPT-5) Passed `py -3.11 -m py_compile` for both Python modules, parsed all nine notebook code cells, passed `git diff --check`, and passed a no-network fake-client Meta dispatch probe through `call_model`.
+- [x] (2026-07-10 01:55 +05:30, Codex/GPT-5) Committed the prepared integration branch as `19eb275 Integrate Meta Muse Spark into Morning append`; Colab execution remains deferred until the active Grok/GPT process is no longer writing the shared CSV.
+- [ ] (2026-07-10 01:55 +05:30, Codex/GPT-5) Push `codex/morning-meta-muse-spark-append` and then use the branch-pinned integration notebook after the active writer stops.
 
 ## Surprises & Discoveries
 
@@ -74,6 +84,9 @@ Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The one-case Muse Spark sm
 - Decision: Accept the smoke gate and keep the next execution as a separate full-run milestone.
   Rationale: The user-provided audit proves a complete and accepted one-case model result, but `TEST_LIMIT = 1` is intentionally non-promotable. A new full-run label prevents any partial artifact from being mistaken for the complete dataset.
   Date/Author: 2026-07-10, Codex/GPT-5
+- Decision: Promote Meta to a native client path in `radle_benchmark.py` and use one serial Morning process for all three models.
+  Rationale: This makes the benchmark and targeted repair paths select the right client for every model while retaining one shared, resumable CSV. A new branch prevents concurrent writers from changing the active Grok/GPT append.
+  Date/Author: 2026-07-10, Codex/GPT-5
 
 ## Revision Notes
 
@@ -81,12 +94,15 @@ Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The one-case Muse Spark sm
 - v2 (2026-07-10, Codex/GPT-5): Recorded the Colab-discovered audit display schema mismatch, state-lock resolution, local reproduction, and the narrow consumer-only correction.
 - v3 (2026-07-10, Codex/GPT-5): Compacted the resolved audit mismatch into Locked Facts and recorded publication commit `6460d22`.
 - v4 (2026-07-10, Codex/GPT-5): Recorded the clean collaborator smoke audit and advanced the next action to a separate full-run milestone.
+- v5 (2026-07-10, Codex/GPT-5): Extended the existing plan, rather than creating a child plan, for post-resume Morning integration with Grok 4.5 and GPT 5.6 Sol Pro.
+- v6 (2026-07-10, Codex/GPT-5): Recorded the implemented native Meta dispatch, copied three-model Morning notebook, static validation, and no-network dispatcher proof.
+- v7 (2026-07-10, Codex/GPT-5): Recorded the local integration commit and retained the active-writer wait condition for Colab execution.
 
 ## Outcomes & Retrospective
 
-Completed additive local validation, collaborator text probe, and collaborator one-case benchmark execution. The one-case result showed native Meta provider routing, diagnosis `Left carotid cavernous fistula`, Likert `4`, `1361` prompt tokens, `950` output tokens, `919` reasoning tokens, and `8.3` seconds latency. The resumed audit verified one expected row, no ID integrity defects, one `accepted` cell, and zero repair/cleanup targets. The stale audit display was corrected in `6460d22`; the only remaining execution milestone is an explicitly configured full run using the collaborator's Colab Pro runtime, private RadLE dataset, and Meta Model API key.
+Completed additive local validation, collaborator text probe, collaborator one-case benchmark execution, and a prepared three-model Morning integration. The one-case result showed native Meta provider routing, diagnosis `Left carotid cavernous fistula`, Likert `4`, `1361` prompt tokens, `950` output tokens, `919` reasoning tokens, and `8.3` seconds latency. The resumed audit verified one expected row, no ID integrity defects, one `accepted` cell, and zero repair/cleanup targets. The integration adds no paid calls locally; it is safe to execute only after the live Grok/GPT writer has stopped because all models then share one serial resumable CSV.
 
-The task branch was published as `codex/meta-muse-spark-colab`. The implementation commit was `3f17f03 Add Meta Muse Spark Colab runner`, followed by plan-only publication updates.
+The task branch was published as `codex/meta-muse-spark-colab`. The implementation commit was `3f17f03 Add Meta Muse Spark Colab runner`, followed by plan-only publication updates. The follow-on Morning integration branch is intentionally separate and has not made any paid calls.
 
 No reusable skill change is proposed: this was a repository-specific stale consumer key rather than a cross-project workflow gap.
 
@@ -96,6 +112,7 @@ No reusable skill change is proposed: this was a repository-specific stale consu
 | --- | --- | --- | --- |
 | Planning | `execplan` | Required for a multi-step collaborator-facing notebook with secrets and runtime validation. | `auto-suggest` |
 | Notebook construction | `jupyter-notebook` | Provides notebook structure and validation guidance. | `auto-suggest` |
+| Morning integration | `workflow-router`, `execplan`, `jupyter-notebook` | Keeps the active writer isolated, preserves the living handoff, and validates the copied runnable notebook. | `auto-suggest` |
 | Implementation | `none` | Direct additive source and notebook edits are sufficient. | `none` |
 | Validation | `jupyter-notebook` | Use notebook JSON and code-cell validation; full execution needs collaborator API and RadLE data. | `auto-suggest` |
 
@@ -118,6 +135,8 @@ Add `notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb` with cells for:
 7. Targeted repair preview/run.
 8. Private final promotion guard.
 9. Public release export guard.
+
+For the Morning integration, edit `src/radle_benchmark.py` so Meta has the same explicit client-selection behavior as the existing native providers, including benchmark and targeted-repair callers. Copy `notebooks/RadLE_v1_5_Morning.ipynb` into a new integration notebook rather than mutating the notebook used by the active resume. The new notebook must create a Meta client from `MODEL_API_KEY` or `META_MODEL_API_KEY`, select the existing `grok_4_5` and `gpt_5_6_sol_pro` registry entries plus the Meta model config, and run them serially into `Runs/radle_v2/raw/results.csv` with `RESUME=True`.
 
 ## Concrete Steps (Commands)
 

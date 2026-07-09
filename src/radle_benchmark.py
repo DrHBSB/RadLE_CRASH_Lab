@@ -1263,6 +1263,11 @@ def uses_native_openai(model):
     return model.get("provider") == "openai"
 
 
+def uses_native_meta(model):
+    """Return True for models served by the Meta Model API."""
+    return model.get("provider") == "meta_model_api"
+
+
 def uses_native_anthropic(model):
     """Return True for models that should use the native Anthropic Messages API."""
     return model.get("provider") == "anthropic"
@@ -1379,7 +1384,14 @@ def build_api_params(model, content_array, max_output_tokens, universal_temperat
     return api_params
 
 
-def get_api_client(model, client, openai_client, anthropic_client=None, gemini_client=None):
+def get_api_client(
+    model,
+    client,
+    openai_client,
+    anthropic_client=None,
+    gemini_client=None,
+    meta_client=None,
+):
     """Select the appropriate provider client for the given model."""
     if uses_native_anthropic(model):
         if anthropic_client is None:
@@ -1393,6 +1405,10 @@ def get_api_client(model, client, openai_client, anthropic_client=None, gemini_c
         if openai_client is None:
             raise ValueError("openai_client is required for native OpenAI models.")
         return openai_client
+    if uses_native_meta(model):
+        if meta_client is None:
+            raise ValueError("meta_client is required for Meta Model API models.")
+        return meta_client
     return client
 
 
@@ -1452,6 +1468,7 @@ def call_model(
     openai_client=None,
     anthropic_client=None,
     gemini_client=None,
+    meta_client=None,
     max_output_tokens=MAX_OUTPUT_TOKENS,
     universal_temperature=UNIVERSAL_TEMPERATURE,
     max_retries=3,
@@ -1463,7 +1480,14 @@ def call_model(
         max_output_tokens,
         universal_temperature,
     )
-    api_client = get_api_client(model, client, openai_client, anthropic_client, gemini_client)
+    api_client = get_api_client(
+        model,
+        client,
+        openai_client,
+        anthropic_client,
+        gemini_client,
+        meta_client,
+    )
 
     response = None
     last_error = "Unknown error occurred before execution"
@@ -1596,9 +1620,15 @@ def extract_result(response, latency, api_params, grok_fallback_used, model):
                 elif hasattr(details, "__dict__"):
                     reasoning_tokens = vars(details).get("reasoning_tokens", 0)
 
-        provider_used = "OpenAI" if uses_native_openai(model) else "UNKNOWN"
+        if uses_native_openai(model):
+            provider_used = "OpenAI"
+        elif uses_native_meta(model):
+            provider_used = "Meta Model API"
+        else:
+            provider_used = "UNKNOWN"
         if (
             not uses_native_openai(model)
+            and not uses_native_meta(model)
             and hasattr(response, "model_extra")
             and response.model_extra
         ):
@@ -1792,6 +1822,7 @@ def run_targeted_repair(
     openai_client=None,
     anthropic_client=None,
     gemini_client=None,
+    meta_client=None,
     repair_backup_interval=CHECKPOINT_CASE_INTERVAL,
     backup_dir=None,
 ):
@@ -1983,6 +2014,7 @@ def run_targeted_repair(
                     openai_client=openai_client,
                     anthropic_client=anthropic_client,
                     gemini_client=gemini_client,
+                    meta_client=meta_client,
                     max_output_tokens=max_output_tokens,
                     universal_temperature=universal_temperature,
                 )
@@ -2190,6 +2222,7 @@ def run_benchmark(
     openai_client=None,
     anthropic_client=None,
     gemini_client=None,
+    meta_client=None,
     resume=True,
     backup_dir=None,
 ):
@@ -2251,6 +2284,7 @@ def run_benchmark(
                     openai_client=openai_client,
                     anthropic_client=anthropic_client,
                     gemini_client=gemini_client,
+                    meta_client=meta_client,
                     max_output_tokens=max_output_tokens,
                     universal_temperature=universal_temperature,
                 )
