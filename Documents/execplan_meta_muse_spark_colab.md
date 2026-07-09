@@ -10,7 +10,7 @@ RadLE collaborators in the United States have legitimate Meta Model API access a
 
 ## Current State
 
-Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The Morning integration is committed locally in the clean follow-on branch `codex/morning-meta-muse-spark-append`. `src/radle_benchmark.py` now has explicit Meta client dispatch for benchmark and repair calls, and `notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb` is configured for the serial Grok/GPT56/Muse append into `Runs/radle_v2/raw/results.csv`. Next: push the branch; after the active Grok/GPT run stops, open the new notebook, rerun setup/import/config, and let resume skip accepted cells before making only the missing calls.
+Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The Morning integration is published as `b0a1ba5` on `codex/morning-meta-muse-spark-append`. `src/radle_benchmark.py` has explicit Meta client dispatch for benchmark and repair calls, and `notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb` is configured for the serial Grok/GPT56/Muse append into `Runs/radle_v2/raw/results.csv`. Next: after the active Grok/GPT run stops, open the new notebook, rerun setup/import/config, and let resume skip accepted cells before making only the missing calls.
 
 ## Locked Facts
 
@@ -49,8 +49,8 @@ Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The Morning integration is
 - [x] (2026-07-10 01:55 +05:30, Codex/GPT-5) Added Meta client dispatch to `src/radle_benchmark.py` and updated `src/radle_meta_model_api_runtime.py` to pass its direct client through that path.
 - [x] (2026-07-10 01:55 +05:30, Codex/GPT-5) Copied the active-branch Morning notebook into `notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb`, pinned it to the follow-on branch, and configured a three-model serial resume run plus matching audit, repair, and export lists.
 - [x] (2026-07-10 01:55 +05:30, Codex/GPT-5) Passed `py -3.11 -m py_compile` for both Python modules, parsed all nine notebook code cells, passed `git diff --check`, and passed a no-network fake-client Meta dispatch probe through `call_model`.
-- [x] (2026-07-10 01:55 +05:30, Codex/GPT-5) Committed the prepared integration branch as `19eb275 Integrate Meta Muse Spark into Morning append`; Colab execution remains deferred until the active Grok/GPT process is no longer writing the shared CSV.
-- [ ] (2026-07-10 01:55 +05:30, Codex/GPT-5) Push `codex/morning-meta-muse-spark-append` and then use the branch-pinned integration notebook after the active writer stops.
+- [x] (2026-07-10 01:55 +05:30, Codex/GPT-5) Committed the prepared integration branch as `b0a1ba5 Integrate Meta Muse Spark into Morning append`; Colab execution remains deferred until the active Grok/GPT process is no longer writing the shared CSV.
+- [x] (2026-07-10 01:55 +05:30, Codex/GPT-5) Pushed `codex/morning-meta-muse-spark-append` to origin. Use the branch-pinned integration notebook only after the active writer stops.
 
 ## Surprises & Discoveries
 
@@ -97,12 +97,13 @@ Current state (2026-07-10 01:55 +05:30, Codex/GPT-5): The Morning integration is
 - v5 (2026-07-10, Codex/GPT-5): Extended the existing plan, rather than creating a child plan, for post-resume Morning integration with Grok 4.5 and GPT 5.6 Sol Pro.
 - v6 (2026-07-10, Codex/GPT-5): Recorded the implemented native Meta dispatch, copied three-model Morning notebook, static validation, and no-network dispatcher proof.
 - v7 (2026-07-10, Codex/GPT-5): Recorded the local integration commit and retained the active-writer wait condition for Colab execution.
+- v8 (2026-07-10, Codex/GPT-5): Reconciled the amended commit hash and recorded publication of the follow-on Morning integration branch.
 
 ## Outcomes & Retrospective
 
 Completed additive local validation, collaborator text probe, collaborator one-case benchmark execution, and a prepared three-model Morning integration. The one-case result showed native Meta provider routing, diagnosis `Left carotid cavernous fistula`, Likert `4`, `1361` prompt tokens, `950` output tokens, `919` reasoning tokens, and `8.3` seconds latency. The resumed audit verified one expected row, no ID integrity defects, one `accepted` cell, and zero repair/cleanup targets. The integration adds no paid calls locally; it is safe to execute only after the live Grok/GPT writer has stopped because all models then share one serial resumable CSV.
 
-The task branch was published as `codex/meta-muse-spark-colab`. The implementation commit was `3f17f03 Add Meta Muse Spark Colab runner`, followed by plan-only publication updates. The follow-on Morning integration branch is intentionally separate and has not made any paid calls.
+The task branch was published as `codex/meta-muse-spark-colab`. The implementation commit was `3f17f03 Add Meta Muse Spark Colab runner`, followed by plan-only publication updates. The follow-on Morning integration branch `codex/morning-meta-muse-spark-append` is published at `b0a1ba5` and has not made any paid calls.
 
 No reusable skill change is proposed: this was a repository-specific stale consumer key rather than a cross-project workflow gap.
 
