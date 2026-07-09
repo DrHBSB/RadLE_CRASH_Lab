@@ -18,11 +18,14 @@ if str(SRC_ROOT) not in sys.path:
 from radle_incremental_admission import (
     RADIOLOGIST_QUEUE_FIELDS,
     ValidationError,
+    audit_finalized_admission,
     audit_judge_evidence,
     allocate_next_candidate_label,
     audit_prepared_staging,
     classify_terminal_state,
     normalize_diagnosis,
+    commit_finalized_admission,
+    finalize_incremental_admission,
     prepare_incremental_admission,
     project_one_model_package,
     run_synthetic_dual_judge_delta,
@@ -107,6 +110,56 @@ class IncrementalAdmissionPrepareTests(unittest.TestCase):
             writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
             writer.writeheader()
             writer.writerows(rows)
+
+    def write_radiologist_decisions(self, staging: Path, rows: list[dict[str, str]] | None = None) -> Path:
+        if rows is None:
+            rows = [
+                {
+                    "Master_Case_ID": "6",
+                    "model_blinded": "Candidate AE",
+                    "score_binary": "1",
+                    "reviewer_pseudonym": "synthetic_rad",
+                    "reviewed_utc": "2026-01-03T00:00:00+00:00",
+                    "rationale": "synthetic disagreement decision",
+                },
+                {
+                    "Master_Case_ID": "7",
+                    "model_blinded": "Candidate AE",
+                    "score_binary": "0",
+                    "reviewer_pseudonym": "synthetic_rad",
+                    "reviewed_utc": "2026-01-03T00:00:00+00:00",
+                    "rationale": "synthetic flag decision",
+                },
+                {
+                    "Master_Case_ID": "164",
+                    "model_blinded": "Candidate AE",
+                    "score_binary": "0",
+                    "reviewer_pseudonym": "synthetic_rad",
+                    "reviewed_utc": "2026-01-03T00:00:00+00:00",
+                    "rationale": "mandatory review decision",
+                },
+            ]
+        path = staging / "radiologist_decisions.csv"
+        fieldnames = ["Master_Case_ID", "model_blinded", "score_binary", "reviewer_pseudonym", "reviewed_utc", "rationale"]
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
+            writer.writeheader()
+            writer.writerows(rows)
+        return path
+
+    def prepared_with_judges(self, tmp: str) -> tuple[Path, Path]:
+        fixture = self.make_fixture(Path(tmp))
+        output_root = Path(tmp) / "output"
+        receipt = prepare_incremental_admission(**self.prepare_args(fixture, output_root), dry_run=False)
+        staging = Path(str(receipt["staging_root"]))
+        run_synthetic_dual_judge_delta(
+            staging_root=staging,
+            judges_path=REPO_ROOT / "config/radle_v2_judges.json",
+            out_dir=staging / "judge_evidence",
+            repo_root=REPO_ROOT,
+            dry_run=False,
+        )
+        return fixture, staging
 
     def test_prepare_dry_run_is_idempotent_and_writes_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -298,6 +351,51 @@ class IncrementalAdmissionPrepareTests(unittest.TestCase):
             request_text = (staging / "judge_evidence/request_payloads.jsonl").read_text(encoding="utf-8")
             self.assertNotIn("Candidate AE", request_text)
             self.assertNotIn("synthetic_model_v1", request_text)
+
+    def test_finalize_requires_complete_radiologist_overlay(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, staging = self.prepared_with_judges(tmp)
+            incomplete = self.write_radiologist_decisions(staging, rows=[
+                {
+                    "Master_Case_ID": "6",
+                    "model_blinded": "Candidate AE",
+                    "score_binary": "1",
+                    "reviewer_pseudonym": "synthetic_rad",
+                    "reviewed_utc": "2026-01-03T00:00:00+00:00",
+                    "rationale": "missing other decisions",
+                }
+            ])
+            with self.assertRaises(ValidationError):
+                finalize_incremental_admission(intake_root=staging, radiologist_decisions=incomplete)
+
+    def test_finalize_commit_and_readback_preserve_parent_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture, staging = self.prepared_with_judges(tmp)
+            decisions = self.write_radiologist_decisions(staging)
+            receipt = finalize_incremental_admission(intake_root=staging, radiologist_decisions=decisions)
+            final_root = Path(str(receipt["final_staging_root"]))
+            self.assertEqual(receipt["transaction_state"], "PRECOMMIT_VALIDATED")
+            self.assertEqual(receipt["source_counts"]["dual_judge_agreement"], 192)
+            self.assertEqual(receipt["source_counts"]["radiologist"], 3)
+            audit = audit_finalized_admission(final_root)
+            self.assertEqual(audit["result"], "PASS")
+            self.assertEqual(audit["scored_delta_rows"], 200)
+            parent_bytes = (fixture / "parent_final_long_master.csv").read_bytes()
+            final_bytes = (final_root / "final/radle_v2_final_long_master.csv").read_bytes()
+            self.assertTrue(final_bytes.startswith(parent_bytes))
+            scored_rows = self.read_rows(final_root / "scored_append_delta.csv")
+            self.assertEqual(len(scored_rows), 200)
+            self.assertEqual({row["final_score"] for row in scored_rows}, {"0", "1"})
+
+            commit = commit_finalized_admission(final_root)
+            self.assertEqual(commit["transaction_state"], "FINAL_MASTER_COMMITTED")
+            self.assertTrue((final_root / "SHA256SUMS").exists())
+            self.assertTrue((final_root / "COMMITTED.json").exists())
+            readback = audit_finalized_admission(final_root, require_committed=True)
+            self.assertEqual(readback["result"], "PASS")
+            self.assertGreater(readback["checksum_rows"], 0)
+            second_commit = commit_finalized_admission(final_root)
+            self.assertEqual(second_commit["transaction_state"], "ALREADY_ADMITTED")
 
 
 if __name__ == "__main__":

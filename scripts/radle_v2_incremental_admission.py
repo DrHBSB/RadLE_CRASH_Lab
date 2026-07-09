@@ -12,7 +12,12 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from radle_incremental_admission import ValidationError, sha256_file, validate_configs
-from radle_incremental_admission import prepare_incremental_admission, project_one_model_package
+from radle_incremental_admission import (
+    commit_finalized_admission,
+    finalize_incremental_admission,
+    prepare_incremental_admission,
+    project_one_model_package,
+)
 
 
 def _cmd_check_config(args: argparse.Namespace) -> int:
@@ -70,6 +75,26 @@ def _cmd_project_one_model(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_finalize_stage(args: argparse.Namespace) -> int:
+    receipt = finalize_incremental_admission(
+        intake_root=Path(args.intake_root),
+        radiologist_decisions=Path(args.radiologist_decisions),
+    )
+    print(json.dumps(receipt, indent=2, sort_keys=True))
+    print(f"FINALIZATION_ID={receipt['finalization_id']}")
+    print(f"FINAL_STAGING_ROOT={receipt['final_staging_root']}")
+    print(f"TRANSACTION_STATE={receipt['transaction_state']}")
+    return 0
+
+
+def _cmd_commit(args: argparse.Namespace) -> int:
+    receipt = commit_finalized_admission(Path(args.final_staging_root))
+    print(json.dumps(receipt, indent=2, sort_keys=True))
+    print(f"COMMITTED_ROOT={receipt['committed_root']}")
+    print(f"TRANSACTION_STATE={receipt['transaction_state']}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="RadLE v2 incremental admission utilities")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -100,6 +125,15 @@ def build_parser() -> argparse.ArgumentParser:
     project.add_argument("--output-package", required=True)
     project.add_argument("--dry-run", action="store_true")
     project.set_defaults(func=_cmd_project_one_model)
+
+    finalize = subparsers.add_parser("finalize-stage", help="create a finalized scored delta and sibling master")
+    finalize.add_argument("--intake-root", required=True)
+    finalize.add_argument("--radiologist-decisions", required=True)
+    finalize.set_defaults(func=_cmd_finalize_stage)
+
+    commit = subparsers.add_parser("commit", help="mark a finalized admission committed")
+    commit.add_argument("--final-staging-root", required=True)
+    commit.set_defaults(func=_cmd_commit)
     return parser
 
 
