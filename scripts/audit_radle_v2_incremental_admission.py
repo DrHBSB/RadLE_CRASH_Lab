@@ -11,19 +11,21 @@ SRC_ROOT = REPO_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from radle_incremental_admission import ValidationError, audit_prepared_staging
+from radle_incremental_admission import ValidationError, audit_judge_evidence, audit_prepared_staging
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Audit RadLE v2 incremental admission artifacts")
     parser.add_argument("--admission-root", required=True)
-    parser.add_argument("--phase", choices=["prepared"], required=True)
+    parser.add_argument("--phase", choices=["prepared", "judge"], required=True)
     parser.add_argument("--no-write", action="store_true")
     args = parser.parse_args(argv)
 
     try:
         if args.phase == "prepared":
             receipt = audit_prepared_staging(Path(args.admission_root))
+        elif args.phase == "judge":
+            receipt = audit_judge_evidence(Path(args.admission_root))
         else:
             raise ValidationError(f"unsupported audit phase: {args.phase}")
     except ValidationError as exc:

@@ -53,6 +53,7 @@ REQUIRED_MODEL_FIELDS = {
     "roster_status",
 }
 PROHIBITED_LIVE_STATS_PATH = "C:/Users/thehb/Documents/" + "RadLE Stats"
+RADIOLOGIST_QUEUE_FIELDS = ["Master_Case_ID", "model_blinded", "Ground_Truth_Diagnosis", "diagnosis", "likert"]
 
 
 class ValidationError(ValueError):
@@ -917,3 +918,271 @@ def audit_prepared_staging(staging_root: Path) -> dict[str, Any]:
         "row_counts": row_counts,
         "terminal_state_counts": manifest.get("terminal_state_counts"),
     }
+
+
+def audit_judge_evidence(staging_root: Path) -> dict[str, Any]:
+    manifest = read_json(staging_root / "append_input_manifest.json")
+    evidence_root = staging_root / "judge_evidence"
+    index_path = evidence_root / "judge_evidence_index.json"
+    if not index_path.exists():
+        raise ValidationError(f"judge_evidence_index.json missing under {evidence_root}")
+    index = read_json(index_path)
+    required = {
+        "request_payloads": evidence_root / "request_payloads.jsonl",
+        "judge_cache": evidence_root / "judge_cache.jsonl",
+        "judge_results": evidence_root / "judge_results.jsonl",
+        "agreement_locks": evidence_root / "agreement_locks.csv",
+        "routing_audit": evidence_root / "radiologist_queue_routing_audit.json",
+        "radiologist_queue": staging_root / "radiologist_queue.csv",
+    }
+    for label, path in required.items():
+        if not path.exists():
+            raise ValidationError(f"{label} evidence file missing: {path}")
+    with (staging_root / "radiologist_queue.csv").open("r", encoding="utf-8", newline="") as handle:
+        queue_reader = csv.DictReader(handle)
+        if queue_reader.fieldnames != RADIOLOGIST_QUEUE_FIELDS:
+            raise ValidationError(f"radiologist_queue.csv columns mismatch: {queue_reader.fieldnames}")
+        queue_rows = list(queue_reader)
+    with (evidence_root / "agreement_locks.csv").open("r", encoding="utf-8", newline="") as handle:
+        lock_rows = list(csv.DictReader(handle))
+    judge_result_rows = [
+        json.loads(line)
+        for line in (evidence_root / "judge_results.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    request_text = (evidence_root / "request_payloads.jsonl").read_text(encoding="utf-8")
+    if str(manifest.get("model_key", "")) in request_text or str(manifest.get("model_blinded", "")) in request_text:
+        raise ValidationError("judge request payload leaks model key or blind label")
+    summary = index.get("summary", {})
+    if int(summary.get("judge_result_rows", -1)) != len(judge_result_rows):
+        raise ValidationError("judge result row count mismatch")
+    if int(summary.get("locked_agreement_rows", -1)) != len(lock_rows):
+        raise ValidationError("agreement lock row count mismatch")
+    if int(summary.get("radiologist_queue_rows", -1)) != len(queue_rows):
+        raise ValidationError("radiologist queue row count mismatch")
+    return {
+        "result": "PASS",
+        "phase": "judge",
+        "intake_id": manifest.get("intake_id"),
+        "judge_result_rows": len(judge_result_rows),
+        "locked_agreement_rows": len(lock_rows),
+        "radiologist_queue_rows": len(queue_rows),
+        "malformed_cache_line_count": index.get("malformed_cache_line_count", 0),
+    }
+
+
+def _judge_score_for_case(case_id: str, judge_key: str) -> tuple[int, bool, str]:
+    if case_id == "5":
+        return 1, False, "synthetic_agreement_correct"
+    if case_id == "6":
+        return (1 if judge_key == "gemini" else 0), False, "synthetic_disagreement"
+    if case_id == "7":
+        return 0, judge_key == "gemini", "synthetic_review_flag"
+    return 0, False, "synthetic_agreement_incorrect"
+
+
+def _request_payload(row: dict[str, str]) -> dict[str, str]:
+    return {
+        "reference_diagnosis": row.get("Ground_Truth_Diagnosis", ""),
+        "candidate_diagnosis": row.get("diagnosis", ""),
+    }
+
+
+def run_synthetic_dual_judge_delta(
+    *,
+    staging_root: Path,
+    judges_path: Path,
+    out_dir: Path,
+    repo_root: Path,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    manifest = read_json(staging_root / "append_input_manifest.json")
+    judges_config = read_json(judges_path)
+    validate_judges(judges_config, repo_root)
+    prompt_path = repo_root / str(judges_config.get("prompt_file", ""))
+    prompt_sha = sha256_file(prompt_path)
+    judge_config_sha = sha256_file(judges_path)
+    terminal_policy_sha = sha256_file(repo_root / "config/radle_v2_terminal_states.json")
+    variants_sha = sha256_file(staging_root / "accepted_variants_snapshot.csv")
+    normalizer_code_sha = sha256_file(Path(__file__))
+    worklist_fields, worklist_rows = read_csv_table(staging_root / "judge_worklist.csv")
+    require_columns(worklist_fields, RADIOLOGIST_QUEUE_FIELDS, "judge worklist")
+    max_retries = int(judges_config.get("max_retries", 1))
+    judge_count = len(judges_config.get("judges", []))
+    base_calls = len(worklist_rows) * judge_count
+    receipt: dict[str, Any] = {
+        "phase": "dual_judge_delta",
+        "mode": "synthetic",
+        "intake_id": manifest.get("intake_id"),
+        "worklist_rows": len(worklist_rows),
+        "judge_count": judge_count,
+        "base_calls": base_calls,
+        "worst_case_http_requests": base_calls * max_retries,
+        "prompt_sha256": prompt_sha,
+    }
+    if dry_run:
+        receipt["result"] = "DRY_RUN_VALIDATED"
+        return receipt
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    request_payloads: list[dict[str, object]] = []
+    judge_cache_rows: list[dict[str, object]] = []
+    judge_results: list[dict[str, object]] = []
+    by_case: dict[str, list[dict[str, object]]] = {}
+    for row in worklist_rows:
+        case_id = row[CASE_KEY]
+        payload = _request_payload(row)
+        payload_sha = sha256_bytes(json.dumps(payload, sort_keys=True).encode("utf-8"))
+        worklist_row_sha = row_sha256(row, RADIOLOGIST_QUEUE_FIELDS)
+        request_payloads.append({
+            "schema_version": "radle_v2_judge_request.v1",
+            CASE_KEY: case_id,
+            "request_payload_sha256": payload_sha,
+            "payload": payload,
+        })
+        for judge in judges_config.get("judges", []):
+            judge_key = str(judge.get("judge_key", ""))
+            score, flag, reason = _judge_score_for_case(case_id, judge_key)
+            raw_response = {
+                "score": score,
+                "matched_entity": row.get("diagnosis", ""),
+                "reason": reason,
+                "confidence": "medium",
+                "flag_for_review": flag,
+            }
+            raw_response_sha = sha256_bytes(json.dumps(raw_response, sort_keys=True).encode("utf-8"))
+            cache_key = sha256_bytes(json.dumps({
+                "requested_model_id": judge.get("requested_model_id", ""),
+                "returned_model_id": judge.get("requested_model_id", ""),
+                "request_payload_sha256": payload_sha,
+                "judge_config_sha256": judge_config_sha,
+                "prompt_sha256": prompt_sha,
+                "normalizer_code_sha256": normalizer_code_sha,
+                "terminal_policy_sha256": terminal_policy_sha,
+                "variants_snapshot_sha256": variants_sha,
+            }, sort_keys=True).encode("utf-8"))
+            result = {
+                "schema_version": "radle_v2_judge_result.v1",
+                "intake_id": manifest.get("intake_id"),
+                CASE_KEY: case_id,
+                "case_triplet_sha256": "",
+                "worklist_row_sha256": worklist_row_sha,
+                "judge_key": judge_key,
+                "requested_judge_model_id": judge.get("requested_model_id", ""),
+                "returned_judge_model_id": judge.get("requested_model_id", ""),
+                "exact_request_payload_sha256": payload_sha,
+                "judge_config_sha256": judge_config_sha,
+                "prompt_sha256": prompt_sha,
+                "normalizer_code_sha256": normalizer_code_sha,
+                "terminal_policy_sha256": terminal_policy_sha,
+                "variants_snapshot_sha256": variants_sha,
+                "cache_key": cache_key,
+                "started_utc": "2026-01-01T00:00:00+00:00",
+                "completed_utc": "2026-01-01T00:00:00+00:00",
+                "terminal_api_status": "synthetic",
+                "retry_count": 0,
+                "raw_response_sha256": raw_response_sha,
+                "score": score,
+                "matched_entity": row.get("diagnosis", ""),
+                "reason": reason,
+                "confidence": "medium",
+                "flag_for_review": flag,
+                "parse_status": "parsed",
+                "api_status": "synthetic",
+                "parse_error": "",
+                "api_error": "",
+                "synthetic_fixture_id": "radle_v2_milestone4_synthetic",
+            }
+            judge_cache_rows.append({
+                "schema_version": "radle_v2_judge_cache_entry.v1",
+                "cache_key": cache_key,
+                "raw_response_sha256": raw_response_sha,
+                "raw_response": raw_response,
+                "result": result,
+            })
+            judge_results.append(result)
+            by_case.setdefault(case_id, []).append(result)
+
+    locked_rows: list[dict[str, object]] = []
+    queue_rows: list[dict[str, object]] = []
+    routing_rows: list[dict[str, object]] = []
+    worklist_by_case = {row[CASE_KEY]: row for row in worklist_rows}
+    for case_id, results in sorted(by_case.items(), key=lambda item: case_sort_key(item[0])):
+        scores = {int(result["score"]) for result in results if result.get("parse_status") == "parsed"}
+        any_flag = any(bool(result.get("flag_for_review")) for result in results)
+        if len(results) == judge_count and len(scores) == 1 and not any_flag:
+            locked_rows.append({
+                CASE_KEY: case_id,
+                "score": next(iter(scores)),
+                "score_source": "dual_judge_agreement",
+                "judge_count": len(results),
+            })
+            routing_rows.append({
+                CASE_KEY: case_id,
+                "route": "dual_judge_agreement",
+                "reason": "equal_unflagged_binary_verdicts",
+            })
+        else:
+            queue_rows.append({field: worklist_by_case[case_id].get(field, "") for field in RADIOLOGIST_QUEUE_FIELDS})
+            routing_rows.append({
+                CASE_KEY: case_id,
+                "route": "radiologist_queue",
+                "reason": "review_flag_or_disagreement",
+            })
+
+    _, delta_rows = read_csv_table(staging_root / "new_model_long_delta.csv")
+    for row in delta_rows:
+        if row.get("terminal_state") == "mandatory_radiologist":
+            queue_rows.append({field: row.get(field, "") for field in RADIOLOGIST_QUEUE_FIELDS})
+            routing_rows.append({
+                CASE_KEY: row.get(CASE_KEY, ""),
+                "route": "radiologist_queue",
+                "reason": "mandatory_radiologist",
+            })
+
+    request_path = out_dir / "request_payloads.jsonl"
+    request_path.write_text("\n".join(json.dumps(row, sort_keys=True) for row in request_payloads) + "\n", encoding="utf-8")
+    (out_dir / "judge_request_payloads.jsonl").write_text(request_path.read_text(encoding="utf-8"), encoding="utf-8")
+    cache_path = out_dir / "judge_cache.jsonl"
+    cache_path.write_text("\n".join(json.dumps(row, sort_keys=True) for row in judge_cache_rows) + "\n", encoding="utf-8")
+    results_path = out_dir / "judge_results.jsonl"
+    results_path.write_text("\n".join(json.dumps(row, sort_keys=True) for row in judge_results) + "\n", encoding="utf-8")
+    write_csv_table(out_dir / "agreement_locks.csv", ["Master_Case_ID", "score", "score_source", "judge_count"], locked_rows)
+    write_csv_table(out_dir / "dual_judge_agreements.csv", ["Master_Case_ID", "score", "score_source", "judge_count"], locked_rows)
+    write_csv_table(staging_root / "radiologist_queue.csv", RADIOLOGIST_QUEUE_FIELDS, queue_rows)
+    write_json(out_dir / "radiologist_queue_routing_audit.json", {
+        "schema_version": "radle_v2_radiologist_queue_routing_audit.v1",
+        "routing_rows": routing_rows,
+    })
+    summary = {
+        "schema_version": "radle_v2_dual_judge_summary.v1",
+        "intake_id": manifest.get("intake_id"),
+        "worklist_rows": len(worklist_rows),
+        "judge_result_rows": len(judge_results),
+        "locked_agreement_rows": len(locked_rows),
+        "radiologist_queue_rows": len(queue_rows),
+        "prompt_sha256": prompt_sha,
+        "request_payloads_sha256": sha256_file(request_path),
+        "judge_cache_sha256": sha256_file(cache_path),
+        "judge_results_sha256": sha256_file(results_path),
+    }
+    write_json(out_dir / "judge_summary.json", summary)
+    write_json(out_dir / "judge_evidence_index.json", {
+        "schema_version": "radle_v2_judge_evidence_index.v1",
+        "summary": summary,
+        "files": {
+            "request_payloads": {"path": "request_payloads.jsonl", "sha256": sha256_file(request_path)},
+            "judge_cache": {"path": "judge_cache.jsonl", "sha256": sha256_file(cache_path)},
+            "judge_results": {"path": "judge_results.jsonl", "sha256": sha256_file(results_path)},
+            "agreement_locks": {"path": "agreement_locks.csv", "sha256": sha256_file(out_dir / "agreement_locks.csv")},
+            "radiologist_queue": {"path": "../radiologist_queue.csv", "sha256": sha256_file(staging_root / "radiologist_queue.csv")},
+            "routing_audit": {
+                "path": "radiologist_queue_routing_audit.json",
+                "sha256": sha256_file(out_dir / "radiologist_queue_routing_audit.json"),
+            },
+        },
+        "malformed_cache_line_count": 0,
+    })
+    receipt.update(summary)
+    receipt["result"] = "PASS"
+    return receipt

@@ -18,7 +18,7 @@ Success is observable when each committed admission has a sealed input manifest,
 
 ## Current State
 
-Current state (2026-07-10 05:13 +05:30, Codex/GPT-5): Milestone 3 prepare/projection is implemented, validated, and committed as `99eb087` in worktree `C:/tmp/radle_v2_incremental_admission`. The CLI supports `project-one-model`, `prepare`, and prepared-stage audit via `scripts/audit_radle_v2_incremental_admission.py`; synthetic tests cover dry-run idempotence/no-write, one-model projection, required staging outputs, terminal routing, metadata mismatch, parent wide/long mismatch, and unprojected multi-model rejection. Next: implement Milestone 4 dual-judge/radiologist routing without paid calls until explicit authorization.
+Current state (2026-07-10 05:19 +05:30, Codex/GPT-5): Milestone 4 local/synthetic dual-judge routing is implemented and validated, not yet committed. The CLI supports `scripts/radle_v2_dual_judge_delta.py --dry-run` for call math and `--synthetic` for deterministic local judge evidence; judge evidence writes request payloads, append-only-style cache, normalized judge results, agreement locks, routing audit, five-column radiologist queue, evidence index, and a read-only `--phase judge` audit. Real paid OpenRouter calls remain blocked; the script refuses non-dry-run/non-synthetic execution. Next: stage and commit Milestone 4, then implement Milestone 5 finalization and immutable final-long-master append.
 
 ## Locked Facts
 
@@ -62,6 +62,7 @@ Current state (2026-07-10 05:13 +05:30, Codex/GPT-5): Milestone 3 prepare/projec
 - Milestone 8 has config-only readiness today: `grok_4_5` is Candidate AE and pending admission, but there is no append manifest, old-row immutability proof, scored delta, judge/radiologist evidence, committed parent, or post-admission independent review.
 - Milestone 3 prepare/projection is implemented locally: `project-one-model` produces a one-model package with `results.csv`, `source_manifest.json`, and `SHA256SUMS`; `prepare` writes a content-addressed staging tree with required prepared outputs; prepared audit validates row counts and terminal-state counts.
 - Checkpoint commit `99eb087` contains Milestone 3 prepared admission staging.
+- Milestone 4 synthetic judge routing is implemented locally: dry-run computes call ceilings; synthetic mode writes judge evidence sidecars and a five-column `radiologist_queue.csv`; judge audit validates counts and prompt non-leakage. Real paid judge calls are still not implemented.
 
 ## Do Not Revisit
 
@@ -88,7 +89,8 @@ Current state (2026-07-10 05:13 +05:30, Codex/GPT-5): Milestone 3 prepare/projec
 - [x] (2026-07-10 05:02 +05:30, Codex/GPT-5) Committed the Milestone 1-2 foundation checkpoint as `fdbe56b` (`Add RadLE v2 incremental admission foundation`).
 - [x] (2026-07-10 05:11 +05:30, Codex/GPT-5) Implement package projection, prepared-stage validation, ground-truth snapshot, parent wide/long reconciliation, long-delta creation, terminal-state routing, judge worklist, and read-only prepared audit.
 - [x] (2026-07-10 05:13 +05:30, Codex/GPT-5) Committed Milestone 3 as `99eb087` (`Implement prepared incremental admission staging`).
-- [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Implement judge evidence, radiologist overlay validation, scored-delta finalization, immutable append, and independent audit.
+- [x] (2026-07-10 05:19 +05:30, Codex/GPT-5) Implement local/synthetic judge evidence generation, dry-run call math, agreement locks, radiologist queue routing, and read-only judge evidence audit.
+- [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Implement radiologist overlay validation, scored-delta finalization, immutable append, and independent audit.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Make IDK0 Score1000/Score2000 and panel contracts roster/manifest-derived and prove them on synthetic admissions.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Stop at the external-results gate and record required package paths/hashes.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Admit and adjudicate Grok 4.5; commit the first new private master.
@@ -155,6 +157,10 @@ Current state (2026-07-10 05:13 +05:30, Codex/GPT-5): Milestone 3 prepare/projec
   Evidence: `prepare` writes `new_model_long_delta.csv` with terminal states and blank final scores, plus `judge_worklist.csv`; `audit_radle_v2_incremental_admission.py --phase prepared --no-write` reports `RESULT=PASS`. Scored delta, radiologist overlay, and immutable final-master append remain Milestones 4-5.
   Date/Author: 2026-07-10, Codex/GPT-5
 
+- Observation: Milestone 4 now covers local/synthetic judge routing only. It exercises agreement, disagreement, review flag, and mandatory-radiologist routing without network access.
+  Evidence: `scripts/radle_v2_dual_judge_delta.py --dry-run` prints `JUDGE_RESULT=DRY_RUN_VALIDATED`; `--synthetic` writes 388 judge rows, 192 agreement locks, and 3 radiologist queue rows; `audit_radle_v2_incremental_admission.py --phase judge --no-write` prints `RESULT=PASS`.
+  Date/Author: 2026-07-10, Codex/GPT-5
+
 ## Decision Log
 
 - Decision: use transaction states distinct from roster status: `intake_prepared`, `adjudication_pending`, `radiologist_pending`, `precommit_validated`, and `final_master_committed`.
@@ -217,6 +223,10 @@ Current state (2026-07-10 05:13 +05:30, Codex/GPT-5): Milestone 3 prepare/projec
   Rationale: idempotence should not bless a partially written or manually corrupted staging directory.
   Date/Author: 2026-07-10, Codex/GPT-5
 
+- Decision: Milestone 4 implements only no-network dry-run and synthetic evidence. Any real OpenRouter execution remains a later authorization-gated implementation and must not be inferred from the local synthetic path.
+  Rationale: the user explicitly wants reliability before real package/panel work, and paid clinical adjudication needs a separate call ceiling and authorization artifact.
+  Date/Author: 2026-07-10, Codex/GPT-5
+
 ## Revision Notes
 
 - v1 (2026-07-10 03:19 +05:30, Codex/GPT-5): drafted the first implementation-ready plan from the requirements and research ledger; added transaction-state separation, exact judge configuration, old-byte immutability, dynamic expected counts, and small-agent stop gates.
@@ -228,6 +238,7 @@ Current state (2026-07-10 05:13 +05:30, Codex/GPT-5): Milestone 3 prepare/projec
 - v7 (2026-07-10 05:02 +05:30, Codex/GPT-5): recorded checkpoint commit `fdbe56b` and advanced Current State to Milestone 3 implementation.
 - v8 (2026-07-10 05:11 +05:30, Codex/GPT-5): recorded Milestone 3 prepare/projection implementation, validation receipts, and the remaining boundary between prepared staging and scored/finalized admission.
 - v9 (2026-07-10 05:13 +05:30, Codex/GPT-5): recorded Milestone 3 commit `99eb087` and advanced Current State to Milestone 4.
+- v10 (2026-07-10 05:19 +05:30, Codex/GPT-5): recorded Milestone 4 local/synthetic judge routing, evidence sidecars, judge audit, and paid-call boundary.
 
 ## Outcomes & Retrospective
 
@@ -238,6 +249,8 @@ Milestone 1 outcome (2026-07-10 04:40 +05:30, Codex/GPT-5): runtime integration 
 Milestone 2 outcome (2026-07-10 04:54 +05:30, Codex/GPT-5): configuration contracts are executable. `check-config` validates roster counts, judge IDs and prompt hash, terminal-state order, invalid-Likert rules, source evidence, static fixtures, and prohibited-path absence. The remaining reusable lesson is project-specific enough to keep here for now; do not promote to a global skill without explicit user approval.
 
 Milestone 3 outcome (2026-07-10 05:11 +05:30, Codex/GPT-5): prepared-stage admission is executable on synthetic 200-case data. `project-one-model` handles shared wide projection into a one-model package; `prepare` validates parent/incoming cases, metadata, parent wide/long reconciliation, ground-truth uniqueness, one model family, terminal-state routing, and writes the prepared staging tree; `audit_radle_v2_incremental_admission.py --phase prepared --no-write` validates the prepared outputs. No reusable lesson has been promoted to a skill; ask the user before creating or editing any skill.
+
+Milestone 4 outcome (2026-07-10 05:19 +05:30, Codex/GPT-5): local judge/radiologist routing is executable on synthetic prepared staging. Dry-run call math reports 194 worklist rows, 2 judges, 388 base calls, and 2328 retry-inclusive worst-case HTTP requests. Synthetic evidence writes `request_payloads.jsonl`, `judge_cache.jsonl`, `judge_results.jsonl`, `agreement_locks.csv`, `radiologist_queue_routing_audit.json`, `judge_evidence_index.json`, and `radiologist_queue.csv`; judge audit passes. No reusable lesson has been promoted to a skill; ask the user before creating or editing any skill.
 
 ## Suggested Skills By Phase
 
@@ -1137,6 +1150,9 @@ Record short literal proof here as execution proceeds:
     Milestone 3 CLI dry-run: project-one-model printed PROJECTION_STATE=DRY_RUN_VALIDATED with row_count=200 and selected_field_count=19; prepare printed INTAKE_ID=5bce784a17cd85b17863c2578cfd5c571a5f297b00ce6200f5af7e8698351190 and TRANSACTION_STATE=DRY_RUN_VALIDATED
     Milestone 3 prepared audit: py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root tests/tmp/synthetic_admission/output_cli/5bce784a17cd85b17863c2578cfd5c571a5f297b00ce6200f5af7e8698351190 --phase prepared --no-write printed RESULT=PASS with row_counts new_model_long_delta=200, judge_worklist=194
     Milestone 3 validation: py_compile PASS for core/CLI/audit/fixture/tests; unittest PASS `Ran 10 tests`; check-config PASS; prohibited live-path rg returned exit 1
+    Milestone 4 dry-run: py -3.11 scripts/radle_v2_dual_judge_delta.py --staging-root tests/tmp/synthetic_m4b/output/5bce784a17cd85b17863c2578cfd5c571a5f297b00ce6200f5af7e8698351190 --config config/radle_v2_judges.json --dry-run printed JUDGE_RESULT=DRY_RUN_VALIDATED, worklist_rows=194, base_calls=388, worst_case_http_requests=2328
+    Milestone 4 synthetic run: same staging root with --synthetic printed JUDGE_RESULT=PASS, judge_result_rows=388, locked_agreement_rows=192, radiologist_queue_rows=3
+    Milestone 4 judge audit: py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root tests/tmp/synthetic_m4b/output/5bce784a17cd85b17863c2578cfd5c571a5f297b00ce6200f5af7e8698351190 --phase judge --no-write printed RESULT=PASS
     parent wide path/SHA/shape:
     parent final-long path/SHA/shape:
     roster manifest SHA:

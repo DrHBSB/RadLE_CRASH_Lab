@@ -16,13 +16,16 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from radle_incremental_admission import (
+    RADIOLOGIST_QUEUE_FIELDS,
     ValidationError,
+    audit_judge_evidence,
     allocate_next_candidate_label,
     audit_prepared_staging,
     classify_terminal_state,
     normalize_diagnosis,
     prepare_incremental_admission,
     project_one_model_package,
+    run_synthetic_dual_judge_delta,
     validate_configs,
 )
 
@@ -244,6 +247,57 @@ class IncrementalAdmissionPrepareTests(unittest.TestCase):
             args["incoming_package"] = projected
             receipt = prepare_incremental_admission(**args, dry_run=True)
             self.assertEqual(receipt["transaction_state"], "DRY_RUN_VALIDATED")
+
+    def test_synthetic_dual_judge_routes_agreements_and_radiologist_queue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = self.make_fixture(Path(tmp))
+            output_root = Path(tmp) / "output"
+            receipt = prepare_incremental_admission(**self.prepare_args(fixture, output_root), dry_run=False)
+            staging = Path(str(receipt["staging_root"]))
+            dry_run = run_synthetic_dual_judge_delta(
+                staging_root=staging,
+                judges_path=REPO_ROOT / "config/radle_v2_judges.json",
+                out_dir=staging / "judge_evidence",
+                repo_root=REPO_ROOT,
+                dry_run=True,
+            )
+            self.assertEqual(dry_run["result"], "DRY_RUN_VALIDATED")
+            self.assertEqual(dry_run["base_calls"], 388)
+            self.assertEqual(dry_run["worst_case_http_requests"], 2328)
+            self.assertFalse((staging / "judge_evidence").exists())
+
+            result = run_synthetic_dual_judge_delta(
+                staging_root=staging,
+                judges_path=REPO_ROOT / "config/radle_v2_judges.json",
+                out_dir=staging / "judge_evidence",
+                repo_root=REPO_ROOT,
+                dry_run=False,
+            )
+            self.assertEqual(result["result"], "PASS")
+            self.assertEqual(result["judge_result_rows"], 388)
+            self.assertEqual(result["locked_agreement_rows"], 192)
+            self.assertEqual(result["radiologist_queue_rows"], 3)
+            for relative in [
+                "judge_evidence/request_payloads.jsonl",
+                "judge_evidence/judge_cache.jsonl",
+                "judge_evidence/judge_results.jsonl",
+                "judge_evidence/judge_evidence_index.json",
+                "judge_evidence/agreement_locks.csv",
+                "judge_evidence/radiologist_queue_routing_audit.json",
+            ]:
+                self.assertTrue((staging / relative).exists(), relative)
+            queue_path = staging / "radiologist_queue.csv"
+            with queue_path.open("r", encoding="utf-8", newline="") as handle:
+                reader = csv.DictReader(handle)
+                self.assertEqual(reader.fieldnames, RADIOLOGIST_QUEUE_FIELDS)
+                queue_rows = list(reader)
+            self.assertEqual({row["Master_Case_ID"] for row in queue_rows}, {"6", "7", "164"})
+            audit = audit_judge_evidence(staging)
+            self.assertEqual(audit["result"], "PASS")
+            self.assertEqual(audit["radiologist_queue_rows"], 3)
+            request_text = (staging / "judge_evidence/request_payloads.jsonl").read_text(encoding="utf-8")
+            self.assertNotIn("Candidate AE", request_text)
+            self.assertNotIn("synthetic_model_v1", request_text)
 
 
 if __name__ == "__main__":
