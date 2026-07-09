@@ -18,7 +18,7 @@ Success is observable when each committed admission has a sealed input manifest,
 
 ## Current State
 
-Current state (2026-07-10 05:11 +05:30, Codex/GPT-5): Milestone 3 prepare/projection is implemented and validated in worktree `C:/tmp/radle_v2_incremental_admission`, not yet committed. The CLI now supports `project-one-model`, `prepare`, and prepared-stage audit via `scripts/audit_radle_v2_incremental_admission.py`; synthetic tests cover dry-run idempotence/no-write, one-model projection, required staging outputs, terminal routing, metadata mismatch, parent wide/long mismatch, and unprojected multi-model rejection. Next: stage and commit Milestone 3, then implement Milestone 4 dual-judge/radiologist routing.
+Current state (2026-07-10 05:13 +05:30, Codex/GPT-5): Milestone 3 prepare/projection is implemented, validated, and committed as `99eb087` in worktree `C:/tmp/radle_v2_incremental_admission`. The CLI supports `project-one-model`, `prepare`, and prepared-stage audit via `scripts/audit_radle_v2_incremental_admission.py`; synthetic tests cover dry-run idempotence/no-write, one-model projection, required staging outputs, terminal routing, metadata mismatch, parent wide/long mismatch, and unprojected multi-model rejection. Next: implement Milestone 4 dual-judge/radiologist routing without paid calls until explicit authorization.
 
 ## Locked Facts
 
@@ -61,6 +61,7 @@ Current state (2026-07-10 05:11 +05:30, Codex/GPT-5): Milestone 3 prepare/projec
 - Real Grok/GPT/Muse admission is blocked until local external result packages are downloaded, sealed, and validated as full `TEST_LIMIT=None` 200-case runs. This worktree currently has no `Runs/`, `results/`, or `outputs/radle_v2_stats/incremental_admissions` package output.
 - Milestone 8 has config-only readiness today: `grok_4_5` is Candidate AE and pending admission, but there is no append manifest, old-row immutability proof, scored delta, judge/radiologist evidence, committed parent, or post-admission independent review.
 - Milestone 3 prepare/projection is implemented locally: `project-one-model` produces a one-model package with `results.csv`, `source_manifest.json`, and `SHA256SUMS`; `prepare` writes a content-addressed staging tree with required prepared outputs; prepared audit validates row counts and terminal-state counts.
+- Checkpoint commit `99eb087` contains Milestone 3 prepared admission staging.
 
 ## Do Not Revisit
 
@@ -86,6 +87,7 @@ Current state (2026-07-10 05:11 +05:30, Codex/GPT-5): Milestone 3 prepare/projec
 - [x] (2026-07-10 04:54 +05:30, Codex/GPT-5) Add roster, judge, terminal-state, and base-authority configs; extract/freeze judge prompt evidence; add config validator, CLI `check-config`, static terminal-state fixture, and synthetic fixture generator. Local validation passes with 11 terminal fixture rows.
 - [x] (2026-07-10 05:02 +05:30, Codex/GPT-5) Committed the Milestone 1-2 foundation checkpoint as `fdbe56b` (`Add RadLE v2 incremental admission foundation`).
 - [x] (2026-07-10 05:11 +05:30, Codex/GPT-5) Implement package projection, prepared-stage validation, ground-truth snapshot, parent wide/long reconciliation, long-delta creation, terminal-state routing, judge worklist, and read-only prepared audit.
+- [x] (2026-07-10 05:13 +05:30, Codex/GPT-5) Committed Milestone 3 as `99eb087` (`Implement prepared incremental admission staging`).
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Implement judge evidence, radiologist overlay validation, scored-delta finalization, immutable append, and independent audit.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Make IDK0 Score1000/Score2000 and panel contracts roster/manifest-derived and prove them on synthetic admissions.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Stop at the external-results gate and record required package paths/hashes.
@@ -225,6 +227,7 @@ Current state (2026-07-10 05:11 +05:30, Codex/GPT-5): Milestone 3 prepare/projec
 - v6 (2026-07-10 04:54 +05:30, Codex/GPT-5): integrated second-wave scout findings for dynamic IDK0/public candidates, external package gating, and Grok vertical-slice readiness; clarified that Milestone 8 is config-ready only until Milestones 3-5 exist.
 - v7 (2026-07-10 05:02 +05:30, Codex/GPT-5): recorded checkpoint commit `fdbe56b` and advanced Current State to Milestone 3 implementation.
 - v8 (2026-07-10 05:11 +05:30, Codex/GPT-5): recorded Milestone 3 prepare/projection implementation, validation receipts, and the remaining boundary between prepared staging and scored/finalized admission.
+- v9 (2026-07-10 05:13 +05:30, Codex/GPT-5): recorded Milestone 3 commit `99eb087` and advanced Current State to Milestone 4.
 
 ## Outcomes & Retrospective
 
@@ -1130,6 +1133,7 @@ Record short literal proof here as execution proceeds:
     Milestone 2 validation: py_compile PASS for src/radle_incremental_admission.py and scripts/radle_v2_incremental_admission.py; unittest PASS `Ran 4 tests`; check-config PASS with fixture_rows=11 and active/excluded/pending counts 15/3/3; prohibited live-path rg returned exit 1; JSON_PARSE=PASS; synthetic fixture generator emitted SYNTHETIC_FIXTURE_ROOT=tests\tmp\synthetic_admission; git add --dry-run showed static unit fixture addable and tests/tmp ignored; git ls-files --error-unmatch tests/fixtures/radle_incremental_admission/unit_cases.csv PASS; git diff --cached --check PASS
     checkpoint commit: fdbe56b Add RadLE v2 incremental admission foundation
     checkpoint commit: 18afdc5 Record incremental admission checkpoint state
+    checkpoint commit: 99eb087 Implement prepared incremental admission staging
     Milestone 3 CLI dry-run: project-one-model printed PROJECTION_STATE=DRY_RUN_VALIDATED with row_count=200 and selected_field_count=19; prepare printed INTAKE_ID=5bce784a17cd85b17863c2578cfd5c571a5f297b00ce6200f5af7e8698351190 and TRANSACTION_STATE=DRY_RUN_VALIDATED
     Milestone 3 prepared audit: py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root tests/tmp/synthetic_admission/output_cli/5bce784a17cd85b17863c2578cfd5c571a5f297b00ce6200f5af7e8698351190 --phase prepared --no-write printed RESULT=PASS with row_counts new_model_long_delta=200, judge_worklist=194
     Milestone 3 validation: py_compile PASS for core/CLI/audit/fixture/tests; unittest PASS `Ran 10 tests`; check-config PASS; prohibited live-path rg returned exit 1
