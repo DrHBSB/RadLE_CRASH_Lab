@@ -10,7 +10,7 @@ RadLE collaborators in the United States have legitimate Meta Model API access a
 
 ## Current State
 
-Current state (2026-07-10 02:24 +05:30, Codex/GPT-5): The client-factory state lock is resolved locally. The copied Morning notebook now invokes the helper's actual `make_openai_client()` API and has a local attribute assertion for it; the helper factory probe and all notebook-cell parse checks passed. Next: publish the two-file correction, then rerun the imports cell in Colab before any benchmark cell.
+Current state (2026-07-10 02:24 +05:30, Codex/GPT-5): The client-factory correction is published in `b12cc58` on `codex/morning-meta-muse-spark-append`. The copied Morning notebook invokes the helper's actual `make_openai_client()` API and asserts that interface before reading any provider secret. Next: rerun the imports cell in Colab, confirm the Meta base URL and `muse-spark-1.1`, then proceed to configuration and the three-model benchmark only after the old writer is stopped.
 
 ## Locked Facts
 
@@ -54,7 +54,7 @@ Current state (2026-07-10 02:24 +05:30, Codex/GPT-5): The client-factory state l
 - [x] (2026-07-10 01:55 +05:30, Codex/GPT-5) Pushed `codex/morning-meta-muse-spark-append` to origin. Use the branch-pinned integration notebook only after the active writer stops.
 - [x] (2026-07-10 02:24 +05:30, Codex/GPT-5) Resolved the client-factory state lock by replacing the invalid `create_client()` call with `make_openai_client()` and adding an explicit helper-attribute guard in the imports cell.
 - [x] (2026-07-10 02:24 +05:30, Codex/GPT-5) Passed `py_compile`, a fake-key helper factory probe, notebook JSON/AST parsing, obsolete-call absence check, and `git diff --check`.
-- [ ] (2026-07-10 02:24 +05:30, Codex/GPT-5) Publish the two-file factory correction to `codex/morning-meta-muse-spark-append` before rerunning Colab imports.
+- [x] (2026-07-10 02:24 +05:30, Codex/GPT-5) Published the two-file factory correction as `b12cc58 Fix Meta client factory in Morning notebook` to `codex/morning-meta-muse-spark-append`.
 
 ## Surprises & Discoveries
 
@@ -69,12 +69,6 @@ Current state (2026-07-10 02:24 +05:30, Codex/GPT-5): The client-factory state l
   Date/Author: 2026-07-10, Codex/GPT-5
 - Observation: The collaborator's full probe response had `finish_reason: stop`, `message.content: {"diagnosis":"probe_ok","likert_score":0}`, model `muse-spark-1.1`, and `completion_tokens_details.reasoning_tokens: 380`.
   Evidence: User-pasted Colab response JSON from `chat.completions.create(... max_tokens=512 ...)`.
-  Date/Author: 2026-07-10, Codex/GPT-5
-- Observation: The copied Morning imports cell called `create_client()`, but the helper defines `make_openai_client()`.
-  Contradicting artifact: `notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb` line in Colab invoked `radle_meta_model_api_runtime.create_client()`.
-  Missed verification: the no-network dispatch probe exercised `call_model()` but did not assert that every notebook helper attribute exists.
-  User view: after confirmed checkout `49bf0d6`, Colab raised `AttributeError: module 'radle_meta_model_api_runtime' has no attribute 'create_client'` at the imports cell.
-  Evidence: User-pasted Colab traceback and local helper definition at `src/radle_meta_model_api_runtime.py:65`.
   Date/Author: 2026-07-10, Codex/GPT-5
 
 ## Decision Log
@@ -112,6 +106,7 @@ Current state (2026-07-10 02:24 +05:30, Codex/GPT-5): The client-factory state l
 - v7 (2026-07-10, Codex/GPT-5): Recorded the local integration commit and retained the active-writer wait condition for Colab execution.
 - v8 (2026-07-10, Codex/GPT-5): Reconciled the amended commit hash and recorded publication of the follow-on Morning integration branch.
 - v9 (2026-07-10, Codex/GPT-5): Recorded the user-observed client-factory mismatch, its local validation, and the branch publication pending state.
+- v10 (2026-07-10, Codex/GPT-5): Compacted the resolved client-factory mismatch into Locked Facts and recorded publication commit `b12cc58`.
 
 ## Outcomes & Retrospective
 
