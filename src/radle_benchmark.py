@@ -74,6 +74,7 @@ MODELS = [
         "name": "grok_4_5",
         "id": "x-ai/grok-4.5",
         "extra": None,
+        "provider_routing": {"only": ["xAI"], "allow_fallbacks": False},
     },
     {
         "name": "qwen_3_7_plus",
@@ -1361,6 +1362,9 @@ def build_api_params(model, content_array, max_output_tokens, universal_temperat
     if model["id"] not in NO_TEMPERATURE_MODELS:
         api_params["temperature"] = universal_temperature
 
+    if model.get("provider_routing"):
+        api_params["provider"] = model.get("provider_routing")
+
     if model.get("extra"):
         api_params["extra_body"] = model.get("extra")
 
@@ -1500,6 +1504,11 @@ def _logged_request_extra(model, api_params):
         return {k: api_params[k] for k in ("thinking", "output_config") if k in api_params}
     if uses_native_google(model):
         return model.get("extra")
+    if api_params and "provider" in api_params:
+        logged = {"provider": api_params["provider"]}
+        if "extra_body" in api_params:
+            logged["extra_body"] = api_params["extra_body"]
+        return logged
     return api_params.get("extra_body", None) if api_params else None
 
 
