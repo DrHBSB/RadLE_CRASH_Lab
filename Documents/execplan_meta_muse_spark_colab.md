@@ -10,7 +10,7 @@ RadLE collaborators in the United States have legitimate Meta Model API access a
 
 ## Current State
 
-Current state (2026-07-10 01:05 +05:30, Codex/GPT-5): The additive helper module and Colab Pro notebook exist, local validation passed, and branch `codex/meta-muse-spark-colab` has been pushed to GitHub. A collaborator text probe succeeded with `muse-spark-1.1` and showed the first built-in probe budget was too small because the response used 380 hidden reasoning tokens before emitting JSON. Next: collaborator should rerun setup/import after pulling the branch and proceed to the 1-case smoke.
+Current state (2026-07-10 01:44 +05:30, Codex/GPT-5): The audit-schema state lock is resolved locally. The notebook now reads `audit`, `repair_targets`, and `no_paid_cleanup`, with local syntax and helper-contract validation passing. Next: publish only the notebook and this living plan to `codex/meta-muse-spark-colab`; the collaborator can then rerun the setup cell and the existing scorer/audit cell without repeating the paid benchmark call.
 
 ## Locked Facts
 
@@ -18,6 +18,7 @@ Current state (2026-07-10 01:05 +05:30, Codex/GPT-5): The additive helper module
 - `src/radle_benchmark.py` is the source of truth for RadLE benchmark execution, image encoding, CSV schema, resume behavior, audit, repair, final promotion, and public export.
 - Existing Colab notebooks use a GitHub-fetch-first setup cell, then import Python modules from `src/` and print the resolved commit before running.
 - The Muse Spark run is collaborator-run under legitimate Meta developer access; no region bypass, proxy, VPN, or fake-location behavior belongs in this notebook.
+- `audit_benchmark_output()` returns tabular `audit`, `repair_targets`, and `no_paid_cleanup` entries; its API does not include `row_count` or `no_paid_cleanup_targets`.
 
 ## Do Not Revisit
 
@@ -34,6 +35,9 @@ Current state (2026-07-10 01:05 +05:30, Codex/GPT-5): The additive helper module
 - [x] (2026-07-10 00:49 +05:30, Codex/GPT-5) Validated Python syntax, notebook JSON/code-cell parsing, output cleanliness, fixed-string secret-prefix scan, and helper import/config without a Meta API key.
 - [x] (2026-07-10 00:56 +05:30, Codex/GPT-5) Published `codex/meta-muse-spark-colab` to GitHub without absorbing unrelated dirty files.
 - [x] (2026-07-10 01:05 +05:30, Codex/GPT-5) Raised the helper text-probe token budget to 512 after collaborator evidence showed 128 could return empty content.
+- [x] (2026-07-10 01:44 +05:30, Codex/GPT-5) Resolved the audit-schema state lock by changing the audit display cell to count the `audit`, `repair_targets`, and `no_paid_cleanup` DataFrames and show dataset/bucket summaries.
+- [x] (2026-07-10 01:44 +05:30, Codex/GPT-5) Validated all 10 notebook code cells with `ast.parse` and called `audit_benchmark_output()` against a one-row local fixture; observed audit display counts `1 0 0`.
+- [ ] (2026-07-10 01:44 +05:30, Codex/GPT-5) Publish the narrow notebook and plan correction to `codex/meta-muse-spark-colab` without staging unrelated worktree changes.
 
 ## Surprises & Discoveries
 
@@ -49,6 +53,9 @@ Current state (2026-07-10 01:05 +05:30, Codex/GPT-5): The additive helper module
 - Observation: The collaborator's full probe response had `finish_reason: stop`, `message.content: {"diagnosis":"probe_ok","likert_score":0}`, model `muse-spark-1.1`, and `completion_tokens_details.reasoning_tokens: 380`.
   Evidence: User-pasted Colab response JSON from `chat.completions.create(... max_tokens=512 ...)`.
   Date/Author: 2026-07-10, Codex/GPT-5
+- Observation: The 1-case smoke result is valid, but the notebook audit display is stale against the helper schema. Contradicting artifact: `notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb` reads `audit["row_count"]` and `audit["no_paid_cleanup_targets"]`; source evidence: `src/radle_benchmark.py::audit_benchmark_output()` returns `audit`, `repair_targets`, and `no_paid_cleanup` instead. Missed verification: the notebook code cells were syntax-checked but the audit cell was not exercised against a real return object. User view: Colab raised `KeyError: 'row_count'` immediately after writing and displaying the valid scorer CSV.
+  Evidence: User-pasted Colab traceback and local source inspection of `src/radle_benchmark.py` lines 1239-1251.
+  Date/Author: 2026-07-10, Codex/GPT-5
 
 ## Decision Log
 
@@ -61,10 +68,14 @@ Current state (2026-07-10 01:05 +05:30, Codex/GPT-5): The additive helper module
 - Decision: Use an OpenAI-compatible hosted client with a configurable base URL defaulting to `https://api.meta.ai/v1`.
   Rationale: Current Meta Model API public material describes OpenAI SDK compatibility; making the base URL configurable lets collaborators update it if their dashboard shows a different endpoint.
   Date/Author: 2026-07-10, Codex/GPT-5
+- Decision: Treat the existing `audit_benchmark_output()` dictionary as the contract and fix only the consumer notebook.
+  Rationale: The one-row audit helper validation proves the source function's present keys; changing its broadly used return shape would be disproportionate to a stale display-only consumer.
+  Date/Author: 2026-07-10, Codex/GPT-5
 
 ## Revision Notes
 
 - v1 (2026-07-10, Codex/GPT-5): Initial plan created for the Meta Muse Spark Colab Pro runner.
+- v2 (2026-07-10, Codex/GPT-5): Recorded the Colab-discovered audit display schema mismatch, state-lock resolution, local reproduction, and the narrow consumer-only correction.
 
 ## Outcomes & Retrospective
 
