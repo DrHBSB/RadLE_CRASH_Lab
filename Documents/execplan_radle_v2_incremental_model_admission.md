@@ -18,7 +18,7 @@ Success is observable when each committed admission has a sealed input manifest,
 
 ## Current State
 
-Current state (2026-07-10 05:20 +05:30, Codex/GPT-5): Milestone 4 local/synthetic dual-judge routing is implemented, validated, and committed as `d36938d`. The CLI supports `scripts/radle_v2_dual_judge_delta.py --dry-run` for call math and `--synthetic` for deterministic local judge evidence; judge evidence writes request payloads, append-only-style cache, normalized judge results, agreement locks, routing audit, five-column radiologist queue, evidence index, and a read-only `--phase judge` audit. Real paid OpenRouter calls remain blocked; the script refuses non-dry-run/non-synthetic execution. Next: implement Milestone 5 finalization, radiologist overlay validation, scored delta creation, and immutable final-long-master append.
+Current state (2026-07-10 05:28 +05:30, Codex/GPT-5): Milestone 6 dynamic IDK0 Score1000/Score2000 lane is implemented, validated, and committed as `7c19c8b`. The CLI now supports `build-idk0-lane`; the audit CLI supports `--phase idk0-lane`; synthetic tests prove replacement/exclusion, pooled12 and split6x6 human projections, Score2000 shift, public-summary privacy shape, active-only panel order, and non-overwrite output roots. Next: perform Milestone 7 external-results gate when real Grok/GPT/Muse packages are downloaded and sealed; meanwhile, branch-consolidation scouting could not launch because the subagent thread limit was reached.
 
 ## Locked Facts
 
@@ -64,6 +64,13 @@ Current state (2026-07-10 05:20 +05:30, Codex/GPT-5): Milestone 4 local/syntheti
 - Checkpoint commit `99eb087` contains Milestone 3 prepared admission staging.
 - Milestone 4 synthetic judge routing is implemented locally: dry-run computes call ceilings; synthetic mode writes judge evidence sidecars and a five-column `radiologist_queue.csv`; judge audit validates counts and prompt non-leakage. Real paid judge calls are still not implemented.
 - Checkpoint commit `d36938d` contains Milestone 4 synthetic dual-judge/radiologist routing.
+- Milestone 5 finalization is implemented locally: `finalize-stage` validates a signed radiologist decision overlay, writes `scored_append_delta.csv`, appends to a sibling final-long-master while preserving parent bytes as prefix, and writes `append_manifest.json`; `commit` writes `SHA256SUMS` before `COMMITTED.json`; readback validates both.
+- The radiologist decision overlay header is exactly `Master_Case_ID,model_blinded,score_binary,reviewer_pseudonym,reviewed_utc,rationale`; the final scored delta keeps the parent schema and writes `final_score` plus `final_score_source`.
+- Checkpoint commit `ec76ec4` contains Milestone 5 finalized incremental admission append.
+- Milestone 6 dynamic IDK0 lane is implemented locally: `build-idk0-lane` writes `score_rows.csv`, `source1000.csv`, `public_candidate_summary.csv`, `panel_order.csv`, `group_summary.csv`, `panel_bins.csv`, and `score_lane_manifest.json`; `--phase idk0-lane` audits hashes, Score2000 shift, public privacy shape, counts, and active-only panel order.
+- `build-idk0-lane` refuses a non-empty output root. Use a new dated lane path for every real run.
+- Effective active/excluded status is derived by joining final-master model keys to the roster: pending-but-present admitted models become active, and their `replaces_model_key` target becomes excluded if present.
+- Checkpoint commit `7c19c8b` contains Milestone 6 dynamic IDK0 score lane builder.
 
 ## Do Not Revisit
 
@@ -92,8 +99,8 @@ Current state (2026-07-10 05:20 +05:30, Codex/GPT-5): Milestone 4 local/syntheti
 - [x] (2026-07-10 05:13 +05:30, Codex/GPT-5) Committed Milestone 3 as `99eb087` (`Implement prepared incremental admission staging`).
 - [x] (2026-07-10 05:19 +05:30, Codex/GPT-5) Implement local/synthetic judge evidence generation, dry-run call math, agreement locks, radiologist queue routing, and read-only judge evidence audit.
 - [x] (2026-07-10 05:20 +05:30, Codex/GPT-5) Committed Milestone 4 as `d36938d` (`Add synthetic dual judge routing`).
-- [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Implement radiologist overlay validation, scored-delta finalization, immutable append, and independent audit.
-- [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Make IDK0 Score1000/Score2000 and panel contracts roster/manifest-derived and prove them on synthetic admissions.
+- [x] (2026-07-10 05:28 +05:30, Codex/GPT-5) Implement radiologist overlay validation, scored-delta finalization, immutable append, and independent precommit/committed-readback audit.
+- [x] (2026-07-10 05:28 +05:30, Codex/GPT-5) Make IDK0 Score1000/Score2000 and panel-source contracts roster/manifest-derived and prove them on synthetic admissions.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Stop at the external-results gate and record required package paths/hashes.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Admit and adjudicate Grok 4.5; commit the first new private master.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Replay the transaction for GPT-5.6 Sol Pro.
@@ -163,6 +170,26 @@ Current state (2026-07-10 05:20 +05:30, Codex/GPT-5): Milestone 4 local/syntheti
   Evidence: `scripts/radle_v2_dual_judge_delta.py --dry-run` prints `JUDGE_RESULT=DRY_RUN_VALIDATED`; `--synthetic` writes 388 judge rows, 192 agreement locks, and 3 radiologist queue rows; `audit_radle_v2_incremental_admission.py --phase judge --no-write` prints `RESULT=PASS`.
   Date/Author: 2026-07-10, Codex/GPT-5
 
+- Observation: Milestone 5 needs two score field names by design. The human decision overlay uses `score_binary` to avoid pretending it is already a parent-master row, while the emitted scored long delta uses the parent schema's `final_score`.
+  Evidence: `RADIOLOGIST_DECISION_FIELDS` in `src/radle_incremental_admission.py`; tests write `score_binary` decisions and assert binary `final_score` in `scored_append_delta.csv`.
+  Date/Author: 2026-07-10, Codex/GPT-5
+
+- Observation: committed-readback must validate the checksum inventory, not merely the marker file. `SHA256SUMS` is written before `COMMITTED.json`, excludes both mutable files, and `COMMITTED.json` records the hash of the completed checksum file.
+  Evidence: `commit_finalized_admission`, `audit_sha256sums`, and `audit_finalized_admission(..., require_committed=True)` in `src/radle_incremental_admission.py`; `test_finalize_commit_and_readback_preserve_parent_bytes` asserts `SHA256SUMS`, `COMMITTED.json`, and positive checksum row count.
+  Date/Author: 2026-07-10, Codex/GPT-5
+
+- Observation: the first Milestone 6 scout confirmed that finalized append support exists and that the remaining gap was a dynamic score/panel-source lane. Additional branch and handoff scouts could not be launched because the thread's subagent limit was reached.
+  Evidence: subagent `019f4951-2789-7b42-8b6c-5305a4418ae5` receipt; subsequent `spawn_agent` attempts returned `agent thread limit reached`.
+  Date/Author: 2026-07-10, Codex/GPT-5
+
+- Observation: the implemented judge CLI takes `--staging-root`, not the older worklist/variant arguments that still appeared in the plan text.
+  Evidence: a CLI receipt attempt with `--worklist` failed with "the following arguments are required: --staging-root"; rerun with `--staging-root ... --synthetic` printed `JUDGE_RESULT=PASS`.
+  Date/Author: 2026-07-10, Codex/GPT-5
+
+- Observation: PowerShell direct writes into the generated `tests/tmp/.../m6_cli_output/<intake_id>` staging directory failed with access denied, while Python-created generated artifacts succeeded.
+  Evidence: `Set-Content` and `New-Item` failed on the generated path; `py -3.11 -c ... Path.write_text(...)` wrote the scratch radiologist overlay used for the CLI receipt.
+  Date/Author: 2026-07-10, Codex/GPT-5
+
 ## Decision Log
 
 - Decision: use transaction states distinct from roster status: `intake_prepared`, `adjudication_pending`, `radiologist_pending`, `precommit_validated`, and `final_master_committed`.
@@ -229,6 +256,26 @@ Current state (2026-07-10 05:20 +05:30, Codex/GPT-5): Milestone 4 local/syntheti
   Rationale: the user explicitly wants reliability before real package/panel work, and paid clinical adjudication needs a separate call ceiling and authorization artifact.
   Date/Author: 2026-07-10, Codex/GPT-5
 
+- Decision: Milestone 5 commit keeps the finalized admission in its content-addressed `intake_root/finalized/<finalization_id>` root and makes it authoritative by writing `SHA256SUMS` followed by `COMMITTED.json` as the last marker.
+  Rationale: the synthetic and future private package roots can remain append-only without a second filesystem move; authority comes from manifest hashes plus committed readback, not from directory name alone.
+  Date/Author: 2026-07-10, Codex/GPT-5
+
+- Decision: `score_binary` is the radiologist overlay verdict field; `final_score` is only written into the scored parent-schema delta.
+  Rationale: keeping the overlay separate makes it clear which file is human adjudication input and which file is admitted scoring output.
+  Date/Author: 2026-07-10, Codex/GPT-5
+
+- Decision: implement Milestone 6 directly in `src/radle_incremental_admission.py` and `scripts/radle_v2_incremental_admission.py` rather than importing absent legacy IDK0/panel scripts.
+  Rationale: the visible worktree and `origin/main` do not contain the named legacy scripts; direct implementation from committed master, roster, and manifest is auditable and avoids stale hard-coded counts.
+  Date/Author: 2026-07-10, Codex/GPT-5
+
+- Decision: `build-idk0-lane` emits row-level `score_rows.csv`, comparator-level `source1000.csv`, sanitized `public_candidate_summary.csv`, active-only `panel_order.csv`, `group_summary.csv`, `panel_bins.csv`, and `score_lane_manifest.json`.
+  Rationale: this preserves the requested panel-data shape while keeping diagnosis/ground-truth/reasoning/image/private-path fields out of public/panel candidate outputs.
+  Date/Author: 2026-07-10, Codex/GPT-5
+
+- Decision: human pooled/split presentation is computed only in summaries. Backend `score_rows.csv` retains the 12 individual human readers.
+  Rationale: this matches the locked requirement that human storage remains individual while pooled12 or split6x6 is a downstream presentation decision.
+  Date/Author: 2026-07-10, Codex/GPT-5
+
 ## Revision Notes
 
 - v1 (2026-07-10 03:19 +05:30, Codex/GPT-5): drafted the first implementation-ready plan from the requirements and research ledger; added transaction-state separation, exact judge configuration, old-byte immutability, dynamic expected counts, and small-agent stop gates.
@@ -242,6 +289,8 @@ Current state (2026-07-10 05:20 +05:30, Codex/GPT-5): Milestone 4 local/syntheti
 - v9 (2026-07-10 05:13 +05:30, Codex/GPT-5): recorded Milestone 3 commit `99eb087` and advanced Current State to Milestone 4.
 - v10 (2026-07-10 05:19 +05:30, Codex/GPT-5): recorded Milestone 4 local/synthetic judge routing, evidence sidecars, judge audit, and paid-call boundary.
 - v11 (2026-07-10 05:20 +05:30, Codex/GPT-5): recorded Milestone 4 commit `d36938d` and advanced Current State to Milestone 5.
+- v12 (2026-07-10 05:28 +05:30, Codex/GPT-5): recorded Milestone 5 finalization, checksum/commit semantics, validation receipts, and commit `ec76ec4`; advanced Current State to Milestone 6.
+- v13 (2026-07-10 05:28 +05:30, Codex/GPT-5): recorded Milestone 6 dynamic IDK0 score lane, implemented output schemas, scout receipt, CLI receipts, validation evidence, and commit `7c19c8b`; advanced Current State to the external-results gate.
 
 ## Outcomes & Retrospective
 
@@ -254,6 +303,10 @@ Milestone 2 outcome (2026-07-10 04:54 +05:30, Codex/GPT-5): configuration contra
 Milestone 3 outcome (2026-07-10 05:11 +05:30, Codex/GPT-5): prepared-stage admission is executable on synthetic 200-case data. `project-one-model` handles shared wide projection into a one-model package; `prepare` validates parent/incoming cases, metadata, parent wide/long reconciliation, ground-truth uniqueness, one model family, terminal-state routing, and writes the prepared staging tree; `audit_radle_v2_incremental_admission.py --phase prepared --no-write` validates the prepared outputs. No reusable lesson has been promoted to a skill; ask the user before creating or editing any skill.
 
 Milestone 4 outcome (2026-07-10 05:19 +05:30, Codex/GPT-5): local judge/radiologist routing is executable on synthetic prepared staging. Dry-run call math reports 194 worklist rows, 2 judges, 388 base calls, and 2328 retry-inclusive worst-case HTTP requests. Synthetic evidence writes `request_payloads.jsonl`, `judge_cache.jsonl`, `judge_results.jsonl`, `agreement_locks.csv`, `radiologist_queue_routing_audit.json`, `judge_evidence_index.json`, and `radiologist_queue.csv`; judge audit passes. No reusable lesson has been promoted to a skill; ask the user before creating or editing any skill.
+
+Milestone 5 outcome (2026-07-10 05:28 +05:30, Codex/GPT-5): finalized append is executable on synthetic prepared staging. `finalize-stage` creates a 200-row `scored_append_delta.csv`, copies/records the signed `radiologist_decisions.csv`, appends those rows to `final/radle_v2_final_long_master.csv` with the parent bytes as exact prefix, and writes `append_manifest.json`; `commit` writes `SHA256SUMS` then `COMMITTED.json`; committed readback validates the manifest hashes and checksum inventory. Validation receipts: `py -3.11 -m py_compile ...` passed, `py -3.11 -m unittest tests.test_radle_incremental_admission -v` ran 13 tests OK, `check-config` printed `CONFIG_RESULT=PASS`, the old RadLE Stats path scan had no matches, and `git diff --check` was clean. No reusable lesson has been promoted to a skill; ask the user before creating or editing any skill.
+
+Milestone 6 outcome (2026-07-10 05:28 +05:30, Codex/GPT-5): dynamic IDK0 Score1000/Score2000 and panel-source output generation is executable on synthetic committed admissions. `build-idk0-lane` derives `score_rows.csv`, `source1000.csv`, `public_candidate_summary.csv`, `panel_order.csv`, `group_summary.csv`, `panel_bins.csv`, and `score_lane_manifest.json` from the committed final master plus roster/terminal policy; `audit --phase idk0-lane` validates hashes, counts, public-summary privacy shape, active-only panel order, and `Score2000 = Score1000 + 1000`. CLI receipt on synthetic data printed `IDK0_RESULT=PASS` with 2800 score rows, 2 complete models, 1 active model, 1 excluded model, 12 human backend readers, 3 presentation comparators, and 2 panel comparators. Validation receipts: `py -3.11 -m py_compile ...` passed, `py -3.11 -m unittest tests.test_radle_incremental_admission -v` ran 15 tests OK, `check-config` printed `CONFIG_RESULT=PASS`, the old RadLE Stats path scan had no matches, and `git diff --check` was clean. No reusable lesson has been promoted to a skill; ask the user before creating or editing any skill.
 
 ## Suggested Skills By Phase
 
@@ -291,10 +344,9 @@ Important existing files:
 - `scripts/radle_v2_stats.py`: current roster-agnostic wide-to-long converter. Its abstention/failure classification and exact-match behavior are incomplete for this contract.
 - `scripts/radle_llm_judge.py`: safe-copy single-judge implementation evidence.
 - `scripts/radle_dual_judge_review.py`: historical dual-judge policy evidence; do not retain its hard-coded live prior path.
-- `scripts/build_radle_v2_score1000_idk0_pipeline.ps1`: current downstream wrapper that correctly passes IDK score 0 but uses scripts with historical assumptions.
-- `scripts/make_radle_v2_likert5_score1000_csvs_IDK0.py`: current Score1000 derivation to refactor around roster/manifest inputs.
-- `scripts/radle_v2_score1000_panel_stats_IDK0.py`: current panel data builder.
-- `scripts/make_radle_v2_score1000_panel23_svg_IDK0.py` and `scripts/audit_radle_v2_score1000_panel23_IDK0.py`: current active handwritten Panel 2/3 generation and audit lane.
+- Legacy IDK0/panel scripts named in earlier study notes are absent from this worktree and `origin/main`. Do not depend on them unless a later reviewed import explicitly adds them.
+- `scripts/radle_v2_incremental_admission.py build-idk0-lane`: current dynamic Score1000/Score2000 and panel-source lane builder.
+- `scripts/audit_radle_v2_incremental_admission.py --phase idk0-lane`: current read-only audit for generated IDK0 lane outputs.
 - `Documents/requirements_radle_v2_incremental_model_admission.md`: distilled user requirements.
 - `Documents/radle_v2_incremental_model_pipeline_requirements_study.md`: evidence and branch/artifact ledger.
 
@@ -372,6 +424,8 @@ Create or modify only these implementation families unless a milestone documents
        validate_radiologist_decisions(...) -> dict
        finalize_scored_delta(...) -> dict
        append_parent_bytes(parent_master: Path, scored_delta: Path, output_master: Path) -> dict
+       build_idk0_score_lane(...) -> dict
+       audit_idk0_score_lane(lane_root: Path) -> dict
        compute_intake_id(...) -> str
        compute_finalization_id(...) -> str
        audit_committed_admission(admission_root: Path) -> dict
@@ -386,14 +440,13 @@ Create or modify only these implementation families unless a milestone documents
        prepare
        finalize-stage
        commit
-       audit
-       build-public-candidate
+       build-idk0-lane
 
-   `project-one-model --dry-run` computes deterministic projection bytes/hash without writing. `prepare` writes only under a new `.staging/intake/<intake_id>/`; `finalize-stage` writes only under `.staging/final/<finalization_id>/`; `commit` promotes a passing precommit tree. No command writes beside the downloaded/shared source. No command accepts an overwrite, replace-existing-model, or allow-metadata-mismatch escape hatch.
+   `project-one-model --dry-run` computes deterministic projection bytes/hash without writing. `prepare` writes only under a content-addressed output root; `finalize-stage` writes only under `intake_root/finalized/<finalization_id>/`; `commit` marks a passing precommit tree by writing `SHA256SUMS` and then `COMMITTED.json`; `build-idk0-lane` refuses a non-empty output root. No command writes beside the downloaded/shared source. No command accepts an overwrite, replace-existing-model, or allow-metadata-mismatch escape hatch.
 
 6. `scripts/radle_v2_dual_judge_delta.py`
 
-   Read only `judge_worklist.csv`, the governed variants snapshot, judge config, a separately created paid-run authorization file, and API credentials. Write append-only JSONL evidence per judge plus `judge_agreement.csv`. Require `--dry-run` by default. Real calls require `--authorization <paid_judge_authorization.json>` whose admission/intake ID, judge IDs, prompt/config hashes, maximum HTTP requests, optional cost ceiling, approver, approval time, and expiry all validate.
+   Read only the prepared `--staging-root`, judge config, and generated staging sidecars. Current implementation supports no-network `--dry-run` and deterministic local `--synthetic`. Real paid calls are not implemented yet; a future extension must require a separately created `paid_judge_authorization.json` whose admission/intake ID, judge IDs, prompt/config hashes, maximum HTTP requests, optional cost ceiling, approver, approval time, and expiry all validate.
 
 7. `scripts/audit_radle_v2_incremental_admission.py`
 
@@ -590,7 +643,7 @@ After all judge/radiologist evidence exists, define the finalized admission iden
       finalizer_code_sha256 + "\n"
     )
 
-`finalization_id` is the committed admission ID. `finalize-stage` writes the complete candidate tree under `.staging/final/<finalization_id>/`. Run independent `audit --phase precommit` there. Only on `RESULT=PASS` may `commit` write `SHA256SUMS`, atomically rename the tree to `admissions/<finalization_id>/`, and write `COMMITTED.json` in the final directory as the last operation. Then run read-only `audit --phase committed-readback --no-write`; it may print a receipt or write outside the committed tree, never mutate it. The visible final directory remains non-authoritative until the marker exists.
+`finalization_id` is the committed admission ID. `finalize-stage` writes the complete candidate tree under `intake_root/finalized/<finalization_id>/`. Run independent `audit --phase precommit` there. Only on `RESULT=PASS` may `commit` write `SHA256SUMS` and then write `COMMITTED.json` in that finalized root as the last operation. Then run read-only `audit --phase committed-readback --no-write`; it may print a receipt or write outside the committed tree, never mutate it. The visible final directory remains non-authoritative until the marker exists.
 
 An identical committed finalization returns `ALREADY_ADMITTED` only after all hashes revalidate. The same `intake_id` may have several abandoned/rejected finalization attempts, but only an explicitly selected committed finalization may become the next parent. An uncommitted staging/final directory is non-authoritative and may resume only after all recorded hashes revalidate. Same model key with differing incoming content is a hard collision.
 
@@ -884,10 +937,9 @@ The release-1 judge prompt contains canonical ground truth and candidate diagnos
 
 Dry-run command:
 
-    $JudgeWorklist = Join-Path $StagingRoot 'judge_worklist.csv'
-    $VariantSnapshot = Join-Path $StagingRoot 'accepted_variants_snapshot.csv'
     $JudgeOut = Join-Path $StagingRoot 'judge_evidence'
-    py -3.11 scripts/radle_v2_dual_judge_delta.py --worklist $JudgeWorklist --variants $VariantSnapshot --config config/radle_v2_judges.json --out-dir $JudgeOut --dry-run
+    py -3.11 scripts/radle_v2_dual_judge_delta.py --staging-root $StagingRoot --config config/radle_v2_judges.json --out-dir $JudgeOut --dry-run
+    py -3.11 scripts/radle_v2_dual_judge_delta.py --staging-root $StagingRoot --config config/radle_v2_judges.json --out-dir $JudgeOut --synthetic
 
 Dry run prints cache misses and a worst-case request ceiling that includes retries:
 
@@ -900,7 +952,7 @@ Before real calls, ask the user to approve the displayed intake ID, judge IDs, c
     $Authorization = (Resolve-Path -LiteralPath $env:RADLE_PAID_JUDGE_AUTHORIZATION).Path
     $AuthorizationPayload = Get-Content -LiteralPath $Authorization -Raw | ConvertFrom-Json
     $ApprovedMaxRequests = [int]$AuthorizationPayload.max_http_requests
-    py -3.11 scripts/radle_v2_dual_judge_delta.py --worklist $JudgeWorklist --variants $VariantSnapshot --config config/radle_v2_judges.json --out-dir $JudgeOut --authorization $Authorization --max-paid-requests $ApprovedMaxRequests
+    # Real paid calls are not implemented in the current CLI; this remains a future authorization-gated extension.
 
 Acceptance:
 
@@ -977,17 +1029,13 @@ Required behavior:
 
 Synthetic validation:
 
-    $SyntheticMaster = 'tests/tmp/synthetic_admission/committed/final/radle_v2_final_long_master.csv'
-    $SyntheticRoster = 'tests/tmp/synthetic_admission/committed/roster/model_roster.json'
-    $SyntheticManifest = 'tests/tmp/synthetic_admission/committed/append_manifest.json'
-    $SyntheticOut = 'tests/tmp/synthetic_admission/idk0_pooled12'
-    & powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_radle_v2_score1000_idk0_pipeline.ps1 -InputMaster $SyntheticMaster -OutDir $SyntheticOut -RosterManifest $SyntheticRoster -SourceManifest $SyntheticManifest -HumanPresentation pooled12 -IdkScore 0
+    $CommittedRoot = 'tests/tmp/m6_cli_output/<intake_id>/finalized/<finalization_id>'
+    $SyntheticOut = 'tests/tmp/m6_cli_idk0_pooled12'
+    py -3.11 scripts/radle_v2_incremental_admission.py build-idk0-lane --committed-root $CommittedRoot --output-root $SyntheticOut --human-presentation pooled12 --states config/radle_v2_terminal_states.json
+    py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root $SyntheticOut --phase idk0-lane --no-write
     py -3.11 -m unittest tests.test_radle_incremental_admission -v
-    py -3.11 scripts/audit_radle_v2_incremental_admission.py --scenario synthetic-grok-replacement
-    py -3.11 scripts/audit_radle_v2_incremental_admission.py --scenario synthetic-gpt-replacement
-    py -3.11 scripts/audit_radle_v2_incremental_admission.py --scenario synthetic-muse-addition
 
-Expected counts are exactly the Dynamic Count Table. Do not update expected values by eyeballing output.
+Expected counts are derived from the lane manifest. For the current synthetic replacement fixture, the committed final master has 2800 row-level score rows, 2 complete models, 1 active model, 1 excluded model, 12 human backend readers, 3 pooled12 presentation comparators, and 2 active panel comparators. Do not update expected values by eyeballing output.
 
 Tests must also prove all signed scores for Likert 0..4, IDK0/invalid-zero, pooled human weight `1/12`, split human weight `1/6`, pooled/split derivation from the same 2400 human rows, and identical model rankings under Score1000 and Score2000.
 
@@ -1078,15 +1126,15 @@ Generate sanitized candidate-public files from the latest committed master, not 
 
 Public staging is a separate transaction under `outputs/radle_v2_stats/public_candidates/<source_master_sha256>/<public_candidate_id>/`. A failed privacy scan can quarantine only that public staging tree; it must not modify or invalidate the committed private admission.
 
-The public command is:
+The current local candidate/panel-source command is:
 
-    $PublicOutput = @(py -3.11 scripts/radle_v2_incremental_admission.py build-public-candidate --committed-admission $CommittedRoot --human-presentation pooled12 --out-root outputs/radle_v2_stats/public_candidates)
+    $PublicOutput = @(py -3.11 scripts/radle_v2_incremental_admission.py build-idk0-lane --committed-root $CommittedRoot --human-presentation pooled12 --output-root outputs/radle_v2_stats/public_candidates/<dated_lane>)
     $PublicOutput | ForEach-Object { Write-Host $_ }
-    $PublicLine = $PublicOutput | Where-Object { $_ -like 'PUBLIC_CANDIDATE_ROOT=*' }
-    if (@($PublicLine).Count -ne 1) { throw 'public command did not emit one PUBLIC_CANDIDATE_ROOT' }
+    $PublicLine = $PublicOutput | Where-Object { $_ -like 'IDK0_LANE_ROOT=*' }
+    if (@($PublicLine).Count -ne 1) { throw 'IDK0 lane command did not emit one IDK0_LANE_ROOT' }
     $PublicCandidateRoot = ($PublicLine -split '=', 2)[1]
 
-It emits `PUBLIC_CANDIDATE_ROOT=<absolute path>`. The public model-case table is model-only and has `200 * M` rows. The comparator summary/table may include projected human rows and orders them humans first, active models by Score2000, then excluded models by Score2000. Both expose `excluded`; no excluded arm enters a panel.
+It emits `IDK0_LANE_ROOT=<absolute path>`. The row-level `score_rows.csv` contains backend model and human rows without diagnosis or ground truth. The comparator summary/table includes projected human rows and orders them humans first, active models by Score2000, then excluded models by Score2000. Summary outputs expose `excluded`; no excluded arm enters `panel_order.csv`.
 
 Use explicit allowlists for public columns. Add a separate command:
 
