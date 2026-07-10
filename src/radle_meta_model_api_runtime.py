@@ -70,7 +70,7 @@ def get_high_reasoning_model_config() -> dict:
         "name": HIGH_REASONING_MODEL_NAME,
         "id": MODEL_ID,
         "provider": "meta_model_api",
-        "extra": {"reasoning": {"effort": "high"}},
+        "extra": {"reasoning_effort": "high"},
     }
 
 
