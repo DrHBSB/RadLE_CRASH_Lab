@@ -79,8 +79,8 @@ def main():
     tra = role_df[role_df.group == "Trainee"].iloc[0]
     allh = role_df[role_df.group == "All-Human"].iloc[0]
 
-    assert rad["n"] == 1400 and rad["n_raters"] == 7, f"Radiologist mismatch: {rad.to_dict()}"
-    assert tra["n"] == 1000 and tra["n_raters"] == 5, f"Trainee mismatch: {tra.to_dict()}"
+    assert rad["n"] == 1200 and rad["n_raters"] == 6, f"Radiologist mismatch: {rad.to_dict()}"
+    assert tra["n"] == 1200 and tra["n_raters"] == 6, f"Trainee mismatch: {tra.to_dict()}"
     assert allh["n"] == 2400 and allh["n_raters"] == 12, f"All-Human mismatch: {allh.to_dict()}"
 
     assert rad["n_correct"] + tra["n_correct"] == allh["n_correct"] == 924, (

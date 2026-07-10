@@ -1,0 +1,24 @@
+{
+  "schema_version": "radle_v2_branch_evidence_ledger.v1",
+  "selective_sources": [
+    {
+      "commit": "0931b0c",
+      "classification": "statistics_and_summary_repairs",
+      "policy": "selective_import_only",
+      "notes": "Contains radle_metrics.py, summary scripts, finalization, and audit writing; never merge its parent branch wholesale."
+    },
+    {
+      "commit": "071d6ec",
+      "classification": "lingshu_invalid_likert_guardrail",
+      "policy": "selective_import_only",
+      "notes": "Preserves final-scoring invalid-Likert handling; never merge its parent branch wholesale."
+    },
+    {
+      "commit": "5337c11^",
+      "blob": "4295ae9dc8f97595b791f2063e6da89b17405bb6",
+      "classification": "replaced_model_historical_notebook",
+      "policy": "archive_excluded"
+    }
+  ],
+  "whole_branch_merge_allowed": false
+}

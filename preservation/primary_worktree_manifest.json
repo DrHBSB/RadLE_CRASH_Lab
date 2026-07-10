@@ -1,0 +1,856 @@
+{
+  "am_paths": [
+    "Documents/execplan_radle_v2_idk0_score2000_svg_lane.md",
+    "scripts/assets/radle_score1000_logos/human_logo_sources.json",
+    "scripts/audit_radle_v2_score1000_panel23_IDK0.py",
+    "scripts/make_radle_v2_score1000_panel23_svg_IDK0.py",
+    "scripts/make_radle_v2_score1000_panel5_logo_placement_contact_sheet_IDK0.py"
+  ],
+  "created_utc": "2026-07-10T05:12:26.156931+00:00",
+  "entries": [
+    {
+      "classification": "runtime_document_changes",
+      "path": "Documents/execplan_final_binary_scoring_20260705_010315.md",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "M ",
+      "staged_blob_hash": "1552fdaef5b0efd00027045a631e9fdabefb5e61",
+      "staged_sha256": "A26766E2B8DA3937BB6E5AE1702D875A783C3A988A89DF2E719C8E31ED888073",
+      "working_differs_from_staged": false,
+      "working_sha256": "A26766E2B8DA3937BB6E5AE1702D875A783C3A988A89DF2E719C8E31ED888073"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "Documents/execplan_gpt56_openrouter_smoke.md",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "??",
+      "staged_blob_hash": null,
+      "staged_sha256": null,
+      "working_differs_from_staged": false,
+      "working_sha256": "FB010C9F1BC919290D9BA7398DAAEDD6E3CED737035831341D00E72C7BDBFB9E"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "Documents/execplan_grok45_morning_smoke.md",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "??",
+      "staged_blob_hash": null,
+      "staged_sha256": null,
+      "working_differs_from_staged": false,
+      "working_sha256": "6E81658FD4D40917A909A28FCDA7A4405843DE94187168A72BFE71C2F5A81A45"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "Documents/execplan_idk0_morning_integration_audit.md",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "??",
+      "staged_blob_hash": null,
+      "staged_sha256": null,
+      "working_differs_from_staged": false,
+      "working_sha256": "F987488E0C828B1F023D1D0EBFF417D18ED42215A3C978593576028F4B1F1842"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "Documents/execplan_medical_custom_runtime_colab.md",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": " M",
+      "staged_blob_hash": "5ae82e3691c4066eebb5319fce4ef0a2bd83d098",
+      "staged_sha256": "BE77C084C9C7E0E2C3C5F376830905768AA6A08AC0BF79DDD645735D06422A28",
+      "working_differs_from_staged": true,
+      "working_sha256": "9CAA5CB49D7227CAEC414E4E931B0CD1D5C7FE5BA35DD3FA80FB89429EDD0A0F"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "Documents/execplan_medical_workbench_runtime.md",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": " M",
+      "staged_blob_hash": "6b44a21597a448dcc6c05982131e31a40a2fd581",
+      "staged_sha256": "BF6ED483129081EF2920B70CDE5D95698143F52D058E01493AEBA74E156EB88D",
+      "working_differs_from_staged": true,
+      "working_sha256": "D752DC2D357E7636B5915268187130769739B6E13FDA7FD4C26622F8F98732B1"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "Documents/execplan_meta_muse_spark_colab.md",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "??",
+      "staged_blob_hash": null,
+      "staged_sha256": null,
+      "working_differs_from_staged": false,
+      "working_sha256": "AF2EBA5EB74B9CB0BAD8AEC2770099115037F23961C5446DAF3BD5E24DC475B3"
+    },
+    {
+      "classification": "panel_experiments_docs",
+      "path": "Documents/execplan_radle_v2_handwritten_panels.md",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "92d4696d636154d56ffbe58541066d8fb5afa346",
+      "staged_sha256": "256035D6DBB449A9201FF328DAFA4B09784026FA3C8BC946C0E8AEE151215D77",
+      "working_differs_from_staged": false,
+      "working_sha256": "256035D6DBB449A9201FF328DAFA4B09784026FA3C8BC946C0E8AEE151215D77"
+    },
+    {
+      "classification": "panel_experiments_docs",
+      "path": "Documents/execplan_radle_v2_idk0_score2000_svg_lane.md",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "AM",
+      "staged_blob_hash": "2f7a208070720f00a787064f9c40a7f6bc26e46c",
+      "staged_sha256": "6CE6A2123A731362A1D49B68AB55F3B349CAFD121B1E1E50A26210F415061044",
+      "working_differs_from_staged": true,
+      "working_sha256": "70F0DE741C16BED0AA9B0CB5C72056F3605BDC4D84DAF22CE0AA38BDB0B91FF2"
+    },
+    {
+      "classification": "panel_experiments_docs",
+      "path": "Documents/execplan_radle_v2_score1000_clean_pipeline.md",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "758a9443bae111caffaecd08d41618ee18228b62",
+      "staged_sha256": "79C010E89F36B363FE35D81BBFB7F68F2F274E68E952227D2C33D9EA2BA73345",
+      "working_differs_from_staged": false,
+      "working_sha256": "79C010E89F36B363FE35D81BBFB7F68F2F274E68E952227D2C33D9EA2BA73345"
+    },
+    {
+      "classification": "panel_experiments_docs",
+      "path": "Documents/execplan_radle_v2_score1000_panel2_group_color_variants.md",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "??",
+      "staged_blob_hash": null,
+      "staged_sha256": null,
+      "working_differs_from_staged": false,
+      "working_sha256": "830B339377D2B7C46F0EE76366DB6534AD1FB4DB2666DC2C881436B504246256"
+    },
+    {
+      "classification": "panel_experiments_docs",
+      "path": "Documents/execplan_radle_v2_temp_final_scoring_version.md",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "9a57a9e32740f1caa210869605a2bec03ba8e975",
+      "staged_sha256": "F28987619631E82BD3D4D468225BE5038483570F83767C61C444A452C00690A0",
+      "working_differs_from_staged": false,
+      "working_sha256": "F28987619631E82BD3D4D468225BE5038483570F83767C61C444A452C00690A0"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "Documents/execplan_repo_structure_audit.md",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "ca2c24bf00099fdd0a27dbeaaf2e5b65186d02d2",
+      "staged_sha256": "9889E2D28FA45D8E82ADFEF5E0D6201D0FC1397E88B2E7962C5CCB24E18F55CC",
+      "working_differs_from_staged": false,
+      "working_sha256": "9889E2D28FA45D8E82ADFEF5E0D6201D0FC1397E88B2E7962C5CCB24E18F55CC"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "Documents/repo_structure_audit_pass_two_ledger.md",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "d3d2cba4097ba35478d415e1363b43132a81a133",
+      "staged_sha256": "B5D8413FF2FF296A447362E1D4CDCB4AE3BD06851FAB1FED6ABEAE8054AA473A",
+      "working_differs_from_staged": false,
+      "working_sha256": "B5D8413FF2FF296A447362E1D4CDCB4AE3BD06851FAB1FED6ABEAE8054AA473A"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "README.md",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": " M",
+      "staged_blob_hash": "1ceb9962900f56efcf63d4f34ac67484fd8c4f5e",
+      "staged_sha256": "71143D786DFBF41D497B1EE08AC55A65E352DD79E1AD67D4986CE243AB0F8F48",
+      "working_differs_from_staged": true,
+      "working_sha256": "232032A1D6ACE75D69C05219B0A49472B4715D96C03941FB14A98FF229A7BDB0"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "notebooks/RadLE_Medical_Custom_Runtime.ipynb",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": " M",
+      "staged_blob_hash": "36eed9fa4225c059637b684b79852f000a30103e",
+      "staged_sha256": "B4CA729F6662916B588B1CF90A592D83E191F5E2122B8FB200A8C5F9346BC6AC",
+      "working_differs_from_staged": true,
+      "working_sha256": "8001A424ABAEB0A02BBE38E9A9A82CB743304158B094E3F14243276CE72676FC"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": " M",
+      "staged_blob_hash": "395e059d410b0e51fc75faef7258739d1d521479",
+      "staged_sha256": "AE23329295B9EF910C99FAA756C713F792285F38133A3F1F04DB469B863E2DF2",
+      "working_differs_from_staged": true,
+      "working_sha256": "F7E99A483C8323FD2DCF13716446631003F23AC9FF56FC2CA7A893507F20A8B3"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": " M",
+      "staged_blob_hash": "91b339e98f3ed33bb4498105e261912ad31327da",
+      "staged_sha256": "62A184E9A030859A7A0C3CFC425DC13675BA42DD8B24BE489EBA3C42B8F5A8BD",
+      "working_differs_from_staged": true,
+      "working_sha256": "31E6CC09BE2285CA0A71E5F581ABD43EAF1199FED9D2E4AEFBC6E0FB3783E523"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "notebooks/RadLE_Medical_Workbench_OctoMed_Runtime.ipynb",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": " M",
+      "staged_blob_hash": "51dee548b2ede73453481be7439d25a56269ced5",
+      "staged_sha256": "A3690F8AAB58DB1D8E7D282A88A060A307694DA2A9EDC940866182C1936E2A5B",
+      "working_differs_from_staged": true,
+      "working_sha256": "06EC666AC7C7A636F18F52D535503F705E413617A4F9C22CB17C634EDFE61DD6"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "notebooks/RadLE_Medical_Workbench_Runtime.ipynb",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": " M",
+      "staged_blob_hash": "d47d3eddc40ddfd7488048c0ca2ea13c749097dc",
+      "staged_sha256": "D8E17343B65C5998835328ABB8FD693F5A213010EE8EE3E506B7024FB39B9F70",
+      "working_differs_from_staged": true,
+      "working_sha256": "D2E4CAD8CEAF80E4A95888D789FD8D6FC641D4B0056A219C36F04208CB6CA65C"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "notebooks/RadLE_v1_5_Morning.ipynb",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": " M",
+      "staged_blob_hash": "be501aad16184a5f1a9a3726cde36584686ae657",
+      "staged_sha256": "38B77A27B2F526915AC01FC14E367AF1EAA318C8F860BEC96158647F2179EF93",
+      "working_differs_from_staged": true,
+      "working_sha256": "4A99FFAA11FE161017711F509822A4D9A1A0A32227401E1CF7B21FBA972C9832"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "notebooks/RadLE_v1_5_Morning_Grok45_5case.ipynb",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "??",
+      "staged_blob_hash": null,
+      "staged_sha256": null,
+      "working_differs_from_staged": false,
+      "working_sha256": "4710D9B31BC974653C8E7EDC6E95D0976BA2D8BF637B6D620C48790EE770E5B0"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/fonts/Lexend-OFL.txt",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "ef5fbbc7c076a7469663bdd8e1b318a589878ec2",
+      "staged_sha256": "DA67588AF7E0987521D7DFFC60CA92E8ABEE37F30535D94B503EC7BC52D73023",
+      "working_differs_from_staged": false,
+      "working_sha256": "DA67588AF7E0987521D7DFFC60CA92E8ABEE37F30535D94B503EC7BC52D73023"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/fonts/Lexend-wght.ttf",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "f70999106bfa76d48051b73ad7c888573663879c",
+      "staged_sha256": "3ADD53E641FBC81DA64DA4BB254285E2831B52B029527BC0714E2B9610832EE6",
+      "working_differs_from_staged": false,
+      "working_sha256": "3ADD53E641FBC81DA64DA4BB254285E2831B52B029527BC0714E2B9610832EE6"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/fonts/SpaceGrotesk-OFL.txt",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "d5666d70873cb905b4421d2c0d2e60747aae8573",
+      "staged_sha256": "18A4DE52385F6B988782639D5D0CC1326E5A8C2DE9A7F01D7B20D9AEDCC60943",
+      "working_differs_from_staged": true,
+      "working_sha256": "CC3D7E30AA5FA3B94D7B7EE6DCBB9CB15B2A3473D8E57435585FAC4A0F8C1334"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/fonts/SpaceGrotesk-wght.ttf",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "a1b2e6c26093066510a31147e7aec9abdc8d6c5e",
+      "staged_sha256": "ACAD6DE1FC93436F5C0F1F4137751EF04F1AEA3063E7036535970FFCFBD79F72",
+      "working_differs_from_staged": false,
+      "working_sha256": "ACAD6DE1FC93436F5C0F1F4137751EF04F1AEA3063E7036535970FFCFBD79F72"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/board_certified_radiologists_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "2a31afc69c32c2ed786ed2613e938d4bbe7d3ef0",
+      "staged_sha256": "C52C7F746A730912D23D6182CE0DF6A7C9A48EE16D17171CB183D4C1493A79B8",
+      "working_differs_from_staged": false,
+      "working_sha256": "C52C7F746A730912D23D6182CE0DF6A7C9A48EE16D17171CB183D4C1493A79B8"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/claude_fable_5_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "e29be47a1fe665d82baa6abf711197b1b17ba56a",
+      "staged_sha256": "97B53FB85B3BF401FFEB8EE7C5EBAD734CE9F6EDC3038F242021C53BCC18E23D",
+      "working_differs_from_staged": false,
+      "working_sha256": "97B53FB85B3BF401FFEB8EE7C5EBAD734CE9F6EDC3038F242021C53BCC18E23D"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/crash_lab_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "d3eb5ffbe719ab80bea97a576123b976046c1d97",
+      "staged_sha256": "91170ADF1AE4F86457DC9D738DA17AC072806F01EE45ABE81DC8B1D1994E8BB0",
+      "working_differs_from_staged": false,
+      "working_sha256": "91170ADF1AE4F86457DC9D738DA17AC072806F01EE45ABE81DC8B1D1994E8BB0"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/gemini_3_1_pro_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "e539633a2de4b789b171867a03cda24b97e36bcc",
+      "staged_sha256": "10C628F55D22A9725B9F9FCCCE7CF062B9FB68DA5F7736E87010E0594D7BA6DB",
+      "working_differs_from_staged": false,
+      "working_sha256": "10C628F55D22A9725B9F9FCCCE7CF062B9FB68DA5F7736E87010E0594D7BA6DB"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/gemma_4_31b_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "94e25295cc19a901dedb3548ae49a1167b8a0879",
+      "staged_sha256": "5F64463F9E00B29595C3CE7222100E263B67C3F29035C304D1249F30C99D2913",
+      "working_differs_from_staged": false,
+      "working_sha256": "5F64463F9E00B29595C3CE7222100E263B67C3F29035C304D1249F30C99D2913"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/glm_5v_turbo_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "d36432bbf2ff937e8e220ef6f43cd3256b6830a4",
+      "staged_sha256": "73D15F7DDDF3F4908BE028D856903B73BE706B3CFA9FF49471DE6D2CE4FD8950",
+      "working_differs_from_staged": false,
+      "working_sha256": "73D15F7DDDF3F4908BE028D856903B73BE706B3CFA9FF49471DE6D2CE4FD8950"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/gpt_5_5_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "bd7a119a6b3c832fde1128d48b258f3d702a5aaa",
+      "staged_sha256": "8A33312F6BB17C1EDDDF8F9D7FBAC09CE1D1D697D6601F37227AFA879E94C52E",
+      "working_differs_from_staged": false,
+      "working_sha256": "8A33312F6BB17C1EDDDF8F9D7FBAC09CE1D1D697D6601F37227AFA879E94C52E"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/grok_4_3_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "bfd935c3c88566b463c3dda7580109bc82cced55",
+      "staged_sha256": "F10EC0B2322F9D65A973D3D48FCDC41270D8B123A5D36E2826DABF9DCEFB0762",
+      "working_differs_from_staged": false,
+      "working_sha256": "F10EC0B2322F9D65A973D3D48FCDC41270D8B123A5D36E2826DABF9DCEFB0762"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/human_expert_baseline_deep_crimson_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "0611b850fc74c4a6cd3b2d190321b5b7d1867e74",
+      "staged_sha256": "7FAAC92B2B5D3DAC7DF5979D856121E66ABEF1C34D4D8D0907CC0F028EED1B47",
+      "working_differs_from_staged": false,
+      "working_sha256": "7FAAC92B2B5D3DAC7DF5979D856121E66ABEF1C34D4D8D0907CC0F028EED1B47"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/human_expert_baseline_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "2a31afc69c32c2ed786ed2613e938d4bbe7d3ef0",
+      "staged_sha256": "C52C7F746A730912D23D6182CE0DF6A7C9A48EE16D17171CB183D4C1493A79B8",
+      "working_differs_from_staged": false,
+      "working_sha256": "C52C7F746A730912D23D6182CE0DF6A7C9A48EE16D17171CB183D4C1493A79B8"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/human_logo_sources.json",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "AM",
+      "staged_blob_hash": "231e0c68bdd8fdd5ed07f56d09ba2805c78046c0",
+      "staged_sha256": "3DD35AC1A8C77BFC7129DB6318B2E22C6058AFC36FE3BF67C7427FCA3282A14A",
+      "working_differs_from_staged": true,
+      "working_sha256": "917AADF64EBDCA352D284B298951838ECBA4E91691C25168B0525D49F2B53029"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/internvl3_5_8b_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "5e44e0af88c68937d85ed290501d4c5c285aef1f",
+      "staged_sha256": "1B3B6158FDF2EA88AC868A4A9DBF7795777772C3EC512092DE6288EAEA043918",
+      "working_differs_from_staged": false,
+      "working_sha256": "1B3B6158FDF2EA88AC868A4A9DBF7795777772C3EC512092DE6288EAEA043918"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/kcdha_logo.svg",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "e2ebf5a58e3168f5959e8bb8dc74b6d1e1ab139b",
+      "staged_sha256": "8EE327772AB54ED3668F13B97E21A93917118D45B6462591AC2E294CF6F84755",
+      "working_differs_from_staged": false,
+      "working_sha256": "8EE327772AB54ED3668F13B97E21A93917118D45B6462591AC2E294CF6F84755"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/lingshu_32b_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "d13f7a4947c8591ba997b9ea430b64c2e0dd7e11",
+      "staged_sha256": "F1615CC091F78E5557B41B5F1464968334701AFCFECCE61A9A89993604058443",
+      "working_differs_from_staged": false,
+      "working_sha256": "F1615CC091F78E5557B41B5F1464968334701AFCFECCE61A9A89993604058443"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/llama_4_maverick_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "9e0af955b1a36eb79e0967836768f9f809464246",
+      "staged_sha256": "144FAB9BA427C7D8F7EE415E5A9113A3A66538CA4FC79FB0E01502978AF29A41",
+      "working_differs_from_staged": false,
+      "working_sha256": "144FAB9BA427C7D8F7EE415E5A9113A3A66538CA4FC79FB0E01502978AF29A41"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/medgemma_1_5_4b_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "94e25295cc19a901dedb3548ae49a1167b8a0879",
+      "staged_sha256": "5F64463F9E00B29595C3CE7222100E263B67C3F29035C304D1249F30C99D2913",
+      "working_differs_from_staged": false,
+      "working_sha256": "5F64463F9E00B29595C3CE7222100E263B67C3F29035C304D1249F30C99D2913"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/minimax_m3_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "e9472c676dc3af879f12d31ac0c66c0c0f211640",
+      "staged_sha256": "9E596627348DEB4030938A948243CC94E96CC1548D645CE4FAF1DE0E51B9043A",
+      "working_differs_from_staged": false,
+      "working_sha256": "9E596627348DEB4030938A948243CC94E96CC1548D645CE4FAF1DE0E51B9043A"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/mistral_large_3_2512_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "9fae9b39376d00d4d5014707edffb4696e7f000e",
+      "staged_sha256": "F3B97D586F84E68B8031C74B34BEBE4651EE0CB130831AC9B97CB64E1820A2EF",
+      "working_differs_from_staged": false,
+      "working_sha256": "F3B97D586F84E68B8031C74B34BEBE4651EE0CB130831AC9B97CB64E1820A2EF"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/model_logo_sources.json",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "b081dc652933487ba554c396f52d2f82c08eda21",
+      "staged_sha256": "88E3A3437B2B6F80E29C04837731613743CA78138EDFEAE37FE7758F491B3B93",
+      "working_differs_from_staged": true,
+      "working_sha256": "9BDB399127EB6EEB2DCDA1883DA3F8737A1529CB057DC5579E95453C510824A8"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/nemotron_3_omni_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "10a0090e30d9c3fd847ebc16250ed8d8e3198481",
+      "staged_sha256": "5A059CEC39A179D3DE978FB5C83D80882F8BAD61E016B9AC5A87EC8CC8DEE721",
+      "working_differs_from_staged": false,
+      "working_sha256": "5A059CEC39A179D3DE978FB5C83D80882F8BAD61E016B9AC5A87EC8CC8DEE721"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/octomed_7b_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "f01014f915912173e50932e97771d18018e20fc9",
+      "staged_sha256": "8438706BCAF7A1CC269653AFD137A9D564531DF07D655E77560F0294E157397B",
+      "working_differs_from_staged": false,
+      "working_sha256": "8438706BCAF7A1CC269653AFD137A9D564531DF07D655E77560F0294E157397B"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/qwen_3_7_plus_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "2667528e34c9a9393a5e823b3632a16b73399e5c",
+      "staged_sha256": "DE9BC7E285164E0D284A7B9555511C7F7767AF7699D6272B3B67B376EEDDBFB3",
+      "working_differs_from_staged": false,
+      "working_sha256": "DE9BC7E285164E0D284A7B9555511C7F7767AF7699D6272B3B67B376EEDDBFB3"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/assets/radle_score1000_logos/radiology_trainees_logo.png",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "f157aa8921b0fc4ddda5c41ecd4439749156cc57",
+      "staged_sha256": "2B154562193CB660348B3A1385254EEA5947EDA58E0E7C77ADF095F70ABEA269",
+      "working_differs_from_staged": false,
+      "working_sha256": "2B154562193CB660348B3A1385254EEA5947EDA58E0E7C77ADF095F70ABEA269"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/audit_radle_v2_handwritten_panels.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "??",
+      "staged_blob_hash": null,
+      "staged_sha256": null,
+      "working_differs_from_staged": false,
+      "working_sha256": "D3C052ED2E9AE05D4FBB4D76111BF510DBD7B5166E479AF38873FB1F069E06E4"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/audit_radle_v2_likert5_score1000_csvs.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "258d2188e9b1b6dcbf283f9d4e2fcdf9e202b02e",
+      "staged_sha256": "D6E82BB48628E6AFDF6AB27A9294FD7AA96D3DCCC676C17602BB062CDBBA5C4D",
+      "working_differs_from_staged": true,
+      "working_sha256": "920D5A9204A43C3D45E14078F8F708184F430605FA0E1C603AD84FF9102CDDD6"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/audit_radle_v2_likert5_score1000_csvs_IDK0.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "8196d8f123da656083a7b8abf37f070586c3e03c",
+      "staged_sha256": "761FC1CA99604962AC8E8E8FCADA731F93EAA7417D9066687D0DC7881697C263",
+      "working_differs_from_staged": false,
+      "working_sha256": "761FC1CA99604962AC8E8E8FCADA731F93EAA7417D9066687D0DC7881697C263"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/audit_radle_v2_score1000_panel23.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "1c73e393342092ca3bfe5212cd6f4e847136a638",
+      "staged_sha256": "49A4F741A693F41473865C1EB3A12B894FA44EA473CE157D39EC514481A06316",
+      "working_differs_from_staged": true,
+      "working_sha256": "D5907E0ED33F908F016CF8462E8554AFCDCB68F6F9EBB6223CEE55DD976C49F6"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/audit_radle_v2_score1000_panel23_IDK0.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "AM",
+      "staged_blob_hash": "b1d49bf2e7be9eae5294ab24eeb35103de9be6c9",
+      "staged_sha256": "55904490E910B0820FB82372EA9D54EA405E7423810292BB425110AFD989AE3F",
+      "working_differs_from_staged": true,
+      "working_sha256": "356AF97FCFE10B5781A6855DD5833B59FE58435F570B723120AB8A72D9F2280B"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/build_radle_v2_clean_adjudication_master.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "492bb92c00cc26a23743846ee21dcc93ab0054f3",
+      "staged_sha256": "153BC74989956A8214DC6CDD3DA5872B2CEC79C939299CDC339ED62FF0E2BEBB",
+      "working_differs_from_staged": false,
+      "working_sha256": "153BC74989956A8214DC6CDD3DA5872B2CEC79C939299CDC339ED62FF0E2BEBB"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/build_radle_v2_handwritten_panels.ps1",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "e3cc6d2b5a6370e47788f1dd5e93f0aaf9df3686",
+      "staged_sha256": "A781BDE7C8661F5D6F463FC67AA0D6579BC9C76879C7AE66F47F8A47B4AC4E88",
+      "working_differs_from_staged": false,
+      "working_sha256": "A781BDE7C8661F5D6F463FC67AA0D6579BC9C76879C7AE66F47F8A47B4AC4E88"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/build_radle_v2_score1000_idk0_pipeline.ps1",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "1d30d8a2ede329e352f7f3c60ac2abf98f025786",
+      "staged_sha256": "4C523FF2226334D167312C26C9240A05AE25CBC2DC51D78EE2A68C1358981766",
+      "working_differs_from_staged": false,
+      "working_sha256": "4C523FF2226334D167312C26C9240A05AE25CBC2DC51D78EE2A68C1358981766"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/build_radle_v2_score1000_pipeline.ps1",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "eef83ce7abd9bc136f4c3ce72c7c6937218f07c6",
+      "staged_sha256": "EC71A671ED160D3FE60DD437488E6E20A5B511182911B58C49BC41E91EBBD545",
+      "working_differs_from_staged": false,
+      "working_sha256": "EC71A671ED160D3FE60DD437488E6E20A5B511182911B58C49BC41E91EBBD545"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/build_radle_v2_temp_final_scoring_version.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "47234924814b7c5361b0ca2762f401c727bab7a5",
+      "staged_sha256": "4EF0B1B2E938E1CC1DDE54078D0C13D600665AAD8D7A9D48A130DE25EEE13D10",
+      "working_differs_from_staged": false,
+      "working_sha256": "4EF0B1B2E938E1CC1DDE54078D0C13D600665AAD8D7A9D48A130DE25EEE13D10"
+    },
+    {
+      "classification": "panel_experiments_docs",
+      "path": "scripts/make_radle_v2_6_3_gap_arrow_options_contact_sheet_IDK0.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "??",
+      "staged_blob_hash": null,
+      "staged_sha256": null,
+      "working_differs_from_staged": false,
+      "working_sha256": "09A3E9D023BF9249E51FD5FD61D46BCA08CCF0106E8F1D7F2C27E632FF3EC3E6"
+    },
+    {
+      "classification": "panel_experiments_docs",
+      "path": "scripts/make_radle_v2_blue_likert_contract_sheet.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "??",
+      "staged_blob_hash": null,
+      "staged_sha256": null,
+      "working_differs_from_staged": false,
+      "working_sha256": "3C6168459E0A942895EA08D569A22B301FE6E69F03DB1219FB4321652ABB9285"
+    },
+    {
+      "classification": "panel_experiments_docs",
+      "path": "scripts/make_radle_v2_category_palette_options.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "??",
+      "staged_blob_hash": null,
+      "staged_sha256": null,
+      "working_differs_from_staged": false,
+      "working_sha256": "90225F092F859075FE6BC040A62B8454B24428D9236DDCC75AB74821083DFD69"
+    },
+    {
+      "classification": "panel_experiments_docs",
+      "path": "scripts/make_radle_v2_claude_octomed_bar_color_contact_sheet.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "??",
+      "staged_blob_hash": null,
+      "staged_sha256": null,
+      "working_differs_from_staged": false,
+      "working_sha256": "BDBE970B7314EFD16D3D4B15D9E06AE460C95B6687B24ECDE093F0479110B6EE"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/make_radle_v2_handwritten_svg_panels.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "??",
+      "staged_blob_hash": null,
+      "staged_sha256": null,
+      "working_differs_from_staged": false,
+      "working_sha256": "5D9A881EF16B301381A9B612DAD6067C438421A48D7B25B4FE02596934ED66F9"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/make_radle_v2_likert5_score1000_csvs.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "58e69c28b69a3111566f3d736f000665bebec7dc",
+      "staged_sha256": "4F86E76E84A412434E7B9F3CE8F7A7114742A40BE1D847D47FD6EB5F93C68E5B",
+      "working_differs_from_staged": true,
+      "working_sha256": "431B12F1CB7E987B4CC5319112FD9E38D1CA1189878BFB99FF2B5439704A51AC"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/make_radle_v2_likert5_score1000_csvs_IDK0.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "1a748801c2fd0f85f99a4bb92284d3ad6b52bcf1",
+      "staged_sha256": "6636D2886E111B180AF26206B2D61478678790270FBE8301E78496CDAB58E0EE",
+      "working_differs_from_staged": false,
+      "working_sha256": "6636D2886E111B180AF26206B2D61478678790270FBE8301E78496CDAB58E0EE"
+    },
+    {
+      "classification": "panel_experiments_docs",
+      "path": "scripts/make_radle_v2_model_bar_color_contact_sheet.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "??",
+      "staged_blob_hash": null,
+      "staged_sha256": null,
+      "working_differs_from_staged": false,
+      "working_sha256": "AF5F512857717F25AE40BB340FFC443D6A9BF6509752EAE5DAF353690A8F487B"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/make_radle_v2_score1000_panel23_svg.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "e0382cd16246405b04bba1d8ebd019dacc1b7fec",
+      "staged_sha256": "B25DAE3BA66077E5355B22EB3EF98CEA9B6E0FE3338E085CF748E2D5CEF9D099",
+      "working_differs_from_staged": true,
+      "working_sha256": "FA5D8CE3BFB2F340A149EA0CEAFA392196A2075BA44575F455B4E87499986E12"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/make_radle_v2_score1000_panel23_svg_IDK0.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "AM",
+      "staged_blob_hash": "87e1637f93a7b38872e2b74c41beb510b74e4850",
+      "staged_sha256": "412D8F2F5B0AC7CA3C4C2F29A2A29CE40C500B170D4CF80ED9CF298043824A35",
+      "working_differs_from_staged": true,
+      "working_sha256": "5A4434103DFC3E50E0837668B97A44EBF6FAAD1A929570DA3229FF08A86670C7"
+    },
+    {
+      "classification": "panel_experiments_docs",
+      "path": "scripts/make_radle_v2_score1000_panel5_logo_placement_contact_sheet.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "??",
+      "staged_blob_hash": null,
+      "staged_sha256": null,
+      "working_differs_from_staged": false,
+      "working_sha256": "168B66DF2D8C8FD956F1FEA3DB27657626B7ED905A29102812D977F00A103FE3"
+    },
+    {
+      "classification": "panel_experiments_docs",
+      "path": "scripts/make_radle_v2_score1000_panel5_logo_placement_contact_sheet_IDK0.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "AM",
+      "staged_blob_hash": "d0796bf75ec0d79ed3a6e1c66ccfee9229b2b3f1",
+      "staged_sha256": "2DF79A50ABFDADA8B2016C327A344E73F0CDE7AC564D2F258C3ED4CC2578986D",
+      "working_differs_from_staged": true,
+      "working_sha256": "D91A818ADCC5066F4978E50A047182AC7727A2AE9DDDAE24BAEF700824D84464"
+    },
+    {
+      "classification": "panel_experiments_docs",
+      "path": "scripts/make_radle_v2_score1000_panel5_options_contact_sheet.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "??",
+      "staged_blob_hash": null,
+      "staged_sha256": null,
+      "working_differs_from_staged": false,
+      "working_sha256": "53D586EEA1C8A28182E9205C69454143285DA3D6A371C4C690DBE987614AFFCE"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "scripts/radle_v2_finalize_summaries.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": " M",
+      "staged_blob_hash": "869a9b6319d13fad1914daf419adb5d624e86405",
+      "staged_sha256": "A6AFF45BEFCB9F101838739745465A3887B7EA3FDA3BC1D16CDEA498B753FEA0",
+      "working_differs_from_staged": true,
+      "working_sha256": "CD6638509CEE7529A58ADCE4A94ED2E8D1F8E9B0417F837DA5D3BD7A037E6CBF"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/radle_v2_handwritten_stats.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "??",
+      "staged_blob_hash": null,
+      "staged_sha256": null,
+      "working_differs_from_staged": false,
+      "working_sha256": "832A5BA9038DA25814B72E1D5B1007C99D60AED65A579CE9D9921D69C2B111A6"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/radle_v2_score1000_panel_stats.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "6f4b8684521653fb5c72cb87c0c38ecf1046a0a0",
+      "staged_sha256": "94DE3CF3B6C4727C8BA0955EC0C6B855C6192D000D361500B3C6D9B68D528C97",
+      "working_differs_from_staged": true,
+      "working_sha256": "14BEFE3ACE664F42420867A1F8CE8FAC502EDA9B156F41B08ACE4BBDBED1446D"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/radle_v2_score1000_panel_stats_IDK0.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "1f79d3c7d94290e3097989aa28aeba18b2c035ea",
+      "staged_sha256": "261ADB5AA9CB46278F4D9E557603B10B3154A7C6CA8043A93FDC69AD07FB268D",
+      "working_differs_from_staged": false,
+      "working_sha256": "261ADB5AA9CB46278F4D9E557603B10B3154A7C6CA8043A93FDC69AD07FB268D"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/reference/radle_stats_handwritten_svg_panels/README.md",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "4e923c95a71b42e2c92555287e10b263ff02fc28",
+      "staged_sha256": "42B7E29FFD656053148285CC6536C199D934FF3FA8842CC2F750C4FA17291D3C",
+      "working_differs_from_staged": false,
+      "working_sha256": "42B7E29FFD656053148285CC6536C199D934FF3FA8842CC2F750C4FA17291D3C"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/reference/radle_stats_handwritten_svg_panels/font_sizes.csv",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "a8983822f76da041f06911c3a562f7bd85b6494c",
+      "staged_sha256": "5ACD7B9E251A967F664989778B7A9A0D8BDF01E804C8AB89401D897852A73D23",
+      "working_differs_from_staged": false,
+      "working_sha256": "5ACD7B9E251A967F664989778B7A9A0D8BDF01E804C8AB89401D897852A73D23"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/reference/radle_stats_handwritten_svg_panels/make_handwritten_svg_panels.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "397b4583774c8c698fc2504ca48b07b1d72d3b48",
+      "staged_sha256": "CA16D1168F5AA9CA89243C437A9162D51DBA2260FCE97C10AC7773478D1BA9E8",
+      "working_differs_from_staged": false,
+      "working_sha256": "CA16D1168F5AA9CA89243C437A9162D51DBA2260FCE97C10AC7773478D1BA9E8"
+    },
+    {
+      "classification": "panel_core_assets",
+      "path": "scripts/reference/radle_stats_handwritten_svg_panels/make_handwritten_svg_panels_fixed.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": "A ",
+      "staged_blob_hash": "f788fa80d54ee16398f79c290084ec905521a5e1",
+      "staged_sha256": "E30FD3E9FA3AA445BA4E56E8190B65074C61BCA49B5B3D88EA9B7A157ACB6BBA",
+      "working_differs_from_staged": false,
+      "working_sha256": "E30FD3E9FA3AA445BA4E56E8190B65074C61BCA49B5B3D88EA9B7A157ACB6BBA"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "scripts/summary_human.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": " M",
+      "staged_blob_hash": "2038f61fd9c191d11b14ff488a6744fcffbbb20b",
+      "staged_sha256": "7EB634C5963B98FE24FC1481EF499ED7EE8D31B0F42E9E8B7C96D28978CE878B",
+      "working_differs_from_staged": true,
+      "working_sha256": "C5A80798362607D4E0C7FAD3EA2791C60F3B3251116B57EBEEA97C7E078CDB5C"
+    },
+    {
+      "classification": "runtime_document_changes",
+      "path": "scripts/write_audit.py",
+      "source_branch": "codex/radle-v2-handwritten-panels",
+      "source_status": " M",
+      "staged_blob_hash": "10272a96f84f13a476f9105ba6ed9a9c1e8a0bc8",
+      "staged_sha256": "6B02DE5191875F9B13CD4107C64E05FA62BB6BA6F4A24A2B55D43FD46D20B7F5",
+      "working_differs_from_staged": true,
+      "working_sha256": "6B4FA23CB203217E15A34141531A6F537F87A277B1C83A12CB0BA72CAF57D980"
+    }
+  ],
+  "excluded_paths": [
+    ".claude/settings.local.json",
+    "Documents/execplan_radle_v2_incremental_model_admission.md",
+    "src/radle_benchmark.py",
+    "src/radle_meta_model_api_runtime.py"
+  ],
+  "incremental_comparison_head": "77dbfb042f9ee58717204b28803a56a8b2509b56",
+  "overlap_paths_preserved": [
+    "Documents/execplan_medical_custom_runtime_colab.md",
+    "Documents/execplan_medical_workbench_runtime.md",
+    "README.md",
+    "notebooks/RadLE_Medical_Custom_Runtime.ipynb",
+    "notebooks/RadLE_Medical_Workbench_Internvl_Runtime.ipynb",
+    "notebooks/RadLE_Medical_Workbench_LLaVA_SGLang_Runtime.ipynb",
+    "notebooks/RadLE_Medical_Workbench_OctoMed_Runtime.ipynb",
+    "notebooks/RadLE_Medical_Workbench_Runtime.ipynb",
+    "notebooks/RadLE_v1_5_Morning.ipynb"
+  ],
+  "primary_only_changed_path_count": 74,
+  "schema_version": "radle_v2_primary_preservation_manifest.v1",
+  "selected_path_count": 82,
+  "source_branch": "codex/radle-v2-handwritten-panels",
+  "source_head": "8c9de277631813172b391e685e772feccab9de28",
+  "source_root": "C:\\Users\\thehb\\Documents\\RadLE v2"
+}

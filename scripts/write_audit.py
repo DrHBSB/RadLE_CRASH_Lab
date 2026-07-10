@@ -89,6 +89,7 @@ def main():
             "candidate_changes": {
                 "Nishtha Mahajan": "Radiologist -> Trainee",
                 "Devyani Singh": "Radiologist -> Trainee",
+                "Prathamesh Tadage": "Radiologist -> Trainee",
             },
             "role_people_counts": {
                 r: int(hum[hum.candidate == r].provider.nunique()) for r in ("Radiologist", "Trainee")

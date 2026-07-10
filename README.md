@@ -34,7 +34,8 @@ Keep the notebook as the Colab runner. The reusable benchmark logic lives in `sr
 
 ## Experimental Medical Custom Runtime
 
-- Notebook: `notebooks/RadLE_Medical_Custom_Runtime.ipynb`
+- Colab notebook: `notebooks/RadLE_Medical_Custom_Runtime.ipynb`
+- Workbench notebook: `notebooks/RadLE_Medical_Workbench_Runtime.ipynb`
 - Colab: https://colab.research.google.com/github/DrHBSB/RadLE_CRASH_Lab/blob/main/notebooks/RadLE_Medical_Custom_Runtime.ipynb
 - Helper module: `src/radle_medical_custom_runtime.py`
 
@@ -47,23 +48,28 @@ Current experimental medical models:
 - `medgemma_1_5_4b` -> `google/medgemma-1.5-4b-it`
 - `llava_med_mistral_7b` -> `microsoft/llava-med-v1.5-mistral-7b`
 - `internvl3_5_8b` -> `OpenGVLab/InternVL3_5-8B`
+- `octomed_7b` -> `OctoMed/OctoMed-7B`
 
 Run sequence:
 
 1. Attach a GPU custom runtime, preferably starting with an L4/G2 runtime.
-2. Open the experimental Colab link.
+2. Open the experimental Colab link, or open the Workbench notebook in Vertex Workbench / Colab Enterprise.
 3. Rerun the first code cell to clone or pull the latest GitHub code, then rerun dependency/import cells.
 4. Select one `SELECTED_MODEL_NAME`.
 5. Start with `TEST_LIMIT=1`, then `TEST_LIMIT=3` or `TEST_LIMIT=5`.
 6. Stop the local model server or restart the runtime before switching models.
 
-The notebook routes Hugging Face, Transformers, vLLM, and pip caches under
-`/content/radle_runtime_cache` so model weights do not fill the custom runtime's
-root disk. If your custom runtime image already includes vLLM or SGLang, set
-`INSTALL_SERVER_PACKAGES = False` in the dependency cell.
+The Colab notebook routes Hugging Face, Transformers, vLLM, and pip caches under
+`/content/radle_runtime_cache`. The Workbench notebook routes those caches under
+the runtime root, defaulting to `/content/radle_runtime_cache` when `/content`
+exists. For Vertex Workbench or notebook execution jobs, set
+`RADLE_RUNTIME_ROOT` or `RADLE_RUNTIME_CACHE_ROOT` if `/content` is not the
+right writable disk. If your custom runtime image already includes vLLM or
+SGLang, set `INSTALL_SERVER_PACKAGES = False` in the dependency cell.
 
-Colab Enterprise does not support `google.colab.drive.mount()`. For Enterprise,
-mount or copy the RadLE dataset to a Cloud Storage/local path and set
-`DATASET_ROOT_OVERRIDE` in cell 4, or set `RADLE_DATASET_ROOT`, to the folder
-that contains `RadLE v2 Master Data`. Standard Colab can still use the default
+Colab Enterprise and Vertex Workbench should not rely on
+`google.colab.drive.mount()`. Mount or copy the RadLE dataset to a local path
+and set `DATASET_ROOT_OVERRIDE` or `RADLE_DATASET_ROOT` to the folder that
+contains `RadLE v2 Master Data`, or set `RADLE_DATASET_GCS_URI` to a private
+Cloud Storage folder that contains it. Standard Colab can still use the default
 Drive path.

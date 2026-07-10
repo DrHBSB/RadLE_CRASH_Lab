@@ -32,7 +32,7 @@ SENIORITY = {
     "Shravan Reddy": ("PGY3", 2),
     "Dhanush Jayanna": ("PGY3", 2),
     "Prerna Priyadarshini": ("6mo post-MD", 3),
-    "Prathamesh Tadage": ("6mo post-MD", 3),
+    "Prathamesh Tadage": ("PGY3", 2),
     "Rahul John Joseph": ("2y post-MD", 4),
     "Vikas H P": ("3y post-MD", 5),
     "Yash Jakhotia": ("3y post-MD", 5),

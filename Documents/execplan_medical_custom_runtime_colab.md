@@ -22,6 +22,8 @@ Current state (2026-06-29 15:58 +05:30, Codex/GPT-5): After creating the `radle-
 
 Current state (2026-06-29 16:09 +05:30, Codex/GPT-5): After the user hit `drive.mount("/content/drive")` directly in Colab Enterprise, the notebook now makes Enterprise storage handling explicit in its opening markdown and cell 4. Standard Colab can still mount Drive, but Enterprise never falls back to `/content/drive`; it checks a local/copied dataset root, honors `DATASET_ROOT_OVERRIDE`/`RADLE_DATASET_ROOT`, and can copy `RadLE v2 Master Data` from a private `RADLE_DATASET_GCS_URI`.
 
+Current state (2026-06-29 17:27 +05:30, Codex/GPT-5): The user reran a pre-OctoMed/pre-sync Colab copy on a T4 and vLLM again failed with `ImportError: libcudart.so.13`, while `/content` still had almost all disk free. This confirms the old notebook/runtime was still using a stale CUDA-13 vLLM wheel, not failing on model download or GPU memory. `start_model_server()` now runs a fast vLLM import probe before launching the background server so this exact wheel mismatch appears directly in the cell output instead of as a later `/models` timeout.
+
 ## Locked Facts
 
 - Official benchmark logic stays in `src/radle_benchmark.py`.
@@ -73,6 +75,7 @@ Current state (2026-06-29 16:09 +05:30, Codex/GPT-5): After the user hit `drive.
 - [x] (2026-06-29 15:58 +05:30, Codex/GPT-5) Patched `wait_for_openai_server(...)` to accept the launched process and log path, raising immediately with the server log tail when vLLM/SGLang exits before readiness.
 - [x] (2026-06-29 15:58 +05:30, Codex/GPT-5) Validated with notebook JSON checks, `py_compile`, vLLM command-shape check, fake-client one-case CSV smoke, and a dead-server fast-fail test.
 - [x] (2026-06-29 16:09 +05:30, Codex/GPT-5) Hardened cell 4 against accidental Enterprise Drive use and added optional private-GCS dataset staging through `RADLE_DATASET_GCS_URI`.
+- [x] (2026-06-29 17:27 +05:30, Codex/GPT-5) Added a `verify_vllm_importable()` guard before vLLM server startup so stale CUDA-13 wheels fail before the endpoint wait.
 
 ## Surprises & Discoveries
 
@@ -88,6 +91,9 @@ Current state (2026-06-29 16:09 +05:30, Codex/GPT-5): After the user hit `drive.
 - Observation: The plain vLLM install path can pick a CUDA-13 wheel in Colab, failing before model load with `ImportError: libcudart.so.13`.
   Evidence: User-shared vLLM traceback failed during `import vllm._C`; vLLM release metadata confirms a separate `vllm-0.23.0+cu129-cp38-abi3-manylinux_2_28_x86_64.whl` asset is available.
   Date/Author: 2026-06-27, Codex/GPT-5.
+- Observation: A stale Colab notebook/runtime can still reach cell 6 with a CUDA-13 vLLM wheel even after the repo has a fixed dependency cell, so server startup needs its own preflight.
+  Evidence: User-shared 2026-06-29 T4 log showed `/usr/local/lib/python3.12/dist-packages/vllm/... ImportError: libcudart.so.13` while `/content` had 196G free and the command still used old `--max-model-len 8192` settings.
+  Date/Author: 2026-06-29, Codex/GPT-5.
 - Observation: Installing the explicit vLLM wheel is not sufficient if a stale CUDA-13 `vllm` package remains installed in the current Colab environment.
   Evidence: The same `libcudart.so.13` traceback recurred after the first exact-wheel patch.
   Date/Author: 2026-06-27, Codex/GPT-5.

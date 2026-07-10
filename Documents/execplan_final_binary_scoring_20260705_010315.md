@@ -10,13 +10,14 @@ The user needs a complete binary correctness scoring of `outputs/radle_v2_stats/
 
 ## Current State
 
-Current state (2026-07-05 01:21 IST, Codex/GPT-5): Final scoring is complete. The output folder `outputs/radle_v2_stats/final_binary_scoring_20260705_010315/` contains the required scored blinded CSV, scored unblinded CSV, model summary, audit JSON, and README. Read-back validation confirmed 6,000 scored blinded rows, 6,000 scored unblinded rows, score values only `0/1`, zero duplicate `(Master_Case_ID, model_blinded)` rows, all 30 blinded candidates represented, and zero missing unblinded `model_key`/`provider` rows. Next: report the output folder, final CSV paths, and validation summary.
+Current state (2026-07-07 12:29 +05:30, Codex/GPT-5): Final binary scoring remains complete, but the stale active output folder has been moved out of the active outputs path. The preserved archive location is now `outputs/radle_v2_stats/_stale_archive/final_binary_scoring_20260705_010315/`. The original active path `outputs/radle_v2_stats/final_binary_scoring_20260705_010315/` no longer exists. Next: use the archive path for historical proof lookup; do not regenerate or restore this lane unless the user explicitly asks.
 
 ## Locked Facts
 
 - Input long CSV: `outputs/radle_v2_stats/long_format_diag_likert_blinded_combined.csv`.
 - Input blinding key: `outputs/radle_v2_stats/blinding_key_blinded_combined.csv`.
-- Output root: `outputs/radle_v2_stats/final_binary_scoring_20260705_010315/`.
+- Original output root: `outputs/radle_v2_stats/final_binary_scoring_20260705_010315/`.
+- Archived output root as of 2026-07-07: `outputs/radle_v2_stats/_stale_archive/final_binary_scoring_20260705_010315/`.
 - Final scored blinded output has 6,000 rows and score counts `0=4665`, `1=1335`.
 - Final scored unblinded output has 6,000 rows and zero missing `model_key`/`provider` joins.
 - Final model summary has 30 rows, one per blinded candidate/model key.
@@ -40,6 +41,7 @@ Current state (2026-07-05 01:21 IST, Codex/GPT-5): Final scoring is complete. Th
 - [x] (2026-07-05 01:14 IST, Codex/GPT-5) Spawned six subagents for the six disjoint shard files; each wrote and validated one scored shard CSV.
 - [x] (2026-07-05 01:20 IST, Codex/GPT-5) Merged shard outputs, reviewed worker/evidence conflicts plus duplicate text-pair inconsistencies, and applied 32 main adjudication overrides.
 - [x] (2026-07-05 01:21 IST, Codex/GPT-5) Wrote final required files and read them back to validate row counts, score values, duplicates, candidate coverage, unblinded join coverage, blank checks, and weighted-score blank semantics.
+- [x] (2026-07-07 12:29 +05:30, Codex/GPT-5) Moved the completed binary scoring folder from the active output root to `outputs/radle_v2_stats/_stale_archive/final_binary_scoring_20260705_010315/` after resolved-path checks, preserving files rather than hard-deleting them.
 
 ## Surprises & Discoveries
 
@@ -69,14 +71,19 @@ Current state (2026-07-05 01:21 IST, Codex/GPT-5): Final scoring is complete. Th
   Rationale: The workers scored every row directly under the supplied rubric, while older evidence artifacts were incomplete and sometimes too strict or clinically wrong for the final requested rubric.
   Date/Author: 2026-07-05, Codex/GPT-5
 
+- Decision: Archive the completed binary scoring lane instead of hard-deleting it during July 7 cleanup.
+  Rationale: The folder was stale relative to the active Score1000 outputs, but prior repo-structure audit classified it as an internal proof precursor. Archiving cleans active outputs while preserving recovery evidence.
+  Date/Author: 2026-07-07, user and Codex/GPT-5
+
 ## Revision Notes
 
 - v1 (2026-07-05, Codex/GPT-5): Created a task-specific plan after validating input shape and writing deterministic shard inputs.
 - v2 (2026-07-05, Codex/GPT-5): Recorded final shard merge, main adjudication overrides, required output files, and read-back validation.
+- v3 (2026-07-07, Codex/GPT-5): Recorded cleanup archival move from active outputs to `_stale_archive`.
 
 ## Outcomes & Retrospective
 
-Completed. Required final artifacts were written under `outputs/radle_v2_stats/final_binary_scoring_20260705_010315/`. No lesson needs promotion into a reusable skill without explicit user request.
+Completed. Required final artifacts were originally written under `outputs/radle_v2_stats/final_binary_scoring_20260705_010315/`; as of 2026-07-07 they are preserved under `outputs/radle_v2_stats/_stale_archive/final_binary_scoring_20260705_010315/`. No lesson needs promotion into a reusable skill without explicit user request.
 
 ## Suggested Skills By Phase
 
