@@ -119,6 +119,43 @@ class IncrementalAdmissionProductionTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def clone_package_for_model(
+        self,
+        source: Path,
+        destination: Path,
+        *,
+        source_model: str,
+        target_model: str,
+        provider: str,
+        returned_model: str,
+    ) -> None:
+        shutil.copytree(source, destination)
+        fields, rows = read_csv_table(destination / "results.csv")
+        renamed_fields = [field.replace(f"_{source_model}", f"_{target_model}") for field in fields]
+        renamed_rows: list[dict[str, object]] = []
+        for row in rows:
+            renamed = {
+                field.replace(f"_{source_model}", f"_{target_model}"): value
+                for field, value in row.items()
+            }
+            renamed[f"Provider_{target_model}"] = provider
+            renamed[f"OpenRouter_Response_Model_{target_model}"] = returned_model
+            renamed[f"Actual_Request_Extra_{target_model}"] = json.dumps(
+                {"provider": {"only": [provider], "allow_fallbacks": False}},
+                sort_keys=True,
+            )
+            renamed_rows.append(renamed)
+        self.write_csv(destination / "results.csv", renamed_fields, renamed_rows)
+        for name in ["source_manifest.json", "promotion_audit.json", "repair_evidence.json"]:
+            path = destination / name
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if "model_key" in payload:
+                payload["model_key"] = target_model
+            if name == "source_manifest.json":
+                payload["run_label"] = f"radle_v2_fixture_full_{target_model}"
+            path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self.reseal_package(destination)
+
     def test_production_shape_and_oversized_csv_field(self) -> None:
         wide_fields, wide_rows = read_csv_table(self.fixture / "parent_wide.csv")
         long_fields, long_rows = read_csv_table(self.fixture / "parent_final_long_master.csv")
@@ -277,6 +314,46 @@ class IncrementalAdmissionProductionTests(unittest.TestCase):
             panel_keys = {row["comparator_key"] for row in read_csv_table(lane / "panel_order.csv")[1]}
             self.assertNotIn("grok_4_3", panel_keys)
             self.assertIn("grok_4_5", panel_keys)
+
+    def test_second_admission_validates_committed_parent_chain(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first_staging = self.prepare_with_judges(root / "first")
+            first_final = Path(str(finalize_incremental_admission(
+                intake_root=first_staging,
+                radiologist_decisions=self.write_decisions(first_staging),
+            )["final_staging_root"]))
+            first_commit = commit_finalized_admission(first_final)
+            second_package = root / "gpt_package"
+            self.clone_package_for_model(
+                self.fixture / "incoming_package",
+                second_package,
+                source_model="grok_4_5",
+                target_model="gpt_5_6_sol_pro",
+                provider="OpenAI",
+                returned_model="openai/gpt-5.6-sol-pro",
+            )
+            second = prepare_incremental_admission(
+                parent_wide=first_final / "combined_wide/RadLE_v2_results_final.csv",
+                parent_final_long_master=first_final / "final/radle_v2_final_long_master.csv",
+                parent_authority_manifest=first_final / "COMMITTED.json",
+                blind_map_path=first_final / "roster/blind_label_map.csv",
+                incoming_package=second_package,
+                model_key="gpt_5_6_sol_pro",
+                roster_path=self.fixture / "roster.json",
+                variants_path=self.fixture / "accepted_variants.csv",
+                states_path=REPO_ROOT / "config/radle_v2_terminal_states.json",
+                output_root=root / "second",
+                repo_root=REPO_ROOT,
+                dry_run=False,
+            )
+            self.assertEqual(second["parent_chain_id"], first_commit["finalization_id"])
+            second_staging = Path(str(second["staging_root"]))
+            self.assertEqual(audit_prepared_staging(second_staging)["result"], "PASS")
+            _, second_delta = read_csv_table(second_staging / "new_model_long_delta.csv")
+            self.assertEqual({row["model_blinded"] for row in second_delta}, {"Candidate AF"})
+            _, second_blind = read_csv_table(second_staging / "roster/blind_label_map.csv")
+            self.assertEqual(len(second_blind), 32)
 
     def test_committed_tamper_and_roster_tamper_block_readback(self) -> None:
         for target in ["scored_append_delta.csv", "roster/model_roster.json", "roster/blind_label_map.csv"]:

@@ -12,7 +12,7 @@ Success is observable when the exact frozen 200x291 wide master, 6000x20 final m
 
 ## Current State
 
-Current state (2026-07-10 12:11 +05:30, Codex/GPT-5.6 Sol): implementation and local acceptance are complete but the gate remains pending. The real frozen authorities pass `check-base`; the production-shape no-network flow passes through committed readback and both IDK0 human presentations; 29 tests pass. Next: create the implementation checkpoint commit, run independent read-only reviews against that SHA and the preservation branch, then record or reject `PRE_M7_REPAIR_RESULT=PASS` from those receipts.
+Current state (2026-07-10 12:11 +05:30, Codex/GPT-5.6 Sol): implementation and local acceptance are complete but the gate remains pending. The real frozen authorities pass `check-base`; the production-shape no-network flow passes through committed readback and both IDK0 human presentations; 30 tests pass, including a second chained GPT-5.6 preparation from the first committed parent. Next: run independent read-only reviews against the final implementation SHA and the preservation branch, then record or reject `PRE_M7_REPAIR_RESULT=PASS` from those receipts.
 
 ## Locked Facts
 
@@ -104,7 +104,7 @@ Current state (2026-07-10 12:11 +05:30, Codex/GPT-5.6 Sol): implementation and l
 
 ## Outcomes & Retrospective
 
-Implementation outcome before independent review: real `check-base` passes all three frozen hashes; 29 unit/integration/runtime/judge tests pass; the acceptance receipt reports zero network calls, exact parent byte prefix, 200 appended records, 6200 output rows, score-source counts `191/5/1/3` for AI/automatic-zero/canonical/radiologist, and IDK0 counts of 19 complete models, 15 active, 4 excluded, and 12 human backend readers. Commit SHA, independent receipt hash, remote refs, and final gate result remain pending.
+Implementation outcome before independent review: real `check-base` passes all three frozen hashes; 30 unit/integration/runtime/judge tests pass, including committed-parent chain replay; the acceptance receipt reports zero network calls, exact parent byte prefix, 200 appended records, 6200 output rows, score-source counts `191/5/1/3` for AI/automatic-zero/canonical/radiologist, and IDK0 counts of 19 complete models, 15 active, 4 excluded, and 12 human backend readers. Final independent receipt hash, remote refs, and final gate result remain pending.
 
 ## Suggested Skills By Phase
 

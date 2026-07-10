@@ -171,7 +171,7 @@
     "full_tests": {
       "command": "py -3.11 -m unittest discover -s tests -p \"test_*.py\" -v",
       "exit_code": 0,
-      "result": "Ran 29 tests in 55.870s; OK"
+      "result": "Ran 30 tests in 57.792s; OK"
     },
     "compile": {
       "command": "py -3.11 -c <py_compile to C:\\tmp temporary directory for four Python files>",
