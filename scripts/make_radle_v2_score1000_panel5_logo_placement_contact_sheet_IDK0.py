@@ -98,7 +98,13 @@ def footer_lines_for_idk_score(idk_score: int) -> list[str]:
 
 
 FOOTER_LINES = footer_lines_for_idk_score(IDK_SCORE)
-OPTION4_REDUCED_KEYS = {"grok_4_3", "claude_fable_5", "gemini_3_1_pro", "gpt_5_5"}
+OPTION4_REDUCED_KEYS = {
+    "grok_4_5",
+    "claude_fable_5",
+    "gemini_3_1_pro",
+    "gpt_5_6_sol_pro",
+    "muse_spark_1_1",
+}
 BOTTOM_LOGO_CENTER_Y = 2390.0
 
 
@@ -144,11 +150,11 @@ SERIES_METADATA = {
         "color": PROMOTED_54_BAR_COLORS["claude_fable_5"],
         "is_human": False,
     },
-    "grok_4_3": {
-        "key": "grok_4_3",
-        "label": "Grok 4.3",
+    "grok_4_5": {
+        "key": "grok_4_5",
+        "label": "Grok 4.5",
         "logo": "grok_4_3_logo.png",
-        "color": PROMOTED_54_BAR_COLORS["grok_4_3"],
+        "color": PROMOTED_54_BAR_COLORS["grok_4_5"],
         "is_human": False,
     },
     "gemini_3_1_pro": {
@@ -158,11 +164,11 @@ SERIES_METADATA = {
         "color": PROMOTED_54_BAR_COLORS["gemini_3_1_pro"],
         "is_human": False,
     },
-    "gpt_5_5": {
-        "key": "gpt_5_5",
-        "label": "GPT-5.5",
+    "gpt_5_6_sol_pro": {
+        "key": "gpt_5_6_sol_pro",
+        "label": "GPT-5.6 Sol Pro",
         "logo": "gpt_5_5_logo.png",
-        "color": PROMOTED_54_BAR_COLORS["gpt_5_5"],
+        "color": PROMOTED_54_BAR_COLORS["gpt_5_6_sol_pro"],
         "is_human": False,
     },
     "qwen_3_7_plus": {
@@ -184,6 +190,13 @@ SERIES_METADATA = {
         "label": "OctoMed 7B",
         "logo": "octomed_7b_logo.png",
         "color": PROMOTED_54_BAR_COLORS["octomed_7b"],
+        "is_human": False,
+    },
+    "muse_spark_1_1": {
+        "key": "muse_spark_1_1",
+        "label": "Meta Muse Spark 1.1",
+        "logo": "muse_spark_1_1_logo.png",
+        "color": PROMOTED_54_BAR_COLORS["muse_spark_1_1"],
         "is_human": False,
     },
 }

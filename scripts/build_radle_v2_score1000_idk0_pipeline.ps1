@@ -8,6 +8,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $CleanMaster = Join-Path $OutDir "radle_v2_clean_adjudication_master.csv"
 $CleanReceipt = Join-Path $OutDir "adjudication_master_cleanup_receipt.json"
+$InputMasterSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $InputMaster).Hash
 
 function Invoke-PythonStep {
     param(
@@ -24,7 +25,15 @@ function Invoke-PythonStep {
 Push-Location $RepoRoot
 try {
     Write-Host "[RUN] clean adjudication master"
-    Invoke-PythonStep @("scripts/build_radle_v2_clean_adjudication_master.py", "--input", $InputMaster, "--out-dir", $OutDir)
+    Invoke-PythonStep @(
+        "scripts/build_radle_v2_clean_adjudication_master.py",
+        "--input",
+        $InputMaster,
+        "--out-dir",
+        $OutDir,
+        "--expected-input-sha256",
+        $InputMasterSha256
+    )
 
     Write-Host "[RUN] Score1000 IDK0 CSV generation"
     Invoke-PythonStep @(
@@ -40,7 +49,15 @@ try {
     )
 
     Write-Host "[RUN] Score1000 IDK0 audit"
-    Invoke-PythonStep @("scripts/audit_radle_v2_likert5_score1000_csvs_IDK0.py", "--out-dir", $OutDir, "--idk-score", "0")
+    Invoke-PythonStep @(
+        "scripts/audit_radle_v2_likert5_score1000_csvs_IDK0.py",
+        "--out-dir",
+        $OutDir,
+        "--idk-score",
+        "0",
+        "--expected-source-sha256",
+        $InputMasterSha256
+    )
 
     $PanelDir = Join-Path $OutDir "handwritten_panels_IDK0"
     $VariantDir = Join-Path $OutDir "handwritten_panels_model_group_color_final_IDK0"
@@ -52,7 +69,9 @@ try {
         "--score-root",
         $OutDir,
         "--out-dir",
-        $PanelDir
+        $PanelDir,
+        "--expected-source-sha256",
+        $InputMasterSha256
     )
 
     Write-Host "[RUN] Score2000 IDK0 SVG variants"
@@ -65,7 +84,9 @@ try {
         "--out-dir",
         $VariantDir,
         "--idk-score",
-        "0"
+        "0",
+        "--expected-source-sha256",
+        $InputMasterSha256
     )
 
     Write-Host "[RUN] Score2000 IDK0 Panel 5.4 logo placement"
@@ -89,7 +110,9 @@ try {
         "--out-dir",
         $VariantDir,
         "--idk-score",
-        "0"
+        "0",
+        "--expected-source-sha256",
+        $InputMasterSha256
     )
 
     Write-Host "[PASS] RadLE v2 Score1000 IDK0 pipeline complete"

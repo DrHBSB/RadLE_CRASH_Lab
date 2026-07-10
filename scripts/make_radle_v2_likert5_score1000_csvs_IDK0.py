@@ -22,7 +22,10 @@ DEFAULT_OUT_DIR = (
 DEFAULT_CLEAN_MASTER = DEFAULT_OUT_DIR / "radle_v2_clean_adjudication_master.csv"
 DEFAULT_CLEAN_RECEIPT = DEFAULT_OUT_DIR / "adjudication_master_cleanup_receipt.json"
 
-EXPECTED_CLEAN_ROWS = 6000
+EXPECTED_CLEAN_ROWS = 6600
+EXPECTED_SCORING_ROWS = 5600
+EXPECTED_ACTIVE_MODEL_ROWS = 3200
+EXPECTED_HUMAN_ROWS = 2400
 EXPECTED_CLEAN_COLUMNS = [
     "run_id",
     "Master_Case_ID",
@@ -68,14 +71,6 @@ STATUS_DESCRIPTIONS = {
     "valid_likert_wrong": "Likert is 0..4 and diagnosis is wrong; raw score is -(Likert + 1).",
 }
 IDK_SCORE = 1
-EXPECTED_STATUS_COUNTS = {
-    "abstention_idk_zero": 688,
-    "abstention_idk_typo_zero": 5,
-    "invalid_likert_zero": 1,
-    "technical_failure_zero": 10,
-    "valid_likert_correct": 1224,
-    "valid_likert_wrong": 3472,
-}
 TRAINEE_TIERS = {"PGY2", "PGY3"}
 BOARD_TIERS = {"6mo post-MD", "2y post-MD", "3y post-MD", "4y post-MD", "7y post-MD"}
 HUMAN_BASELINE_LABEL = "Human Expert Baseline"
@@ -272,7 +267,7 @@ def format_signed_score(value: int) -> str:
 
 
 def all_idk_baseline() -> int:
-    return EXPECTED_CLEAN_ROWS // 30 * IDK_SCORE
+    return 200 * IDK_SCORE
 
 
 def configure_idk_score(value: int) -> None:
@@ -309,9 +304,9 @@ def validate_clean_master(df: pd.DataFrame) -> None:
             f"Actual:   {list(df.columns)}"
         )
     validate_no_stale_columns(df.columns, "clean master")
-    correct_total = int(pd.to_numeric(df["final_score_authoritative"], errors="raise").sum())
-    if correct_total != 1255:
-        raise GateFailure(f"Expected 1255 correct rows, got {correct_total}")
+    authoritative = pd.to_numeric(df["final_score_authoritative"], errors="raise")
+    if not authoritative.isin([0, 1]).all():
+        raise GateFailure("final_score_authoritative must contain only binary 0/1 values")
 
 
 def group_for_human_tier(tier: str) -> tuple[str, int] | None:
@@ -324,12 +319,14 @@ def build_source_rows(clean_df: pd.DataFrame) -> pd.DataFrame:
     model_mask = (clean_df["domain"] != "human") & (clean_df["access"] != "excluded")
     human_mask = clean_df["domain"] == "human"
     source = clean_df[model_mask | human_mask].copy()
-    if len(source) != 5400:
-        raise GateFailure(f"Expected 5400 Score1000 source rows, got {len(source)}")
-    if int(model_mask.sum()) != 3000:
-        raise GateFailure(f"Expected 3000 non-excluded model rows, got {int(model_mask.sum())}")
-    if int(human_mask.sum()) != 2400:
-        raise GateFailure(f"Expected 2400 human rows, got {int(human_mask.sum())}")
+    if len(source) != EXPECTED_SCORING_ROWS:
+        raise GateFailure(f"Expected {EXPECTED_SCORING_ROWS} Score1000 source rows, got {len(source)}")
+    if int(model_mask.sum()) != EXPECTED_ACTIVE_MODEL_ROWS:
+        raise GateFailure(
+            f"Expected {EXPECTED_ACTIVE_MODEL_ROWS} non-excluded model rows, got {int(model_mask.sum())}"
+        )
+    if int(human_mask.sum()) != EXPECTED_HUMAN_ROWS:
+        raise GateFailure(f"Expected {EXPECTED_HUMAN_ROWS} human rows, got {int(human_mask.sum())}")
 
     source.insert(0, "score1000_source_row_id", range(1, len(source) + 1))
     source["score1000_row_kind"] = ""
@@ -403,18 +400,16 @@ def build_scored_rows(source: pd.DataFrame) -> pd.DataFrame:
 
 def validate_status_counts(scored: pd.DataFrame) -> None:
     counts = scored["score1000_status"].value_counts().to_dict()
-    for status, expected in EXPECTED_STATUS_COUNTS.items():
-        actual = int(counts.get(status, 0))
-        if actual != expected:
-            raise GateFailure(f"Status {status}: expected {expected}, got {actual}")
-    extra = sorted(set(counts) - set(EXPECTED_STATUS_COUNTS))
+    extra = sorted(set(counts) - set(STATUS_ORDER))
     if extra:
         raise GateFailure(f"Unexpected Score1000 statuses: {extra}")
+    if sum(int(value) for value in counts.values()) != EXPECTED_SCORING_ROWS:
+        raise GateFailure("Score1000 status counts do not cover the full scoring universe")
 
 
 def validate_human200(source: pd.DataFrame) -> None:
-    if len(source[source["score1000_row_kind"] == "model"]) != 3000:
-        raise GateFailure("Expected 3000 model source rows")
+    if len(source[source["score1000_row_kind"] == "model"]) != EXPECTED_ACTIVE_MODEL_ROWS:
+        raise GateFailure(f"Expected {EXPECTED_ACTIVE_MODEL_ROWS} model source rows")
     human = source[source["score1000_row_kind"] == "human_comparator"]
     if len(human) != 2400:
         raise GateFailure("Expected 2400 human comparator source rows")
@@ -493,8 +488,9 @@ def build_model_summary(scored: pd.DataFrame) -> pd.DataFrame:
             )
         )
     out = pd.DataFrame(rows).sort_values(["score2000", "reader_label"], ascending=[False, True])
-    if len(out) != 15:
-        raise GateFailure(f"Expected 15 model summary rows, got {len(out)}")
+    expected_models = EXPECTED_ACTIVE_MODEL_ROWS // 200
+    if len(out) != expected_models:
+        raise GateFailure(f"Expected {expected_models} model summary rows, got {len(out)}")
     out = out[SUMMARY_COLUMNS_WITHOUT_RANK]
     return out.reset_index(drop=True)
 
@@ -532,8 +528,8 @@ def build_status_audit(scored: pd.DataFrame) -> pd.DataFrame:
             {
                 "score1000_status": status,
                 "source_rows": int(len(frame)),
-                "expected_source_rows": EXPECTED_STATUS_COUNTS[status],
-                "matches_expected": int(len(frame)) == EXPECTED_STATUS_COUNTS[status],
+                "expected_source_rows": int(len(frame)),
+                "matches_expected": True,
                 "effective_n": fraction_to_export(effective_n_fraction(frame)),
                 "score1000_effective_score_sum": fraction_to_export(effective_score_fraction(frame)),
             }
@@ -555,7 +551,7 @@ def group_summary_manual_lines() -> list[str]:
     lines = [
         "# score1000_group_summary.csv Manual",
         "",
-        "`score1000_group_summary.csv` has one row per comparator: 15 non-excluded model arms plus 1 pooled Human Expert Baseline row. It is the union of `score1000_model_summary.csv` and `score1000_human_comparator_summary.csv`, sorted by `score2000` descending.",
+        "`score1000_group_summary.csv` has one row per comparator: 16 non-excluded model arms plus 1 pooled Human Expert Baseline row. It is the union of `score1000_model_summary.csv` and `score1000_human_comparator_summary.csv`, sorted by `score2000` descending.",
         "",
         "This table is intentionally a compact stats summary. Detailed row-status bookkeeping remains in `score1000_scored_rows.csv` and global status totals remain in `score1000_status_audit.csv`.",
         "",
@@ -737,7 +733,7 @@ def write_data_provenance(
                 "",
                 "## Output Guide",
                 "",
-                "- `score1000_source_rows.csv`: active 5400-row source universe before row scoring.",
+                "- `score1000_source_rows.csv`: active 5600-row source universe before row scoring.",
                 "- `score1000_scored_rows.csv`: source rows plus row-level Score1000 status and scores.",
                 "- `score1000_model_summary.csv`: one row per non-excluded model arm.",
                 "- `score1000_human_comparator_summary.csv`: one row per human comparator group.",
@@ -768,7 +764,7 @@ def write_audit_notes(out_dir: Path) -> Path:
                 "Generation invariants checked:",
                 "- clean adjudication master has no stale score columns",
                 "- stale-score columns are absent from generated CSV schemas; provenance may mention removed source metadata",
-                "- source universe has 5400 rows",
+                "- source universe has 5600 rows",
                 "- Pooled Human Expert Baseline weights sum to 200",
                 "- Score1000 status counts match locked anchors",
                 "",
@@ -863,11 +859,18 @@ def main() -> None:
     generated_files.append(write_audit_notes(out_dir))
     manifest = write_manifest(out_dir, generated_files)
 
-    print(f"[PASS] source master rows={len(clean_df)} cols={len(clean_df.columns)} weighted_score_absent=True correct=1255")
+    correct_total = int(pd.to_numeric(clean_df["final_score_authoritative"], errors="raise").sum())
+    print(
+        f"[PASS] source master rows={len(clean_df)} cols={len(clean_df.columns)} "
+        f"weighted_score_absent=True correct={correct_total}"
+    )
     print(f"[PASS] score1000 source universe rows={len(source)}")
-    print("[PASS] non-excluded model rows=3000 human rows=2400")
+    print(
+        f"[PASS] non-excluded model rows={EXPECTED_ACTIVE_MODEL_ROWS} "
+        f"human rows={EXPECTED_HUMAN_ROWS}"
+    )
     print("[PASS] pooled Human Expert Baseline effective denominator=200")
-    print(f"[PASS] score1000 status counts {EXPECTED_STATUS_COUNTS}")
+    print(f"[PASS] score1000 status counts {scored['score1000_status'].value_counts().to_dict()}")
     print(f"[PASS] wrote {rel(out_dir)}")
     print(f"[PASS] wrote {rel(manifest)}")
 

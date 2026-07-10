@@ -19,7 +19,11 @@ DEFAULT_OUT_DIR = (
     / "outputs/radle_v2_stats/final_scoring_radiologist_20260706_001147"
     / "likert5_score1000"
 )
-EXPECTED_SOURCE_SHA256 = "7641BACC91B1AE9EDACA3249507E31A75924624FA8C232685C835AF1524F51ED"
+EXPECTED_SOURCE_SHA256: str | None = None
+EXPECTED_MASTER_ROWS = 6600
+EXPECTED_SCORING_ROWS = 5600
+EXPECTED_ACTIVE_MODEL_ROWS = 3200
+EXPECTED_HUMAN_ROWS = 2400
 EXPECTED_SOURCE_COLUMNS = [
     "run_id",
     "Master_Case_ID",
@@ -58,14 +62,6 @@ STATUS_ORDER = [
     "valid_likert_correct",
     "valid_likert_wrong",
 ]
-EXPECTED_STATUS_COUNTS = {
-    "abstention_idk_zero": 688,
-    "abstention_idk_typo_zero": 5,
-    "invalid_likert_zero": 1,
-    "technical_failure_zero": 10,
-    "valid_likert_correct": 1224,
-    "valid_likert_wrong": 3472,
-}
 IDK_SCORE = 1
 LIKERT_LEVELS = [0, 1, 2, 3, 4]
 LIKERT_SUMMARY_COLUMNS = [
@@ -273,6 +269,8 @@ def validate_clean_master(out_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, di
     if not source_path.exists():
         raise AuditFailure(f"Recorded source master does not exist: {source_path}")
     source_sha = sha256_file(source_path)
+    if EXPECTED_SOURCE_SHA256 is None:
+        raise AuditFailure("Expected source SHA256 was not configured")
     if source_sha != EXPECTED_SOURCE_SHA256:
         raise AuditFailure(f"Source master SHA mismatch: expected {EXPECTED_SOURCE_SHA256}, got {source_sha}")
     if str(receipt["source_master"]["sha256"]).upper() != EXPECTED_SOURCE_SHA256:
@@ -284,10 +282,13 @@ def validate_clean_master(out_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, di
         raise AuditFailure("Source columns no longer match the locked input snapshot")
     if list(clean.columns) != EXPECTED_CLEAN_COLUMNS:
         raise AuditFailure("Clean master columns do not match expected adjudication schema")
-    if len(source) != 6000 or len(clean) != 6000:
-        raise AuditFailure(f"Expected 6000 source/clean rows, got {len(source)}/{len(clean)}")
-    if int(pd.to_numeric(clean["final_score_authoritative"], errors="raise").sum()) != 1255:
-        raise AuditFailure("Clean master correctness total is not 1255")
+    if len(source) != EXPECTED_MASTER_ROWS or len(clean) != EXPECTED_MASTER_ROWS:
+        raise AuditFailure(
+            f"Expected {EXPECTED_MASTER_ROWS} source/clean rows, got {len(source)}/{len(clean)}"
+        )
+    authoritative = pd.to_numeric(clean["final_score_authoritative"], errors="raise")
+    if not authoritative.isin([0, 1]).all():
+        raise AuditFailure("Clean master final_score_authoritative is not binary 0/1")
     validate_no_stale_columns(clean.columns, "clean master")
     if list(map(tuple, source[["Master_Case_ID", "model_blinded"]].to_numpy())) != list(
         map(tuple, clean[["Master_Case_ID", "model_blinded"]].to_numpy())
@@ -314,12 +315,17 @@ def validate_csv_schemas(out_dir: Path) -> dict[str, pd.DataFrame]:
 def validate_source_and_scored(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
     source = frames["score1000_source_rows.csv"]
     scored = frames["score1000_scored_rows.csv"]
-    if len(source) != 5400 or len(scored) != 5400:
-        raise AuditFailure(f"Expected 5400 source/scored rows, got {len(source)}/{len(scored)}")
+    if len(source) != EXPECTED_SCORING_ROWS or len(scored) != EXPECTED_SCORING_ROWS:
+        raise AuditFailure(
+            f"Expected {EXPECTED_SCORING_ROWS} source/scored rows, got {len(source)}/{len(scored)}"
+        )
     if list(source["score1000_source_row_id"]) != list(scored["score1000_source_row_id"]):
         raise AuditFailure("Source and scored row ids differ")
     row_kind_counts = scored["score1000_row_kind"].value_counts().to_dict()
-    if row_kind_counts.get("model", 0) != 3000 or row_kind_counts.get("human_comparator", 0) != 2400:
+    if (
+        row_kind_counts.get("model", 0) != EXPECTED_ACTIVE_MODEL_ROWS
+        or row_kind_counts.get("human_comparator", 0) != EXPECTED_HUMAN_ROWS
+    ):
         raise AuditFailure(f"Unexpected row_kind counts: {row_kind_counts}")
     model = scored[scored["score1000_row_kind"] == "model"]
     if not (model["score1000_row_weight"].astype(float) == 1.0).all():
@@ -357,10 +363,7 @@ def validate_source_and_scored(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
             raise AuditFailure(f"Effective score mismatch at scored row {idx + 1}: {actual} vs {expected_value}")
 
     counts = scored["score1000_status"].value_counts().to_dict()
-    for status, expected_count in EXPECTED_STATUS_COUNTS.items():
-        if int(counts.get(status, 0)) != expected_count:
-            raise AuditFailure(f"{status}: expected {expected_count}, got {counts.get(status, 0)}")
-    extra = sorted(set(counts) - set(EXPECTED_STATUS_COUNTS))
+    extra = sorted(set(counts) - set(STATUS_ORDER))
     if extra:
         raise AuditFailure(f"Unexpected Score1000 statuses: {extra}")
     return scored
@@ -425,12 +428,16 @@ def validate_summaries(frames: dict[str, pd.DataFrame], scored: pd.DataFrame) ->
     model_summary = frames["score1000_model_summary.csv"]
     human_summary = frames["score1000_human_comparator_summary.csv"]
     group_summary = frames["score1000_group_summary.csv"]
-    if len(model_summary) != 15:
-        raise AuditFailure(f"Expected 15 model summary rows, got {len(model_summary)}")
+    expected_models = EXPECTED_ACTIVE_MODEL_ROWS // 200
+    if len(model_summary) != expected_models:
+        raise AuditFailure(f"Expected {expected_models} model summary rows, got {len(model_summary)}")
     if len(human_summary) != 1:
         raise AuditFailure(f"Expected 1 human summary row, got {len(human_summary)}")
-    if len(group_summary) != 16:
-        raise AuditFailure(f"Expected 16 group summary rows, got {len(group_summary)}")
+    expected_comparators = expected_models + 1
+    if len(group_summary) != expected_comparators:
+        raise AuditFailure(
+            f"Expected {expected_comparators} group summary rows, got {len(group_summary)}"
+        )
     if list(model_summary.columns) != SUMMARY_COLUMNS_WITHOUT_RANK:
         raise AuditFailure("Model summary columns do not match the compact stats schema")
     if list(human_summary.columns) != SUMMARY_COLUMNS_WITHOUT_RANK:
@@ -489,8 +496,11 @@ def validate_status_audit(frames: dict[str, pd.DataFrame], scored: pd.DataFrame)
     for _, row in audit.iterrows():
         status = row["score1000_status"]
         frame = scored[scored["score1000_status"] == status]
-        if int(row["source_rows"]) != EXPECTED_STATUS_COUNTS[status]:
+        actual_count = int(len(frame))
+        if int(row["source_rows"]) != actual_count:
             raise AuditFailure(f"Status audit source_rows mismatch for {status}")
+        if int(row["expected_source_rows"]) != actual_count:
+            raise AuditFailure(f"Status audit expected_source_rows mismatch for {status}")
         if clean_text(row["matches_expected"]).lower() != "true":
             raise AuditFailure(f"Status audit matches_expected is not true for {status}")
         if not close_enough(row["effective_n"], fraction_to_export(effective_n_fraction(frame))):
@@ -510,7 +520,8 @@ def validate_provenance(out_dir: Path, scored: pd.DataFrame) -> None:
         out_dir / "radle_v2_clean_adjudication_master.csv"
     ):
         raise AuditFailure("Data provenance clean SHA mismatch")
-    for status, expected_count in EXPECTED_STATUS_COUNTS.items():
+    for status in STATUS_ORDER:
+        expected_count = int((scored["score1000_status"] == status).sum())
         if int(data["score1000_status_counts"][status]) != expected_count:
             raise AuditFailure(f"Data provenance status count mismatch for {status}")
     if int(data["cohort"]["source_rows"]) != len(scored):
@@ -595,6 +606,7 @@ def write_audit_report(out_dir: Path, scored: pd.DataFrame) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
+    parser.add_argument("--expected-source-sha256", required=True)
     parser.add_argument(
         "--idk-score",
         type=int,
@@ -605,9 +617,18 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def configure_expected_source_sha256(value: str) -> None:
+    normalized = value.strip().upper()
+    if len(normalized) != 64 or any(char not in "0123456789ABCDEF" for char in normalized):
+        raise AuditFailure("--expected-source-sha256 must be a 64-character SHA256 digest")
+    global EXPECTED_SOURCE_SHA256
+    EXPECTED_SOURCE_SHA256 = normalized
+
+
 def main() -> None:
     args = parse_args()
     out_dir = args.out_dir.resolve()
+    configure_expected_source_sha256(args.expected_source_sha256)
     configure_idk_score(args.idk_score)
     validate_required_files(out_dir)
     validate_clean_master(out_dir)

@@ -124,10 +124,11 @@ VARIANT_LOGO_ASSETS = {
     "right-lab-logo": LOGO_ASSET_DIR / "crash_lab_logo.png",
 }
 MODEL_LOGO_ASSETS = {
-    "grok_4_3": LOGO_ASSET_DIR / "grok_4_3_logo.png",
+    "grok_4_5": LOGO_ASSET_DIR / "grok_4_3_logo.png",
     "claude_fable_5": LOGO_ASSET_DIR / "claude_fable_5_logo.png",
     "gemini_3_1_pro": LOGO_ASSET_DIR / "gemini_3_1_pro_logo.png",
-    "gpt_5_5": LOGO_ASSET_DIR / "gpt_5_5_logo.png",
+    "gpt_5_6_sol_pro": LOGO_ASSET_DIR / "gpt_5_5_logo.png",
+    "muse_spark_1_1": LOGO_ASSET_DIR / "muse_spark_1_1_logo.png",
     "octomed_7b": LOGO_ASSET_DIR / "octomed_7b_logo.png",
     "nemotron_3_omni": LOGO_ASSET_DIR / "nemotron_3_omni_logo.png",
     "qwen_3_7_plus": LOGO_ASSET_DIR / "qwen_3_7_plus_logo.png",
@@ -186,10 +187,11 @@ SHARED_IMAGE_TEXT_COLORS = {
 CATEGORY_ORDER = ["Human Expert Baseline", "Closed generalist", "Open generalist", "Open medical"]
 CATEGORY_MODEL_GROUPS = {
     "Closed generalist": {
-        "gpt_5_5",
+        "gpt_5_6_sol_pro",
         "claude_fable_5",
         "gemini_3_1_pro",
-        "grok_4_3",
+        "grok_4_5",
+        "muse_spark_1_1",
         "qwen_3_7_plus",
         "glm_5v_turbo",
     },
@@ -210,19 +212,20 @@ CATEGORY_MODEL_GROUPS = {
 SCORE1000_BAR_READER_LABELS = [
     "Human Expert Baseline",
     "claude_fable_5",
-    "grok_4_3",
+    "grok_4_5",
     "gemini_3_1_pro",
-    "gpt_5_5",
+    "gpt_5_6_sol_pro",
     "octomed_7b",
 ]
 SCORE1000_BAR_CLOSED_READER_LABELS = [
     "Human Expert Baseline",
     "claude_fable_5",
-    "grok_4_3",
+    "grok_4_5",
     "gemini_3_1_pro",
-    "gpt_5_5",
+    "gpt_5_6_sol_pro",
     "qwen_3_7_plus",
     "glm_5v_turbo",
+    "muse_spark_1_1",
 ]
 SCORE1000_BAR_OPEN_READER_LABELS = [
     "Human Expert Baseline",
@@ -239,9 +242,9 @@ SCORE1000_BAR_OPEN_READER_LABELS = [
 SCORE1000_BAR_THROUGH_MEDGEMMA_READER_LABELS = [
     "Human Expert Baseline",
     "claude_fable_5",
-    "grok_4_3",
+    "grok_4_5",
     "gemini_3_1_pro",
-    "gpt_5_5",
+    "gpt_5_6_sol_pro",
     "octomed_7b",
     "nemotron_3_omni",
     "qwen_3_7_plus",
@@ -250,6 +253,7 @@ SCORE1000_BAR_THROUGH_MEDGEMMA_READER_LABELS = [
     "gemma_4_31b",
     "lingshu_32b",
     "medgemma_1_5_4b",
+    "muse_spark_1_1",
 ]
 SCORE1000_BAR_ALL_MODEL_READER_LABELS = [
     *SCORE1000_BAR_THROUGH_MEDGEMMA_READER_LABELS,
@@ -259,10 +263,11 @@ SCORE1000_BAR_ALL_MODEL_READER_LABELS = [
 ]
 SCORE1000_BAR_LABEL_LINES = {
     "Human Expert Baseline": ["Human Expert", "Baseline"],
-    "grok_4_3": ["Grok", "4.3"],
+    "grok_4_5": ["Grok", "4.5"],
     "claude_fable_5": ["Claude", "Fable 5"],
     "gemini_3_1_pro": ["Gemini", "3.1 Pro"],
-    "gpt_5_5": ["GPT-5.5"],
+    "gpt_5_6_sol_pro": ["GPT-5.6", "Sol Pro"],
+    "muse_spark_1_1": ["Meta Muse", "Spark 1.1"],
     "octomed_7b": ["OctoMed", "7B"],
     "nemotron_3_omni": ["Nemotron", "3 Omni"],
     "qwen_3_7_plus": ["Qwen", "3.7 Plus"],
@@ -297,26 +302,29 @@ SCORE1000_BAR_READER_KEYS = {
 }
 SCORE1000_BAR_COLORS = {
     "Human Expert Baseline": "#1b324d",
-    "grok_4_3": "#3f464c",
+    "grok_4_5": "#3f464c",
     "claude_fable_5": "#84848e",
     "gemini_3_1_pro": "#2f6f9f",
-    "gpt_5_5": "#1b324d",
+    "gpt_5_6_sol_pro": "#1b324d",
+    "muse_spark_1_1": "#c026d3",
     "octomed_7b": "#4c9f8f",
 }
 SCORE1000_BAR_COLORS_WARM_REFRESH = {
     "Human Expert Baseline": "#1b324d",
-    "grok_4_3": "#313131",
+    "grok_4_5": "#313131",
     "claude_fable_5": "#d97757",
     "gemini_3_1_pro": "#4796e3",
-    "gpt_5_5": "#74aa9c",
+    "gpt_5_6_sol_pro": "#74aa9c",
+    "muse_spark_1_1": "#c026d3",
     "octomed_7b": "#f27b73",
 }
 SCORE1000_BAR_COLORS_RECOMMENDED_BALANCED = {
     "Human Expert Baseline": "#1b324d",
     "claude_fable_5": "#d97757",
-    "grok_4_3": "#3f464c",
+    "grok_4_5": "#3f464c",
     "gemini_3_1_pro": "#4285f4",
-    "gpt_5_5": "#10a37f",
+    "gpt_5_6_sol_pro": "#10a37f",
+    "muse_spark_1_1": "#c026d3",
     "octomed_7b": "#e85d75",
     "nemotron_3_omni": "#76b900",
     "qwen_3_7_plus": "#7b61e7",
@@ -771,7 +779,7 @@ VARIANT_FILE_SPECS = {
         "palette_key": "option_c_teal_green_to_current_red",
         "category_colors": SHARED_IMAGE_CATEGORY_COLORS,
         "text_colors": SHARED_IMAGE_TEXT_COLORS,
-        "caption": "Panel 5.5. Palette-refresh checkpoint for the icon confidence-weighted diagnosis chart using Claude #D97757, Grok #313131, Gemini #4796E3, GPT-5.5 #74AA9C, and OctoMed #F27B73; human colors stay unchanged.",
+        "caption": "Panel 5.5. Palette-refresh checkpoint for the icon confidence-weighted diagnosis chart using Claude #D97757, Grok #313131, Gemini #4796E3, GPT-5.6 #74AA9C, and OctoMed #F27B73; human colors stay unchanged.",
         "selected_reader_labels": SCORE1000_BAR_READER_LABELS,
         "bar_colors": SCORE1000_BAR_COLORS_WARM_REFRESH,
         "score_y_min": SCORE1000_BAR_Y_MIN,
@@ -1128,7 +1136,7 @@ VARIANT_FILE_SPECS = {
         "palette_key": "option_c_teal_green_to_current_red",
         "category_colors": SHARED_IMAGE_CATEGORY_COLORS,
         "text_colors": SHARED_IMAGE_TEXT_COLORS,
-        "caption": "Panel 6.4. Confidence-weighted diagnosis chart for the pooled Human Expert Baseline plus all 15 evaluated AI models in the current comparator CSV.",
+        "caption": "Panel 6.4. Confidence-weighted diagnosis chart for the pooled Human Expert Baseline plus all 16 active AI models in the current comparator CSV.",
         "selected_reader_labels": SCORE1000_BAR_ALL_MODEL_READER_LABELS,
         "bar_colors": SCORE1000_BAR_COLORS_RECOMMENDED_BALANCED,
         "score_y_min": SCORE1000_BAR_Y_MIN,
@@ -1184,6 +1192,16 @@ def configure_idk_score(idk_score: int) -> None:
             spec["footer_lines"] = SCORE1000_BAR_FOOTER_LINES
 
 
+def configure_expected_source_sha256(value: str | None) -> None:
+    if value is None:
+        return
+    normalized = value.strip().upper()
+    if len(normalized) != 64 or any(char not in "0123456789ABCDEF" for char in normalized):
+        raise ValueError("--expected-source-sha256 must be a 64-character SHA256 digest")
+    global EXPECTED_SOURCE_SHA256
+    EXPECTED_SOURCE_SHA256 = normalized
+
+
 def variant_category_colors(spec: dict[str, object]) -> dict[str, str]:
     return dict(spec.get("category_colors", CATEGORY_COLORS))  # type: ignore[arg-type]
 
@@ -1200,10 +1218,11 @@ def variant_bar_colors(spec: dict[str, object]) -> dict[str, str]:
 
 
 DISPLAY_NAMES = {
-    "grok_4_3": "Grok 4.3",
+    "grok_4_5": "Grok 4.5",
     "claude_fable_5": "Claude Fable 5",
     "gemini_3_1_pro": "Gemini 3.1 Pro",
-    "gpt_5_5": "GPT-5.5",
+    "gpt_5_6_sol_pro": "GPT-5.6 Sol Pro",
+    "muse_spark_1_1": "Meta Muse Spark 1.1",
     "octomed_7b": "OctoMed 7B",
     "nemotron_3_omni": "Nemotron 3 Omni",
     "qwen_3_7_plus": "Qwen 3.7 Plus",
@@ -2226,7 +2245,14 @@ def score1000_bar_rows(
     if missing:
         raise ValueError(f"Missing Score1000 bar chart rows: {missing}")
     selected = [by_label[label] for label in active_reader_labels]
-    return sorted(selected, key=lambda row: (-score2000_value(row), row["reader_label"]))
+    return sorted(
+        selected,
+        key=lambda row: (
+            0 if row["reader_label"] == "Human Expert Baseline" else 1,
+            -score2000_value(row),
+            row["reader_label"],
+        ),
+    )
 
 
 def score1000_bar_scale(
@@ -3363,13 +3389,13 @@ def write_variant_support_files(out_dir: Path, provenance: dict[str, object]) ->
         f"Each row gives correct, neutral, and incorrect response counts out of 200 effective cases for the pooled Human Expert Baseline (12 readers, averaged) or one AI model (single evaluation run), ranked by Score2000. {score_rule}",
         "",
         "## Panel 5.0. Confidence-weighted diagnosis correctness",
-        "A clean vertical bar chart shows confidence-weighted diagnosis scores for the pooled Human Expert Baseline, Claude Fable 5, Grok 4.3, Gemini 3.1 Pro, GPT-5.5, and OctoMed 7B. The y-axis uses the shifted 0..2000 display scale with an A1 kink after 1000; visible ticks are 0, 500, 1000, and 2000.",
+        "A clean vertical bar chart shows confidence-weighted diagnosis scores for the pooled Human Expert Baseline, Claude Fable 5, Grok 4.5, Gemini 3.1 Pro, GPT-5.6 Sol Pro, and OctoMed 7B. The y-axis uses the shifted 0..2000 display scale with an A1 kink after 1000; visible ticks are 0, 500, 1000, and 2000.",
         "",
         "## Panel 5.1. Confidence-weighted diagnosis correctness with icons",
-        "An icon-enabled companion to Panel 5.0 keeps the same readers/models and shifted 0..2000 y-axis with an A1 kink after 1000 while refreshing the model bar colors to Claude #D97757, Grok #313131, Gemini #4796E3, GPT-5.5 #74AA9C, and OctoMed #F27B73; the Human Expert Baseline color stays unchanged. It uses the public confidence-weighted title and explanatory footer, moves the bar chart body down, scales header logos and reader/model icons, and enlarges the OctoMed icon image by 20%. The Human Expert Baseline uses the renamed human-expert icon.",
+        "An icon-enabled companion to Panel 5.0 keeps the same readers/models and shifted 0..2000 y-axis with an A1 kink after 1000 while refreshing the model bar colors to Claude #D97757, Grok #313131, Gemini #4796E3, GPT-5.6 #74AA9C, and OctoMed #F27B73; the Human Expert Baseline color stays unchanged. It uses the public confidence-weighted title and explanatory footer, moves the bar chart body down, scales header logos and reader/model icons, and enlarges the OctoMed icon image by 20%. The Human Expert Baseline uses the renamed human-expert icon.",
         "",
         "## Panel 5.5. Confidence-weighted diagnosis correctness with icons, refreshed palette checkpoint",
-        "Panel 5.5 keeps the 5.1 icon geometry, footer, 0..2000 y-axis domain, and A1 kink after 1000, and serves as the checkpoint copy of the refreshed per-model bar palette: Claude #D97757, Grok #313131, Gemini #4796E3, GPT-5.5 #74AA9C, and OctoMed #F27B73; the Human Expert Baseline bar keeps the existing navy fill.",
+        "Panel 5.5 keeps the 5.1 icon geometry, footer, 0..2000 y-axis domain, and A1 kink after 1000, and serves as the checkpoint copy of the refreshed per-model bar palette: Claude #D97757, Grok #313131, Gemini #4796E3, GPT-5.6 #74AA9C, and OctoMed #F27B73; the Human Expert Baseline bar keeps the existing navy fill.",
         "",
         "## Panel 5.6. Open-access models vs 12 radiologists/trainees",
         "Panel 5.6 is a bottom-logo companion for the pooled Human Expert Baseline plus all open-access/open models from the current comparator CSV, including open medical models: OctoMed 7B, Nemotron 3 Omni, MiniMax M3, Gemma 4 31B, Lingshu 32B, MedGemma 1.5 4B, Llama 4 Maverick, InternVL 3.5 8B, and Mistral Large 3 2512. The y-axis uses the shifted 0..2000 display scale with an A1 kink after 1000. Bar colors use Palette A from `model_bar_color_contact_sheet.json`; all reader/model logos are bound from `scripts/assets/radle_score1000_logos`.",
@@ -3378,7 +3404,7 @@ def write_variant_support_files(out_dir: Path, provenance: dict[str, object]) ->
         "Panel 6.0 shows the pooled Human Expert Baseline plus all ranked models through MedGemma, excluding Llama, InternVL, and Mistral. Bar fills use exact Palette A colors from `model_bar_color_contact_sheet.json`; fixed-size horizontal barcode capsules are centered inside each vertical bar with green outcomes at the bottom, neutral in the middle, and red outcomes at the top. The y-axis uses the A1 kink after 1000 and labels 0, 500, 1000, and 2000 directly, with no 1500 tick.",
         "",
         "## Panel 6.1. Proprietary Frontier Vision Language Models (VLMs) vs Human Expert Baseline",
-        "Panel 6.1 shows the pooled Human Expert Baseline plus all proprietary frontier VLMs from the current comparator CSV: Claude Fable 5, Grok 4.3, Gemini 3.1 Pro, GPT-5.5, Qwen 3.7 Plus, and GLM-5V Turbo. The y-axis uses the shifted 0..2000 display scale with an A1 kink after 1000. Bar colors use Palette A from `model_bar_color_contact_sheet.json`; logos sit below the reader/model names.",
+        "Panel 6.1 shows the pooled Human Expert Baseline plus all proprietary frontier VLMs from the current comparator CSV: Claude Fable 5, Grok 4.5, Gemini 3.1 Pro, GPT-5.6 Sol Pro, Qwen 3.7 Plus, GLM-5V Turbo, and Meta Muse Spark 1.1. The y-axis uses the shifted 0..2000 display scale with an A1 kink after 1000. Bar colors use Palette A from `model_bar_color_contact_sheet.json`; logos sit below the reader/model names.",
         "",
         "## Panel 6.1.1. Proprietary Frontier Vision Language Models (VLMs) vs Human Expert Baseline, gap overlay",
         "Panel 6.1.1 is a copy of Panel 6.1 with the dynamic Human-AI gap overlay added. The top AI line and label are selected from visible AI model rows, and the label remains inline on the dashed line using the same formula-driven placement as Panel 6.4.",
@@ -3390,10 +3416,10 @@ def write_variant_support_files(out_dir: Path, provenance: dict[str, object]) ->
         "Panel 6.2.1 is a copy of Panel 6.2 with the dynamic Human-AI gap overlay added. The top AI line and label are selected from visible AI model rows, and the label remains inline on the dashed line using the same formula-driven placement as Panel 6.4.",
         "",
         "## Panel 6.3. Confidence-Weighted Diagnosis Scores: AI Models vs Human Expert Baseline",
-        "Panel 6.3 shows the pooled Human Expert Baseline plus all evaluated AI models through MedGemma from the current comparator CSV: Claude Fable 5, Grok 4.3, Gemini 3.1 Pro, GPT-5.5, Qwen 3.7 Plus, GLM-5V Turbo, OctoMed 7B, Nemotron 3 Omni, MiniMax M3, Gemma 4 31B, Lingshu 32B, and MedGemma 1.5 4B. It excludes later rows after MedGemma: Llama 4 Maverick, InternVL 3.5 8B, and Mistral Large 3 2512. The y-axis uses the shifted 0..2000 display scale with an A1 kink after 1000. Bar colors and bottom logos use Palette A and locked logo assets from `model_bar_color_contact_sheet.json` and `scripts/assets/radle_score1000_logos`.",
+        "Panel 6.3 shows the pooled Human Expert Baseline plus the established through-MedGemma comparison set and the newly admitted frontier models: Claude Fable 5, Grok 4.5, Gemini 3.1 Pro, GPT-5.6 Sol Pro, Qwen 3.7 Plus, GLM-5V Turbo, OctoMed 7B, Nemotron 3 Omni, MiniMax M3, Gemma 4 31B, Lingshu 32B, MedGemma 1.5 4B, and Meta Muse Spark 1.1. It excludes Llama 4 Maverick, InternVL 3.5 8B, and Mistral Large 3 2512. The y-axis uses the shifted 0..2000 display scale with an A1 kink after 1000. Bar colors and bottom logos use Palette A and locked logo assets from `model_bar_color_contact_sheet.json` and `scripts/assets/radle_score1000_logos`.",
         "",
         "## Panel 6.4. Frontier Vision Language Models (VLMs) vs Human Expert Baseline",
-        "Panel 6.4 shows the pooled Human Expert Baseline plus all 15 evaluated frontier VLMs from the current comparator CSV: Claude Fable 5, Grok 4.3, Gemini 3.1 Pro, GPT-5.5, Qwen 3.7 Plus, GLM-5V Turbo, OctoMed 7B, Nemotron 3 Omni, MiniMax M3, Gemma 4 31B, Lingshu 32B, MedGemma 1.5 4B, Llama 4 Maverick, InternVL 3.5 8B, and Mistral Large 3 2512. The y-axis uses the shifted 0..2000 display scale with an A1 kink after 1000. Bar colors and bottom logos use Palette A and locked logo assets from `model_bar_color_contact_sheet.json` and `scripts/assets/radle_score1000_logos`.",
+        "Panel 6.4 shows the pooled Human Expert Baseline plus all 16 active frontier VLMs from the current comparator CSV: Claude Fable 5, Grok 4.5, Gemini 3.1 Pro, GPT-5.6 Sol Pro, Qwen 3.7 Plus, GLM-5V Turbo, Meta Muse Spark 1.1, OctoMed 7B, Nemotron 3 Omni, MiniMax M3, Gemma 4 31B, Lingshu 32B, MedGemma 1.5 4B, Llama 4 Maverick, InternVL 3.5 8B, and Mistral Large 3 2512. The y-axis uses the shifted 0..2000 display scale with an A1 kink after 1000. Bar colors and bottom logos use Palette A and locked logo assets from `model_bar_color_contact_sheet.json` and `scripts/assets/radle_score1000_logos`.",
         "",
         f"Source master SHA256: `{provenance['source_master_sha256']}`",
     ]
@@ -3411,8 +3437,8 @@ def write_variant_support_files(out_dir: Path, provenance: dict[str, object]) ->
         "- New palette variants: `2.2` and `3.2` use Option A blue-to-current-red outcome colors; `2.3`, `3.3`, `2.4`, `3.4`, `2.5`, and `3.5` use Option C teal-green-to-current-red outcome colors.",
         "- The `2.2`, `3.2`, `2.3`, `3.3`, `2.4`, and `3.4` palette variants use balanced horizontal margins: the bar/axis/B3 legend frame is shortened to 2320 px and starts at x=1015, the score anchor moves to x=150, and the top category key shifts left by 75 px.",
         "- The `2.5` and `3.5` score-colored variants keep the score anchor at x=170, move the reader/model anchor to x=790, and expand the bar/axis/B3 legend frame left to x=935 with width 2400 px.",
-        "- Variant `5.0` is a clean vertical confidence-weighted diagnosis chart using the pooled Human Expert Baseline, Claude Fable 5, Grok 4.3, Gemini 3.1 Pro, GPT-5.5, and OctoMed 7B, with y-axis domain fixed at 0 to 2000 and an A1 kink after 1000.",
-        "- Variant `5.1` keeps the `5.0` chart data, uses the same 0 to 2000 shifted y-axis domain with an A1 kink after 1000, updates the model bar palette to Claude `#D97757`, Grok `#313131`, Gemini `#4796E3`, GPT-5.5 `#74AA9C`, and OctoMed `#F27B73`, keeps the Human Expert Baseline bar unchanged, uses the public confidence-weighted title and explanatory footer, moves the chart body down, and adds 1.5x larger header logos plus reader/model icons; the OctoMed icon image is enlarged by 20%. The Human Expert Baseline uses the renamed human-expert icon.",
+        "- Variant `5.0` is a clean vertical confidence-weighted diagnosis chart using the pooled Human Expert Baseline, Claude Fable 5, Grok 4.5, Gemini 3.1 Pro, GPT-5.6 Sol Pro, and OctoMed 7B, with y-axis domain fixed at 0 to 2000 and an A1 kink after 1000.",
+        "- Variant `5.1` keeps the `5.0` chart data, uses the same 0 to 2000 shifted y-axis domain with an A1 kink after 1000, updates the model bar palette to Claude `#D97757`, Grok `#313131`, Gemini `#4796E3`, GPT-5.6 `#74AA9C`, and OctoMed `#F27B73`, keeps the Human Expert Baseline bar unchanged, uses the public confidence-weighted title and explanatory footer, moves the chart body down, and adds 1.5x larger header logos plus reader/model icons; the OctoMed icon image is enlarged by 20%. The Human Expert Baseline uses the renamed human-expert icon.",
         "- Variant `5.5` is the palette-refresh checkpoint copy of `5.1`, preserving the same icon layout, footer, 0 to 2000 domain, and A1 kink after 1000 while shipping the refreshed per-model bar colors.",
         "- Variant `5.6` is a bottom-logo open-model companion showing the pooled Human Expert Baseline plus all open-access/open models in the current comparator CSV, including the open medical models, with the same A1 axis kink.",
         "- Variant `6.0` shows the pooled Human Expert Baseline plus all ranked models through MedGemma, excludes Llama, InternVL, and Mistral, uses exact Palette A bar fills, places logos below the x-axis labels, and centers fixed-size horizontal barcode capsules inside each vertical bar.",
@@ -3421,8 +3447,8 @@ def write_variant_support_files(out_dir: Path, provenance: dict[str, object]) ->
         "- Variant `6.1.1` is a copy of `6.1` with the dynamic Human-AI gap overlay.",
         "- Variant `6.2` shows the pooled Human Expert Baseline plus all open-access/open models in the current comparator CSV, including the open medical models, with the same A1 axis kink.",
         "- Variant `6.2.1` is a copy of `6.2` with the dynamic Human-AI gap overlay.",
-        "- Variant `6.3` shows the pooled Human Expert Baseline plus all evaluated AI model rows through MedGemma, excluding Llama 4 Maverick, InternVL 3.5 8B, and Mistral Large 3 2512.",
-        "- Variant `6.4` shows the pooled Human Expert Baseline plus all 15 evaluated AI model rows in the current comparator CSV.",
+        "- Variant `6.3` shows the pooled Human Expert Baseline plus the established through-MedGemma comparison set and the three newly admitted frontier models, excluding Llama 4 Maverick, InternVL 3.5 8B, and Mistral Large 3 2512.",
+        "- Variant `6.4` shows the pooled Human Expert Baseline plus all 16 active AI model rows in the current comparator CSV.",
         "- Variants `5.6`, `6.0`, `6.1`, `6.1.1`, `6.2`, `6.2.1`, `6.3`, and `6.4` use Palette A from `model_bar_color_contact_sheet.json` for locked model colors and place logos below the x-axis reader/model names. Llama 4 Maverick, InternVL 3.5 8B, and Mistral Large 3 2512 use locked PNG assets from `scripts/assets/radle_score1000_logos` in 5.6, 6.2, 6.2.1, and 6.4.",
         "- Variants `2.3` and `3.3` use a custom category palette: Human Expert Baseline `#2f6f9f`, Closed generalist `#3f464c`, Open generalist `#c26a2e`, and Open medical `#bd3f70`.",
         "- Variants `2.4`, `3.4`, `2.5`, and `3.5` use the shared-image category palette: Human Expert Baseline `#131E35`, Closed generalist `#84848e`, Open generalist `#6f9cda`, and Open medical `#1B324D`; non-bar text uses `#131E35`, the figure title uses `#1B324D`, and text inside bars keeps the existing contrast colors.",
@@ -3496,7 +3522,7 @@ def write_variant_support_files(out_dir: Path, provenance: dict[str, object]) ->
         "- [ ] Variant 3.4 preserves grouped row order/gaps, keeps 3.3 geometry/data, uses the shared-image category palette, and applies the dark-blue text theme outside the bars.",
         "- [ ] Variant 2.5 preserves 2.4 geometry/data and colors each left score label with the corresponding reader/model category color.",
         "- [ ] Variant 3.5 preserves 3.4 geometry/data and colors each left score label with the corresponding reader/model category color.",
-        "- [ ] Variant 5.0 shows only the pooled Human Expert Baseline plus Claude Fable 5, Grok 4.3, Gemini 3.1 Pro, GPT-5.5, and OctoMed 7B.",
+        "- [ ] Variant 5.0 shows only the pooled Human Expert Baseline plus Claude Fable 5, Grok 4.5, Gemini 3.1 Pro, GPT-5.6 Sol Pro, and OctoMed 7B.",
         "- [ ] Variant 5.0 uses Score2000 on the y-axis with a fixed 0 to 2000 domain and A1 kink after 1000; the shifted Score1000 zero is retained as Score2000 1000 reference metadata.",
         "- [ ] Variant 5.0 remains a clean no-model-icon chart for this first pass.",
         "- [ ] Variant 5.1 keeps the same data as 5.0 while using the fixed 0 to 2000 Score2000 y-axis domain, A1 kink after 1000, and the refreshed model bar palette.",
@@ -3512,7 +3538,7 @@ def write_variant_support_files(out_dir: Path, provenance: dict[str, object]) ->
         "- [ ] Variant 6.2 shows one Human Expert Baseline row/bar plus nine open-access/open model bars, including OctoMed, Lingshu, and MedGemma as open medical models.",
         "- [ ] Variant 6.2.1 matches Variant 6.2 and adds the dynamic Human-AI gap overlay.",
         "- [ ] Variant 6.3 shows one Human Expert Baseline row/bar plus all evaluated AI model bars through MedGemma, excluding Llama, InternVL, and Mistral.",
-        "- [ ] Variant 6.4 shows one Human Expert Baseline row/bar plus all 15 evaluated AI model bars.",
+        "- [ ] Variant 6.4 shows one Human Expert Baseline row/bar plus all 16 active AI model bars.",
         "- [ ] Variants 5.6, 6.0, 6.1, 6.1.1, 6.2, 6.2.1, 6.3, and 6.4 use Palette A colors from `model_bar_color_contact_sheet.json` and bind every logo by `reader_label`.",
         "- [ ] Category color appears only on reader/model names, visible 3.1 group headers, and the category key.",
         "- [ ] Outcome bars and B3 legend retain the unchanged Score1000 bin order, data, and single-line legend grammar while displayed ranking uses Score2000.",
@@ -3563,6 +3589,14 @@ def write_manifest(out_dir: Path, provenance: dict[str, object]) -> dict[str, ob
 
 
 def write_variant_manifest(out_dir: Path, provenance: dict[str, object]) -> dict[str, object]:
+    summary_rows = read_csv(out_dir / "score1000_panel23_bins.csv")
+
+    def selected_labels_for_manifest(spec: dict[str, object]) -> list[str]:
+        selected = list(spec.get("selected_reader_labels", SCORE1000_BAR_READER_LABELS))
+        if spec.get("layout") != "score1000_bar_chart":
+            return selected
+        return [str(row["reader_label"]) for row in score1000_bar_rows(summary_rows, selected)]
+
     files = [
         "score1000_panel23_bins.csv",
         "score1000_likert_direction_provenance.json",
@@ -3599,7 +3633,7 @@ def write_variant_manifest(out_dir: Path, provenance: dict[str, object]) -> dict
                 **({"color_scores": True} if spec.get("color_scores") else {}),
                 **(
                     {
-                        "selected_reader_labels": spec["selected_reader_labels"],
+                        "selected_reader_labels": selected_labels_for_manifest(spec),
                         "bar_colors": variant_bar_colors(spec),
                         "score_y_min": spec["score_y_min"],
                         "score_y_max": spec["score_y_max"],
@@ -3728,6 +3762,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--source-panel-dir", type=Path, default=None)
     parser.add_argument("--idk-score", type=int, choices=[0, 1], default=1)
+    parser.add_argument("--expected-source-sha256", default=None)
     return parser.parse_args()
 
 
@@ -3865,6 +3900,7 @@ def main_variant(args: argparse.Namespace) -> None:
 def main() -> None:
     args = parse_args()
     configure_idk_score(args.idk_score)
+    configure_expected_source_sha256(args.expected_source_sha256)
     if args.mode == "model-group-color-final":
         main_variant(args)
         return
