@@ -17,6 +17,7 @@ import radle_benchmark
 
 
 MODEL_NAME = "muse_spark_1_1"
+HIGH_REASONING_MODEL_NAME = "muse_spark_1_1_high"
 MODEL_ID = "muse-spark-1.1"
 DEFAULT_BASE_URL = "https://api.meta.ai/v1"
 META_MAX_OUTPUT_TOKENS = 2048
@@ -59,6 +60,17 @@ def get_model_config() -> dict:
         "id": MODEL_ID,
         "provider": "meta_model_api",
         "extra": None,
+    }
+
+
+def get_high_reasoning_model_config() -> dict:
+    """Return a separate high-reasoning Muse Spark config for append runs."""
+    configure_benchmark_runtime()
+    return {
+        "name": HIGH_REASONING_MODEL_NAME,
+        "id": MODEL_ID,
+        "provider": "meta_model_api",
+        "extra": {"reasoning": {"effort": "high"}},
     }
 
 
