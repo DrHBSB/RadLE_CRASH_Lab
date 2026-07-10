@@ -6,8 +6,10 @@ import io
 import json
 import re
 import shutil
+import tempfile
 import unicodedata
 from collections import Counter
+from datetime import datetime
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -1860,7 +1862,11 @@ def validate_radiologist_decisions(queue_rows: list[dict[str, str]], decisions_p
     if not queue_rows:
         return {}
     fields, rows = read_csv_table(decisions_path)
-    require_columns(fields, RADIOLOGIST_DECISION_FIELDS, "radiologist decisions")
+    if fields != RADIOLOGIST_DECISION_FIELDS:
+        raise ValidationError(
+            "radiologist decisions must use the exact ordered schema: "
+            f"{RADIOLOGIST_DECISION_FIELDS}"
+        )
     queue_keys = {(row[CASE_KEY], row["model_blinded"]) for row in queue_rows}
     decisions: dict[tuple[str, str], dict[str, str]] = {}
     for row in rows:
@@ -1872,8 +1878,18 @@ def validate_radiologist_decisions(queue_rows: list[dict[str, str]], decisions_p
         score = str(row.get("score_binary", "")).strip()
         if score not in {"0", "1"}:
             raise ValidationError(f"radiologist decision score_binary must be 0 or 1 for {key}")
-        if not str(row.get("reviewer_pseudonym", "")).strip() or not str(row.get("reviewed_utc", "")).strip():
+        reviewed_utc = str(row.get("reviewed_utc", "")).strip()
+        if not str(row.get("reviewer_pseudonym", "")).strip() or not reviewed_utc:
             raise ValidationError(f"radiologist decision missing reviewer/time for {key}")
+        try:
+            parsed_reviewed_utc = datetime.fromisoformat(
+                reviewed_utc[:-1] + "+00:00" if reviewed_utc.endswith("Z") else reviewed_utc
+            )
+        except ValueError as exc:
+            raise ValidationError(f"radiologist decision reviewed_utc is not a valid timestamp for {key}") from exc
+        offset = parsed_reviewed_utc.utcoffset()
+        if parsed_reviewed_utc.tzinfo is None or offset is None or offset.total_seconds() != 0:
+            raise ValidationError(f"radiologist decision reviewed_utc must be timezone-aware UTC for {key}")
         decisions[key] = row
     missing = sorted(queue_keys - set(decisions), key=lambda item: (case_sort_key(item[0]), item[1]))
     if missing:
@@ -2804,15 +2820,53 @@ def audit_idk0_score_lane(lane_root: Path) -> dict[str, Any]:
     if not manifest_path.exists():
         raise ValidationError("score_lane_manifest.json missing")
     manifest = read_json(manifest_path)
+    expected_output_paths = {
+        "score_rows": "score_rows.csv",
+        "source1000": "source1000.csv",
+        "public_candidate_summary": "public_candidate_summary.csv",
+        "panel_order": "panel_order.csv",
+        "group_summary": "group_summary.csv",
+        "panel_bins": "panel_bins.csv",
+    }
     outputs = manifest.get("outputs", {})
-    for name, descriptor in outputs.items():
-        path = lane_root / str(descriptor.get("path", ""))
+    if not isinstance(outputs, dict) or set(outputs) != set(expected_output_paths):
+        raise ValidationError("IDK0 lane output inventory mismatch")
+    actual_files = sorted(path.relative_to(lane_root).as_posix() for path in lane_root.rglob("*") if path.is_file())
+    expected_files = sorted(["score_lane_manifest.json", *expected_output_paths.values()])
+    if actual_files != expected_files:
+        raise ValidationError("IDK0 lane contains missing or undeclared files")
+    for name, expected_relative_path in expected_output_paths.items():
+        descriptor = outputs[name]
+        if not isinstance(descriptor, dict) or descriptor.get("path") != expected_relative_path:
+            raise ValidationError(f"IDK0 lane output path mismatch: {name}")
+        path = lane_root / expected_relative_path
         if not path.exists():
             raise ValidationError(f"IDK0 lane output missing: {name}")
         if sha256_file(path) != descriptor.get("sha256"):
             raise ValidationError(f"IDK0 lane output SHA mismatch: {name}")
+    committed_root_value = str(manifest.get("committed_root", "")).strip()
+    if not committed_root_value:
+        raise ValidationError("IDK0 lane committed_root provenance is missing")
+    committed_root = Path(committed_root_value)
+    if not committed_root.is_dir():
+        raise ValidationError(f"IDK0 lane committed_root is unavailable: {committed_root}")
+    human_presentation = str(manifest.get("human_presentation", ""))
+    with tempfile.TemporaryDirectory(prefix="radle_idk0_audit_") as temp_dir:
+        rederived_root = Path(temp_dir) / "lane"
+        build_idk0_score_lane(
+            committed_root=committed_root,
+            output_root=rederived_root,
+            human_presentation=human_presentation,
+        )
+        rederived_manifest = read_json(rederived_root / "score_lane_manifest.json")
+        if manifest != rederived_manifest:
+            raise ValidationError("IDK0 lane manifest does not independently rederive from committed inputs")
+        for relative_path in expected_output_paths.values():
+            if (lane_root / relative_path).read_bytes() != (rederived_root / relative_path).read_bytes():
+                raise ValidationError(f"IDK0 lane output does not independently rederive: {relative_path}")
     summary_fields, summary_rows = read_csv_table(lane_root / "public_candidate_summary.csv")
-    require_columns(summary_fields, IDK0_SUMMARY_FIELDS, "public candidate summary")
+    if summary_fields != IDK0_SUMMARY_FIELDS:
+        raise ValidationError("public candidate summary schema mismatch")
     prohibited_public = {"diagnosis", "Ground_Truth_Diagnosis", "Reasoning", "Raw_Response", "Associated_Images", "Image_SHA256", "source_file"}
     if prohibited_public & set(summary_fields):
         raise ValidationError(f"public candidate summary leaks prohibited columns: {sorted(prohibited_public & set(summary_fields))}")
@@ -2825,7 +2879,8 @@ def audit_idk0_score_lane(lane_root: Path) -> dict[str, Any]:
         if score2000 != score1000 + 1000:
             raise ValidationError(f"score2000 shift mismatch for {row.get('comparator_key')}")
     panel_fields, panel_rows = read_csv_table(lane_root / "panel_order.csv")
-    require_columns(panel_fields, IDK0_SUMMARY_FIELDS, "panel order")
+    if panel_fields != IDK0_SUMMARY_FIELDS:
+        raise ValidationError("panel order schema mismatch")
     for row in panel_rows:
         if row.get("excluded") == "true":
             raise ValidationError("panel_order contains excluded comparator")

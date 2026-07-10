@@ -18,7 +18,7 @@ Success is observable when each committed admission has a sealed input manifest,
 
 ## Current State
 
-Current state (2026-07-10 10:27 +05:30, Codex/GPT-5.6 Sol): Milestones 3-6 are synthetic-only proofs and are blocked from production use by the accepted P0/P1 audit findings. Blocking child Milestone 6.5 is active in `Documents/execplan_radle_v2_pre_m7_production_repair.md` on branch `codex/radle-v2-pre-m7-repair`. Next: complete and independently review the production-readiness repair. Milestone 7 may inventory and seal packages only after `PRE_M7_REPAIR_RESULT=PASS`; `prepare` must not consume them before that gate.
+Current state (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol): child Milestone 6.5 has passed and `PRE_M7_REPAIR_RESULT=PASS` is recorded in `Documents/execplan_radle_v2_pre_m7_production_repair.md` with review receipt `review/pre_m7_production_repair_review.json`. Next: commit and push the repair branch, then begin Milestone 7 by inventorying and sealing the already downloaded three-model source. Real `prepare` may consume only sealed one-model packages after source hash, manifest, runtime provenance, parent-chain, and no-paid-judge gates pass.
 
 ## Locked Facts
 
@@ -72,7 +72,7 @@ Current state (2026-07-10 10:27 +05:30, Codex/GPT-5.6 Sol): Milestones 3-6 are s
 - Effective active/excluded status is derived by joining final-master model keys to the roster: pending-but-present admitted models become active, and their `replaces_model_key` target becomes excluded if present.
 - Checkpoint commit `7c19c8b` contains Milestone 6 dynamic IDK0 score lane builder.
 - Milestones 3-6 are synthetic-only until child Milestone 6.5 passes production-schema, authority, transaction, judge, runtime, and independent-review gates.
-- `PRE_M7_REPAIR_RESULT=PENDING`; Milestone 7 and every real admission remain blocked.
+- `PRE_M7_REPAIR_RESULT=PASS`; Milestone 7 may inventory and seal packages, but every real admission still requires the one-model package, parent-chain, runtime-provenance, and judge-authorization gates.
 
 ## Do Not Revisit
 
@@ -103,7 +103,7 @@ Current state (2026-07-10 10:27 +05:30, Codex/GPT-5.6 Sol): Milestones 3-6 are s
 - [x] (2026-07-10 05:20 +05:30, Codex/GPT-5) Committed Milestone 4 as `d36938d` (`Add synthetic dual judge routing`).
 - [x] (2026-07-10 05:28 +05:30, Codex/GPT-5) Implement radiologist overlay validation, scored-delta finalization, immutable append, and independent precommit/committed-readback audit.
 - [x] (2026-07-10 05:28 +05:30, Codex/GPT-5) Make IDK0 Score1000/Score2000 and panel-source contracts roster/manifest-derived and prove them on synthetic admissions.
-- [ ] (2026-07-10 10:27 +05:30, Codex/GPT-5.6 Sol) Complete blocking child Milestone 6.5 and record `PRE_M7_REPAIR_RESULT=PASS` from an independent read-only review.
+- [x] (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol) Completed blocking child Milestone 6.5 and recorded `PRE_M7_REPAIR_RESULT=PASS` from bounded read-only re-review receipt `review/pre_m7_production_repair_review.json`.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Stop at the external-results gate and record required package paths/hashes.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Admit and adjudicate Grok 4.5; commit the first new private master.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Replay the transaction for GPT-5.6 Sol Pro.
@@ -302,6 +302,7 @@ Current state (2026-07-10 10:27 +05:30, Codex/GPT-5.6 Sol): Milestones 3-6 are s
 - v11 (2026-07-10 05:20 +05:30, Codex/GPT-5): recorded Milestone 4 commit `d36938d` and advanced Current State to Milestone 5.
 - v12 (2026-07-10 05:28 +05:30, Codex/GPT-5): recorded Milestone 5 finalization, checksum/commit semantics, validation receipts, and commit `ec76ec4`; advanced Current State to Milestone 6.
 - v13 (2026-07-10 05:28 +05:30, Codex/GPT-5): recorded Milestone 6 dynamic IDK0 score lane, implemented output schemas, scout receipt, local branch-consolidation scout, CLI receipts, validation evidence, and commit `7c19c8b`; advanced Current State to the external-results gate.
+- v14 (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol): recorded child Milestone 6.5 PASS, the repair review receipt, 31-test rerun, production-shape acceptance rerun, and the transition to Milestone 7 package inventory/sealing.
 
 ## Outcomes & Retrospective
 
@@ -312,6 +313,8 @@ Milestone 1 outcome (2026-07-10 04:40 +05:30, Codex/GPT-5): runtime integration 
 Milestone 2 outcome (2026-07-10 04:54 +05:30, Codex/GPT-5): configuration contracts are executable. `check-config` validates roster counts, judge IDs and prompt hash, terminal-state order, invalid-Likert rules, source evidence, static fixtures, and prohibited-path absence. The remaining reusable lesson is project-specific enough to keep here for now; do not promote to a global skill without explicit user approval.
 
 Milestone 3 outcome (2026-07-10 05:11 +05:30, Codex/GPT-5): prepared-stage admission is executable on synthetic 200-case data. `project-one-model` handles shared wide projection into a one-model package; `prepare` validates parent/incoming cases, metadata, parent wide/long reconciliation, ground-truth uniqueness, one model family, terminal-state routing, and writes the prepared staging tree; `audit_radle_v2_incremental_admission.py --phase prepared --no-write` validates the prepared outputs. No reusable lesson has been promoted to a skill; ask the user before creating or editing any skill.
+
+Child Milestone 6.5 outcome (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol): production-readiness repair is no longer blocked by the prior P0/P1 findings. The rerun passed `check-base`, `check-config`, `git diff --check`, `py_compile` for five modules, full discovery `Ran 31 tests`, production-shape acceptance, committed readback, and both IDK0 readbacks. Receipt `review/pre_m7_production_repair_review.json` records `verdict: pass`; no reusable lesson has been promoted to a skill.
 
 Milestone 4 outcome (2026-07-10 05:19 +05:30, Codex/GPT-5): local judge/radiologist routing is executable on synthetic prepared staging. Dry-run call math reports 194 worklist rows, 2 judges, 388 base calls, and 2328 retry-inclusive worst-case HTTP requests. Synthetic evidence writes `request_payloads.jsonl`, `judge_cache.jsonl`, `judge_results.jsonl`, `agreement_locks.csv`, `radiologist_queue_routing_audit.json`, `judge_evidence_index.json`, and `radiologist_queue.csv`; judge audit passes. No reusable lesson has been promoted to a skill; ask the user before creating or editing any skill.
 
@@ -1218,6 +1221,9 @@ Record short literal proof here as execution proceeds:
     Milestone 4 dry-run: py -3.11 scripts/radle_v2_dual_judge_delta.py --staging-root tests/tmp/synthetic_m4b/output/5bce784a17cd85b17863c2578cfd5c571a5f297b00ce6200f5af7e8698351190 --config config/radle_v2_judges.json --dry-run printed JUDGE_RESULT=DRY_RUN_VALIDATED, worklist_rows=194, base_calls=388, worst_case_http_requests=2328
     Milestone 4 synthetic run: same staging root with --synthetic printed JUDGE_RESULT=PASS, judge_result_rows=388, locked_agreement_rows=192, radiologist_queue_rows=3
     Milestone 4 judge audit: py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root tests/tmp/synthetic_m4b/output/5bce784a17cd85b17863c2578cfd5c571a5f297b00ce6200f5af7e8698351190 --phase judge --no-write printed RESULT=PASS
+    PRE_M7_REPAIR_RESULT=PASS: review/pre_m7_production_repair_review.json verdict pass; source/test patch SHA256 85A1E889184B0B9F0A4F76E67DB4009E412214B6BC675A31BA50D7EE00835232
+    Pre-M7 repair validation rerun: check-base PASS before/after; check-config PASS; git diff --check PASS; full unittest discovery PASS `Ran 31 tests in 69.865s`; py_compile PASS for five modules
+    Pre-M7 production-shape acceptance: root C:/tmp/radle_pre_m7_recheck_20260710_155032; acceptance receipt SHA256 8CDD1A5187952F13853327ED0EE3CF46B44FBF0C992A94EE325013372FB92047; finalization_id 0099659ca4b3c03f0bdbf9fe65a911959363073c9bd17093932cdd1ed09c8428; 6200 rows; 200 appended records; parent byte prefix true; network_calls=0; committed/idk0 pooled12/idk0 split6x6 readbacks PASS
     parent wide path/SHA/shape:
     parent final-long path/SHA/shape:
     roster manifest SHA:

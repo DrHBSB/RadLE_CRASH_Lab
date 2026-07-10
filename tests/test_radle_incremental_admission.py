@@ -274,6 +274,34 @@ class IncrementalAdmissionProductionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValidationError, "missing queue keys"):
                 finalize_incremental_admission(intake_root=staging, radiologist_decisions=decisions)
 
+    def test_finalize_rejects_malformed_radiologist_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            staging = self.prepare_with_judges(Path(tmp))
+            decisions = self.write_decisions(staging)
+            _, valid_rows = read_csv_table(decisions)
+            scenarios = {
+                "invalid timestamp": (
+                    RADIOLOGIST_DECISION_FIELDS,
+                    [{**row, "reviewed_utc": "not-a-timestamp"} for row in valid_rows],
+                    "not a valid timestamp",
+                ),
+                "reordered header": (
+                    [RADIOLOGIST_DECISION_FIELDS[1], RADIOLOGIST_DECISION_FIELDS[0], *RADIOLOGIST_DECISION_FIELDS[2:]],
+                    valid_rows,
+                    "exact ordered schema",
+                ),
+                "extra column": (
+                    [*RADIOLOGIST_DECISION_FIELDS, "unexpected"],
+                    [{**row, "unexpected": "forged"} for row in valid_rows],
+                    "exact ordered schema",
+                ),
+            }
+            for name, (fields, rows, error) in scenarios.items():
+                with self.subTest(name=name):
+                    self.write_csv(decisions, fields, rows)
+                    with self.assertRaisesRegex(ValidationError, error):
+                        finalize_incremental_admission(intake_root=staging, radiologist_decisions=decisions)
+
     def test_full_commit_readback_and_idk0_lane(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -314,6 +342,18 @@ class IncrementalAdmissionProductionTests(unittest.TestCase):
             panel_keys = {row["comparator_key"] for row in read_csv_table(lane / "panel_order.csv")[1]}
             self.assertNotIn("grok_4_3", panel_keys)
             self.assertIn("grok_4_5", panel_keys)
+            summary_fields, summary_rows = read_csv_table(lane / "public_candidate_summary.csv")
+            summary_rows[0]["score1000"] = "123"
+            summary_rows[0]["score2000"] = "1123"
+            self.write_csv(lane / "public_candidate_summary.csv", summary_fields, summary_rows)
+            manifest_path = lane / "score_lane_manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["outputs"]["public_candidate_summary"]["sha256"] = sha256_file(
+                lane / "public_candidate_summary.csv"
+            )
+            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValidationError, "does not independently rederive"):
+                audit_idk0_score_lane(lane)
 
     def test_second_admission_validates_committed_parent_chain(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

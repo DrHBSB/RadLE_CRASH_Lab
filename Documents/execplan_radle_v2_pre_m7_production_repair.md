@@ -12,7 +12,7 @@ Success is observable when the exact frozen 200x291 wide master, 6000x20 final m
 
 ## Current State
 
-Current state (2026-07-10 12:11 +05:30, Codex/GPT-5.6 Sol): implementation and local acceptance are complete but the gate remains pending. The real frozen authorities pass `check-base`; the production-shape no-network flow passes through committed readback and both IDK0 human presentations; 30 tests pass, including a second chained GPT-5.6 preparation from the first committed parent. Next: run independent read-only reviews against the final implementation SHA and the preservation branch, then record or reject `PRE_M7_REPAIR_RESULT=PASS` from those receipts.
+Current state (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol): the blocking pre-M7 repair gate is passed. The rerun reproduced `check-base`, `check-config`, `git diff --check`, the full 31-test suite, production-shape no-network acceptance, committed readback, both IDK0 readbacks, and compile checks; `review/pre_m7_production_repair_review.json` now records `verdict: pass`. Next: commit and push the repair branch, then resume the parent plan at Milestone 7 package inventory and sealing.
 
 ## Locked Facts
 
@@ -25,6 +25,8 @@ Current state (2026-07-10 12:11 +05:30, Codex/GPT-5.6 Sol): implementation and l
 - The frozen production wide master is 200x291 with SHA256 `7D9CE5C66FBECB6FF9B72EDB6676CA8CE4F9E5E3DCAF621610437A703EFDE17F`.
 - The frozen production final master is 6000x20 with SHA256 `7641BACC91B1AE9EDACA3249507E31A75924624FA8C232685C835AF1524F51ED`.
 - The frozen blind-label map is 30x3 with SHA256 `09EBF4562EB541B59930930C70D5D6D1E3AF76373C49EA1F4F17C1AB471AB633`.
+- Re-review receipt `review/pre_m7_production_repair_review.json` records `verdict: pass` for source/test patch SHA256 `85A1E889184B0B9F0A4F76E67DB4009E412214B6BC675A31BA50D7EE00835232`.
+- Production-shape rerun root `C:/tmp/radle_pre_m7_recheck_20260710_155032` passed with finalization ID `0099659ca4b3c03f0bdbf9fe65a911959363073c9bd17093932cdd1ed09c8428`, 6200 output rows, 200 appended records, exact parent byte prefix, and zero network calls.
 - New score sources are limited to `auto_score_not_required`, `canonical_exact`, `ai_judges`, and `radiologist`.
 - IDK, technical failure, invalid Likert, nonintegral/out-of-range Likert including `8`, and every locked invalid terminal state score zero.
 - Twelve human readers remain separate backend rows. `pooled12` and `split6x6` are presentation-only projections.
@@ -48,7 +50,7 @@ Current state (2026-07-10 12:11 +05:30, Codex/GPT-5.6 Sol): implementation and l
 - [x] (2026-07-10 11:58 +05:30, Codex/GPT-5.6 Sol with Worker/Dirac) Implemented authorization-gated real OpenRouter judging with injected mocked transport, append-only cache, zero-network default, and agreement rederivation.
 - [x] (2026-07-10 11:25 +05:30, Codex/GPT-5.6 Sol with Worker/Euler) Reconciled benchmark blob `85278e2`, medical blob `5b013be`, Meta blob `511eaf`, chat template, notebooks, and 13 runtime regression tests with `review/runtime_reconciliation_review.json`.
 - [x] (2026-07-10 12:08 +05:30, Codex/GPT-5.6 Sol) Passed the 200-case production-shape acceptance flow: 6200x20 child master, exact parent byte prefix, 200 appended records, 12 human backend readers, active/excluded model counts 15/4, and zero network calls.
-- [ ] Run independent read-only review, verify both branches, push reviewed refs, and set the parent gate result.
+- [x] (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol) Re-ran independent read-only review gates, verified both prior blocking findings fail closed, recorded `review/pre_m7_production_repair_review.json` with `verdict: pass`, and set the parent gate result to `PRE_M7_REPAIR_RESULT=PASS`.
 
 ## Surprises & Discoveries
 
@@ -101,10 +103,11 @@ Current state (2026-07-10 12:11 +05:30, Codex/GPT-5.6 Sol): implementation and l
 ## Revision Notes
 
 - v2 (2026-07-10 12:11 +05:30, Codex/GPT-5.6 Sol): recorded completed implementation and local acceptance; left the production gate pending independent review.
+- v3 (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol): recorded the bounded re-review pass, the 31-test rerun, the production-shape acceptance rerun, and the `PRE_M7_REPAIR_RESULT=PASS` gate transition.
 
 ## Outcomes & Retrospective
 
-Implementation outcome before independent review: real `check-base` passes all three frozen hashes; 30 unit/integration/runtime/judge tests pass, including committed-parent chain replay; the acceptance receipt reports zero network calls, exact parent byte prefix, 200 appended records, 6200 output rows, score-source counts `191/5/1/3` for AI/automatic-zero/canonical/radiologist, and IDK0 counts of 19 complete models, 15 active, 4 excluded, and 12 human backend readers. Final independent receipt hash, remote refs, and final gate result remain pending.
+Final repair outcome (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol): real `check-base` passes all three frozen hashes before and after the rerun; 31 unit/integration/runtime/judge tests pass, including committed-parent chain replay and the two prior blocker regressions; the production-shape acceptance receipt reports zero network calls, exact parent byte prefix, 200 appended records, 6200 output rows, score-source counts `191/5/1/3` for AI/automatic-zero/canonical/radiologist, and IDK0 counts of 19 complete models, 15 active, 4 excluded, and 12 human backend readers. The child gate is PASS and no reusable lesson has been promoted to a skill.
 
 ## Suggested Skills By Phase
 
@@ -183,6 +186,6 @@ The source incremental ref and preservation branch make recovery non-destructive
 
 ## Gate Result
 
-`PRE_M7_REPAIR_RESULT=PENDING`
+`PRE_M7_REPAIR_RESULT=PASS`
 
-Milestone 7 remains blocked while this value is `PENDING` or `FAIL`. Change it to `PASS` only in the same reviewed commit that records the independent receipt and exact acceptance evidence.
+Milestone 7 may proceed to inventory and seal the already downloaded package source. Real `prepare` must still wait for one-model package projection, source seal validation, parent-chain validation, and the no-paid-judge authorization rule.
