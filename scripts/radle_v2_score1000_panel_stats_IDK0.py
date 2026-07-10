@@ -22,11 +22,11 @@ DEFAULT_SCORE_ROOT = (
 )
 DEFAULT_OUT_DIR = DEFAULT_SCORE_ROOT / "handwritten_panels"
 EXPECTED_SOURCE_SHA256 = "7641BACC91B1AE9EDACA3249507E31A75924624FA8C232685C835AF1524F51ED"
-EXPECTED_SCORING_ROWS = 5400
+EXPECTED_SCORING_ROWS = 5600
 EFFECTIVE_CASES_PER_ROW = 200
 DOT_DISPLAY_TOTAL = 100
 SCORE2000_SHIFT = 1000
-EXPECTED_COMPARATORS = 16
+EXPECTED_COMPARATORS = 17
 
 CORRECT_BINS = ["correct_l4", "correct_l3", "correct_l2", "correct_l1", "correct_l0"]
 WRONG_BINS = ["wrong_l0", "wrong_l1", "wrong_l2", "wrong_l3", "wrong_l4"]
@@ -288,15 +288,27 @@ def write_provenance(score_root: Path, out_dir: Path, rows: list[dict[str, objec
     )
 
 
+def configure_expected_source_sha256(value: str | None) -> None:
+    if value is None:
+        return
+    normalized = value.strip().upper()
+    if len(normalized) != 64 or any(char not in "0123456789ABCDEF" for char in normalized):
+        raise StatsFailure("--expected-source-sha256 must be a 64-character SHA256 digest")
+    global EXPECTED_SOURCE_SHA256
+    EXPECTED_SOURCE_SHA256 = normalized
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--score-root", type=Path, default=DEFAULT_SCORE_ROOT)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
+    parser.add_argument("--expected-source-sha256", default=None)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    configure_expected_source_sha256(args.expected_source_sha256)
     score_root = args.score_root.resolve()
     out_dir = args.out_dir.resolve()
     scored_rows = read_csv(score_root / "score1000_scored_rows.csv")

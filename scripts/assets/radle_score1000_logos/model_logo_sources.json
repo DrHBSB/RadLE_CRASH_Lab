@@ -166,6 +166,17 @@
                        "source_url":  "https://unpkg.com/@lobehub/icons-static-png@1.91.0/light/mistral-color.png",
                        "transform":  "direct_png_download",
                        "fetched_utc":  "2026-07-08T15:37:16Z"
+                   },
+                   {
+                       "model_key":  "muse_spark_1_1",
+                       "label":  "Muse Spark 1.1",
+                       "file":  "scripts/assets/radle_score1000_logos/muse_spark_1_1_logo.png",
+                       "sha256":  "CA5DDA0B73A05C4C00A09ED31A6DE377B29332E7FD097A601D5E56687338E376",
+                       "bytes":  15100,
+                       "source_name":  "LobeHub Icons static PNG, Meta AI color; Muse Spark 1.1 is a Meta AI model",
+                       "source_url":  "https://unpkg.com/@lobehub/icons-static-png@1.91.0/light/metaai-color.png",
+                       "transform":  "direct_png_download",
+                       "fetched_utc":  "2026-07-10T15:00:07Z"
                    }
                ]
 }

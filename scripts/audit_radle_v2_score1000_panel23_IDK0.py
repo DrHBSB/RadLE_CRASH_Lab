@@ -135,29 +135,32 @@ PROMOTED_PANEL5_FILES = [
 PROMOTED_PANEL5_SELECTED_READER_LABELS = [
     "Human Expert Baseline",
     "claude_fable_5",
-    "grok_4_3",
+    "grok_4_5",
     "gemini_3_1_pro",
-    "gpt_5_5",
+    "gpt_5_6_sol_pro",
     "qwen_3_7_plus",
     "glm_5v_turbo",
+    "muse_spark_1_1",
 ]
 PROMOTED_PANEL5_KEY_BY_READER_LABEL = {
     "Human Expert Baseline": "human_expert_baseline",
     "claude_fable_5": "claude_fable_5",
-    "grok_4_3": "grok_4_3",
+    "grok_4_5": "grok_4_5",
     "gemini_3_1_pro": "gemini_3_1_pro",
-    "gpt_5_5": "gpt_5_5",
+    "gpt_5_6_sol_pro": "gpt_5_6_sol_pro",
     "qwen_3_7_plus": "qwen_3_7_plus",
     "glm_5v_turbo": "glm_5v_turbo",
+    "muse_spark_1_1": "muse_spark_1_1",
 }
 PROMOTED_PANEL5_DISPLAY_BY_READER_LABEL = {
     "Human Expert Baseline": "Human Expert Baseline",
     "claude_fable_5": "Claude Fable 5",
-    "grok_4_3": "Grok 4.3",
+    "grok_4_5": "Grok 4.5",
     "gemini_3_1_pro": "Gemini 3.1 Pro",
-    "gpt_5_5": "GPT-5.5",
+    "gpt_5_6_sol_pro": "GPT-5.6 Sol Pro",
     "qwen_3_7_plus": "Qwen 3.7 Plus",
     "glm_5v_turbo": "GLM-5V Turbo",
+    "muse_spark_1_1": "Meta Muse Spark 1.1",
 }
 REQUIRED_FILES = [
     "score1000_panel23_bins.csv",
@@ -191,7 +194,7 @@ WRONG_BINS = ["wrong_l0", "wrong_l1", "wrong_l2", "wrong_l3", "wrong_l4"]
 BIN_COLUMNS = [*CORRECT_BINS, "neutral", *WRONG_BINS]
 DOT_COLUMNS = [f"dot_{key}" for key in BIN_COLUMNS]
 DOT_DISPLAY_TOTAL = 100
-EXPECTED_COMPARATORS = 16
+EXPECTED_COMPARATORS = 17
 EXPECTED_PANEL3_UNITS = EXPECTED_COMPARATORS * DOT_DISPLAY_TOTAL
 LIKERT_LEGEND_LABELS = likert_legend_labels(IDK_SCORE)
 OUTCOME_PALETTES = {
@@ -246,18 +249,20 @@ OUTCOME_PALETTES = {
 }
 SCORE1000_BAR_COLORS_WARM_REFRESH = {
     "Human Expert Baseline": "#1b324d",
-    "grok_4_3": "#313131",
+    "grok_4_5": "#313131",
     "claude_fable_5": "#d97757",
     "gemini_3_1_pro": "#4796e3",
-    "gpt_5_5": "#74aa9c",
+    "gpt_5_6_sol_pro": "#74aa9c",
+    "muse_spark_1_1": "#c026d3",
     "octomed_7b": "#f27b73",
 }
 SCORE1000_BAR_COLORS_RECOMMENDED_BALANCED = {
     "Human Expert Baseline": "#1b324d",
     "claude_fable_5": "#d97757",
-    "grok_4_3": "#3f464c",
+    "grok_4_5": "#3f464c",
     "gemini_3_1_pro": "#4285f4",
-    "gpt_5_5": "#10a37f",
+    "gpt_5_6_sol_pro": "#10a37f",
+    "muse_spark_1_1": "#c026d3",
     "octomed_7b": "#e85d75",
     "nemotron_3_omni": "#76b900",
     "qwen_3_7_plus": "#7b61e7",
@@ -274,9 +279,9 @@ SCORE1000_BAR_COLORS_PALETTE_A = SCORE1000_BAR_COLORS_RECOMMENDED_BALANCED
 SCORE1000_BAR_THROUGH_MEDGEMMA_READER_LABELS = [
     "Human Expert Baseline",
     "claude_fable_5",
-    "grok_4_3",
+    "grok_4_5",
     "gemini_3_1_pro",
-    "gpt_5_5",
+    "gpt_5_6_sol_pro",
     "octomed_7b",
     "nemotron_3_omni",
     "qwen_3_7_plus",
@@ -285,6 +290,7 @@ SCORE1000_BAR_THROUGH_MEDGEMMA_READER_LABELS = [
     "gemma_4_31b",
     "lingshu_32b",
     "medgemma_1_5_4b",
+    "muse_spark_1_1",
 ]
 SCORE1000_BAR_ALL_MODEL_READER_LABELS = [
     *SCORE1000_BAR_THROUGH_MEDGEMMA_READER_LABELS,
@@ -295,11 +301,12 @@ SCORE1000_BAR_ALL_MODEL_READER_LABELS = [
 SCORE1000_BAR_CLOSED_READER_LABELS = [
     "Human Expert Baseline",
     "claude_fable_5",
-    "grok_4_3",
+    "grok_4_5",
     "gemini_3_1_pro",
-    "gpt_5_5",
+    "gpt_5_6_sol_pro",
     "qwen_3_7_plus",
     "glm_5v_turbo",
+    "muse_spark_1_1",
 ]
 SCORE1000_BAR_OPEN_READER_LABELS = [
     "Human Expert Baseline",
@@ -517,9 +524,9 @@ VARIANT_FILE_SPECS = {
         "selected_reader_labels": [
             "Human Expert Baseline",
             "claude_fable_5",
-            "grok_4_3",
+            "grok_4_5",
             "gemini_3_1_pro",
-            "gpt_5_5",
+            "gpt_5_6_sol_pro",
             "octomed_7b",
         ],
         "score_y_min": 0.0,
@@ -560,9 +567,9 @@ VARIANT_FILE_SPECS = {
         "selected_reader_labels": [
             "Human Expert Baseline",
             "claude_fable_5",
-            "grok_4_3",
+            "grok_4_5",
             "gemini_3_1_pro",
-            "gpt_5_5",
+            "gpt_5_6_sol_pro",
             "octomed_7b",
         ],
         "bar_colors": SCORE1000_BAR_COLORS_WARM_REFRESH,
@@ -618,9 +625,9 @@ VARIANT_FILE_SPECS = {
         "selected_reader_labels": [
             "Human Expert Baseline",
             "claude_fable_5",
-            "grok_4_3",
+            "grok_4_5",
             "gemini_3_1_pro",
-            "gpt_5_5",
+            "gpt_5_6_sol_pro",
             "octomed_7b",
         ],
         "bar_colors": SCORE1000_BAR_COLORS_WARM_REFRESH,
@@ -1138,10 +1145,11 @@ VARIANT_BAR_H = {
 }
 SCORE1000_BAR_COLORS = {
     "Human Expert Baseline": "#1b324d",
-    "grok_4_3": "#3f464c",
+    "grok_4_5": "#3f464c",
     "claude_fable_5": "#84848e",
     "gemini_3_1_pro": "#2f6f9f",
-    "gpt_5_5": "#1b324d",
+    "gpt_5_6_sol_pro": "#1b324d",
+    "muse_spark_1_1": "#c026d3",
     "octomed_7b": "#4c9f8f",
 }
 SCORE2000_SHIFT = 1000.0
@@ -1250,10 +1258,11 @@ VARIANT_LOGO_LAYOUT = {
 }
 SCORE1000_BAR_LOGO_ASSETS = {
     "Human Expert Baseline": LOGO_ASSET_DIR / "human_expert_baseline_radiologist_navy_logo.png",
-    "grok_4_3": LOGO_ASSET_DIR / "grok_4_3_logo.png",
+    "grok_4_5": LOGO_ASSET_DIR / "grok_4_3_logo.png",
     "claude_fable_5": LOGO_ASSET_DIR / "claude_fable_5_logo.png",
     "gemini_3_1_pro": LOGO_ASSET_DIR / "gemini_3_1_pro_logo.png",
-    "gpt_5_5": LOGO_ASSET_DIR / "gpt_5_5_logo.png",
+    "gpt_5_6_sol_pro": LOGO_ASSET_DIR / "gpt_5_5_logo.png",
+    "muse_spark_1_1": LOGO_ASSET_DIR / "muse_spark_1_1_logo.png",
     "octomed_7b": LOGO_ASSET_DIR / "octomed_7b_logo.png",
     "nemotron_3_omni": LOGO_ASSET_DIR / "nemotron_3_omni_logo.png",
     "qwen_3_7_plus": LOGO_ASSET_DIR / "qwen_3_7_plus_logo.png",
@@ -1270,9 +1279,10 @@ SCORE1000_BAR_FALLBACK_BADGES = {}
 SCORE1000_BAR_READER_KEYS = {
     "Human Expert Baseline": "human_expert_baseline",
     "claude_fable_5": "claude_fable_5",
-    "grok_4_3": "grok_4_3",
+    "grok_4_5": "grok_4_5",
     "gemini_3_1_pro": "gemini_3_1_pro",
-    "gpt_5_5": "gpt_5_5",
+    "gpt_5_6_sol_pro": "gpt_5_6_sol_pro",
+    "muse_spark_1_1": "muse_spark_1_1",
     "octomed_7b": "octomed_7b",
     "nemotron_3_omni": "nemotron_3_omni",
     "qwen_3_7_plus": "qwen_3_7_plus",
@@ -1298,10 +1308,11 @@ SCORE1000_BAR_FOOTER_LINE_STEP = 66.0
 SCORE1000_BAR_FOOTER_LINES = score1000_bar_footer_lines(IDK_SCORE)
 CATEGORY_MODEL_GROUPS = {
     "Closed generalist": {
-        "gpt_5_5",
+        "gpt_5_6_sol_pro",
         "claude_fable_5",
         "gemini_3_1_pro",
-        "grok_4_3",
+        "grok_4_5",
+        "muse_spark_1_1",
         "qwen_3_7_plus",
         "glm_5v_turbo",
     },
@@ -1334,11 +1345,22 @@ def configure_idk_score(idk_score: int) -> None:
             spec["footer_lines"] = SCORE1000_BAR_FOOTER_LINES
 
 
+def configure_expected_source_sha256(value: str | None) -> None:
+    if value is None:
+        return
+    normalized = value.strip().upper()
+    if len(normalized) != 64 or any(char not in "0123456789ABCDEF" for char in normalized):
+        raise AuditFailure("--expected-source-sha256 must be a 64-character SHA256 digest")
+    global EXPECTED_SOURCE_SHA256
+    EXPECTED_SOURCE_SHA256 = normalized
+
+
 DISPLAY_NAMES = {
-    "grok_4_3": "Grok 4.3",
+    "grok_4_5": "Grok 4.5",
     "claude_fable_5": "Claude Fable 5",
     "gemini_3_1_pro": "Gemini 3.1 Pro",
-    "gpt_5_5": "GPT-5.5",
+    "gpt_5_6_sol_pro": "GPT-5.6 Sol Pro",
+    "muse_spark_1_1": "Meta Muse Spark 1.1",
     "octomed_7b": "OctoMed 7B",
     "nemotron_3_omni": "Nemotron 3 Omni",
     "qwen_3_7_plus": "Qwen 3.7 Plus",
@@ -1435,7 +1457,17 @@ def score2000_expected_labels(rows: list[dict[str, str]], selected_labels: list[
     if missing:
         raise AuditFailure(f"Selected Score2000 labels are missing from source rows: {missing}")
     selected = [by_label[label] for label in selected_labels]
-    return [row["reader_label"] for row in sorted(selected, key=lambda row: (-score2000_value(row), row["reader_label"]))]
+    return [
+        row["reader_label"]
+        for row in sorted(
+            selected,
+            key=lambda row: (
+                0 if row["reader_label"] == "Human Expert Baseline" else 1,
+                -score2000_value(row),
+                row["reader_label"],
+            ),
+        )
+    ]
 
 
 NEUTRAL_STATUSES = {
@@ -4344,6 +4376,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-panel-dir", type=Path, default=None)
     parser.add_argument("--skip-visual-qa", action="store_true")
     parser.add_argument("--idk-score", type=int, choices=[0, 1], default=1)
+    parser.add_argument("--expected-source-sha256", default=None)
     return parser.parse_args()
 
 
@@ -4370,6 +4403,7 @@ def main_variant(args: argparse.Namespace) -> None:
 def main() -> None:
     args = parse_args()
     configure_idk_score(args.idk_score)
+    configure_expected_source_sha256(args.expected_source_sha256)
     if args.mode == "model-group-color-final":
         main_variant(args)
         return

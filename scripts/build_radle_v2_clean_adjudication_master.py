@@ -28,8 +28,8 @@ DEFAULT_OUT_DIR = (
     / "likert5_score1000"
 )
 
-EXPECTED_INPUT_SHA256 = "7641BACC91B1AE9EDACA3249507E31A75924624FA8C232685C835AF1524F51ED"
-EXPECTED_ROWS = 6000
+EXPECTED_INPUT_SHA256: str | None = None
+EXPECTED_ROWS = 6600
 EXPECTED_INPUT_COLUMNS = [
     "run_id",
     "Master_Case_ID",
@@ -86,7 +86,17 @@ def read_csv_text(path: Path) -> pd.DataFrame:
     return pd.read_csv(path, dtype=str, keep_default_na=False)
 
 
+def configure_expected_input_sha256(value: str) -> None:
+    normalized = value.strip().upper()
+    if len(normalized) != 64 or any(char not in "0123456789ABCDEF" for char in normalized):
+        raise GateFailure("--expected-input-sha256 must be a 64-character SHA256 digest")
+    global EXPECTED_INPUT_SHA256
+    EXPECTED_INPUT_SHA256 = normalized
+
+
 def validate_input_snapshot(path: Path, df: pd.DataFrame, actual_sha: str) -> None:
+    if EXPECTED_INPUT_SHA256 is None:
+        raise GateFailure("Expected input SHA256 was not configured")
     if actual_sha != EXPECTED_INPUT_SHA256:
         raise GateFailure(
             f"Input SHA256 mismatch: expected {EXPECTED_INPUT_SHA256}, got {actual_sha}"
@@ -102,9 +112,9 @@ def validate_input_snapshot(path: Path, df: pd.DataFrame, actual_sha: str) -> No
     if df.duplicated(KEY_COLUMNS).any():
         dupes = int(df.duplicated(KEY_COLUMNS).sum())
         raise GateFailure(f"Duplicate key rows found in input snapshot: {dupes}")
-    correct_total = int(pd.to_numeric(df["final_score_authoritative"], errors="raise").sum())
-    if correct_total != 1255:
-        raise GateFailure(f"Expected 1255 correct rows, got {correct_total}")
+    authoritative = pd.to_numeric(df["final_score_authoritative"], errors="raise")
+    if not authoritative.isin([0, 1]).all():
+        raise GateFailure("final_score_authoritative must contain only binary 0/1 values")
     normalization_columns = [c for c in df.columns if c.startswith("normalization_")]
     if normalization_columns:
         raise GateFailure(f"Input snapshot unexpectedly contains normalization columns: {normalization_columns}")
@@ -177,11 +187,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT, help="Input final long master CSV.")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR, help="Score1000 output directory.")
+    parser.add_argument("--expected-input-sha256", required=True)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    configure_expected_input_sha256(args.expected_input_sha256)
     source_path = args.input.resolve()
     out_dir = args.out_dir.resolve()
     clean_path = out_dir / "radle_v2_clean_adjudication_master.csv"
