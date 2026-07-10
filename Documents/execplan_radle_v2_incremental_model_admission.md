@@ -18,7 +18,7 @@ Success is observable when each committed admission has a sealed input manifest,
 
 ## Current State
 
-Current state (2026-07-10 05:28 +05:30, Codex/GPT-5): Milestone 6 dynamic IDK0 Score1000/Score2000 lane is implemented, validated, and committed as `7c19c8b`. The CLI now supports `build-idk0-lane`; the audit CLI supports `--phase idk0-lane`; synthetic tests prove replacement/exclusion, pooled12 and split6x6 human projections, Score2000 shift, public-summary privacy shape, active-only panel order, and non-overwrite output roots. Next: perform Milestone 7 external-results gate when real Grok/GPT/Muse packages are downloaded and sealed. Extra subagent waves could not launch because the thread agent limit was reached, so branch consolidation was scouted locally and read-only instead.
+Current state (2026-07-10 10:27 +05:30, Codex/GPT-5.6 Sol): Milestones 3-6 are synthetic-only proofs and are blocked from production use by the accepted P0/P1 audit findings. Blocking child Milestone 6.5 is active in `Documents/execplan_radle_v2_pre_m7_production_repair.md` on branch `codex/radle-v2-pre-m7-repair`. Next: complete and independently review the production-readiness repair. Milestone 7 may inventory and seal packages only after `PRE_M7_REPAIR_RESULT=PASS`; `prepare` must not consume them before that gate.
 
 ## Locked Facts
 
@@ -71,6 +71,8 @@ Current state (2026-07-10 05:28 +05:30, Codex/GPT-5): Milestone 6 dynamic IDK0 S
 - `build-idk0-lane` refuses a non-empty output root. Use a new dated lane path for every real run.
 - Effective active/excluded status is derived by joining final-master model keys to the roster: pending-but-present admitted models become active, and their `replaces_model_key` target becomes excluded if present.
 - Checkpoint commit `7c19c8b` contains Milestone 6 dynamic IDK0 score lane builder.
+- Milestones 3-6 are synthetic-only until child Milestone 6.5 passes production-schema, authority, transaction, judge, runtime, and independent-review gates.
+- `PRE_M7_REPAIR_RESULT=PENDING`; Milestone 7 and every real admission remain blocked.
 
 ## Do Not Revisit
 
@@ -101,6 +103,7 @@ Current state (2026-07-10 05:28 +05:30, Codex/GPT-5): Milestone 6 dynamic IDK0 S
 - [x] (2026-07-10 05:20 +05:30, Codex/GPT-5) Committed Milestone 4 as `d36938d` (`Add synthetic dual judge routing`).
 - [x] (2026-07-10 05:28 +05:30, Codex/GPT-5) Implement radiologist overlay validation, scored-delta finalization, immutable append, and independent precommit/committed-readback audit.
 - [x] (2026-07-10 05:28 +05:30, Codex/GPT-5) Make IDK0 Score1000/Score2000 and panel-source contracts roster/manifest-derived and prove them on synthetic admissions.
+- [ ] (2026-07-10 10:27 +05:30, Codex/GPT-5.6 Sol) Complete blocking child Milestone 6.5 and record `PRE_M7_REPAIR_RESULT=PASS` from an independent read-only review.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Stop at the external-results gate and record required package paths/hashes.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Admit and adjudicate Grok 4.5; commit the first new private master.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Replay the transaction for GPT-5.6 Sol Pro.
@@ -1050,6 +1053,8 @@ Tests must also prove all signed scores for Likert 0..4, IDK0/invalid-zero, pool
 For real panels, use SVG structural QA before screenshots. Then render desktop/contact-sheet outputs and verify no missing logos, overlap, clipping, stale model names, wrong comparator counts, or excluded arms.
 
 ### Milestone 7: External-results gate
+
+This milestone is blocked while `PRE_M7_REPAIR_RESULT` is not `PASS`. The blocking repair contract and evidence live in `Documents/execplan_radle_v2_pre_m7_production_repair.md`. Downloading, inventorying, and sealing packages may happen in parallel, but `prepare` must not consume a real package before the repair gate passes.
 
 Skill: `execplan` to update state; otherwise `none`.
 

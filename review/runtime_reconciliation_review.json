@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "milestone": "6.5",
+  "branch": "codex/radle-v2-pre-m7-repair",
+  "reconciliation_method": "Hunk-level three-way reconciliation from the current incremental benchmark blob. No whole-file checkout or stale branch overwrite was used. Unified-only hunks were applied to the current file, then exact working-tree blob hashes were compared with every approved source object.",
+  "object_type_note": "All five supplied source identifiers resolve to Git blob objects, not commit objects.",
+  "source_objects": {
+    "benchmark_base": {
+      "blob": "6b6cc03901ce7bc262ea3b885a4467690d30ff87",
+      "type": "blob",
+      "size_bytes": 91940,
+      "path": "src/radle_benchmark.py"
+    },
+    "benchmark_unified": {
+      "blob": "85278e2b4be1492ee402b1a6e90edcacfb85ccd7",
+      "type": "blob",
+      "size_bytes": 98285,
+      "path": "src/radle_benchmark.py",
+      "tree_commit": "efe3d3ca3a1ec539235dcb2fed8025a8dd176ec3"
+    },
+    "benchmark_incremental": {
+      "blob": "b8e0bbea69ce8dd01696495618cf1405838f16cf",
+      "type": "blob",
+      "size_bytes": 93269,
+      "path": "src/radle_benchmark.py",
+      "tree_commit": "fdbe56b2558275a766338028f4b4b9b275c9e6e0"
+    },
+    "medical_runtime": {
+      "blob": "5b013be15af3b7d8d0e3bf7c6b4b16d9f0e900b9",
+      "type": "blob",
+      "size_bytes": 23419,
+      "path": "src/radle_medical_custom_runtime.py",
+      "tree_commit": "41fd035346d1560ff85b2f2133b0feae97ba8d8d"
+    },
+    "meta_runtime": {
+      "blob": "511eaf27669c04db5451dca7a81c67c675585f7d",
+      "type": "blob",
+      "size_bytes": 5268,
+      "path": "src/radle_meta_model_api_runtime.py",
+      "tree_commit": "b0a1ba5f00919647a1af3e62f26cb2dd0d4fc620"
+    },
+    "llava_chat_template": {
+      "blob": "4622a44f0f8bdee11eb7a3f2e501be1b9414e85d",
+      "type": "blob",
+      "size_bytes": 889,
+      "path": "src/templates/llava_med_mistral_vllm_chat_template.jinja",
+      "tree_commit": "41fd035346d1560ff85b2f2133b0feae97ba8d8d"
+    },
+    "meta_append_notebook_at_meta_integration": {
+      "blob": "ecb7f36defdf18a3f88173a5ea919c9c7c851406",
+      "type": "blob",
+      "size_bytes": 21591,
+      "path": "notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb",
+      "tree_commit": "b0a1ba5f00919647a1af3e62f26cb2dd0d4fc620"
+    },
+    "meta_notebook": {
+      "blob": "58a4774d9dd78cfb8a328b08e6329a5f1217dc02",
+      "type": "blob",
+      "size_bytes": 19057,
+      "path": "notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb",
+      "tree_commit": "b0a1ba5f00919647a1af3e62f26cb2dd0d4fc620"
+    }
+  },
+  "exact_comparisons": [
+    {
+      "command": "git diff --numstat 6b6cc03901ce7bc262ea3b885a4467690d30ff87 85278e2b4be1492ee402b1a6e90edcacfb85ccd7",
+      "output": "209\t40\t6b6cc03901ce7bc262ea3b885a4467690d30ff87 => 85278e2b4be1492ee402b1a6e90edcacfb85ccd7",
+      "meaning": "Unified benchmark changes relative to the approved base."
+    },
+    {
+      "command": "git diff --numstat 6b6cc03901ce7bc262ea3b885a4467690d30ff87 b8e0bbea69ce8dd01696495618cf1405838f16cf",
+      "output": "55\t4\t6b6cc03901ce7bc262ea3b885a4467690d30ff87 => b8e0bbea69ce8dd01696495618cf1405838f16cf",
+      "meaning": "Incremental benchmark changes relative to the approved base."
+    },
+    {
+      "command": "git diff --numstat b8e0bbea69ce8dd01696495618cf1405838f16cf 85278e2b4be1492ee402b1a6e90edcacfb85ccd7",
+      "output": "154\t36\tb8e0bbea69ce8dd01696495618cf1405838f16cf => 85278e2b4be1492ee402b1a6e90edcacfb85ccd7",
+      "meaning": "Unified-only and conflict-resolution hunks applied to the initial incremental working blob."
+    },
+    {
+      "command": "git diff --numstat c3a4b3c510ade871494880f86aa3c0a152961c6e 5b013be15af3b7d8d0e3bf7c6b4b16d9f0e900b9",
+      "output": "107\t5\tc3a4b3c510ade871494880f86aa3c0a152961c6e => 5b013be15af3b7d8d0e3bf7c6b4b16d9f0e900b9",
+      "meaning": "Missing medical runtime hunks restored from the approved medical blob."
+    },
+    {
+      "command": "git diff --numstat ecb7f36defdf18a3f88173a5ea919c9c7c851406 d5082d1d75005cf1c688e9ae320b38500359b5a3",
+      "output": "1\t1\tecb7f36defdf18a3f88173a5ea919c9c7c851406 => d5082d1d75005cf1c688e9ae320b38500359b5a3",
+      "meaning": "The existing append notebook preserves the later make_openai_client factory fix from commit b12cc58f4b0a38ddcadf2aeacc6c41ca37f9f353."
+    }
+  ],
+  "owned_path_results": [
+    {
+      "path": "src/radle_benchmark.py",
+      "initial_blob": "b8e0bbea69ce8dd01696495618cf1405838f16cf",
+      "final_blob": "85278e2b4be1492ee402b1a6e90edcacfb85ccd7",
+      "action": "hunk_reconciled",
+      "exact_source_match": "benchmark_unified",
+      "retained": [
+        "14-model unified roster",
+        "GPT-5.6 OpenAI-only routing",
+        "Grok-4.5 xAI-only routing",
+        "Meta provider and meta_client plumbing",
+        "closed and unclosed think-block protections",
+        "VQA fallback",
+        "abstention behavior",
+        "conservative prose fallback"
+      ]
+    },
+    {
+      "path": "src/radle_medical_custom_runtime.py",
+      "initial_blob": "c3a4b3c510ade871494880f86aa3c0a152961c6e",
+      "final_blob": "5b013be15af3b7d8d0e3bf7c6b4b16d9f0e900b9",
+      "action": "missing_hunks_restored",
+      "exact_source_match": "medical_runtime",
+      "retained": [
+        "LLaVA-Med HF-format model ID",
+        "vLLM engine",
+        "min_tokens=16 request body",
+        "chat-template command flags",
+        "vLLM generation-config flag",
+        "rotary FlashAttention fallback preflight"
+      ]
+    },
+    {
+      "path": "src/radle_meta_model_api_runtime.py",
+      "initial_blob": "511eaf27669c04db5451dca7a81c67c675585f7d",
+      "final_blob": "511eaf27669c04db5451dca7a81c67c675585f7d",
+      "action": "preserved_byte_for_byte",
+      "exact_source_match": "meta_runtime"
+    },
+    {
+      "path": "src/templates/llava_med_mistral_vllm_chat_template.jinja",
+      "initial_blob": null,
+      "final_blob": "4622a44f0f8bdee11eb7a3f2e501be1b9414e85d",
+      "action": "imported",
+      "exact_source_match": "llava_chat_template"
+    },
+    {
+      "path": "notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb",
+      "initial_blob": "d5082d1d75005cf1c688e9ae320b38500359b5a3",
+      "final_blob": "d5082d1d75005cf1c688e9ae320b38500359b5a3",
+      "action": "preserved_byte_for_byte",
+      "source_relationship": "One-line newer descendant of ecb7f36defdf18a3f88173a5ea919c9c7c851406; uses make_openai_client and passes meta_client through benchmark and repair calls."
+    },
+    {
+      "path": "notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb",
+      "initial_blob": "58a4774d9dd78cfb8a328b08e6329a5f1217dc02",
+      "final_blob": "58a4774d9dd78cfb8a328b08e6329a5f1217dc02",
+      "action": "preserved_byte_for_byte",
+      "exact_source_match": "meta_notebook"
+    },
+    {
+      "path": "tests/test_radle_runtime_reconciliation.py",
+      "initial_blob": null,
+      "final_blob_before_review_validation": "c298a8037d9978e8636c594753e5045ae29f9ab3",
+      "action": "added"
+    },
+    {
+      "path": "review/runtime_reconciliation_review.json",
+      "initial_blob": null,
+      "action": "added"
+    }
+  ],
+  "validation": {
+    "interpreter": "Python 3.11; pandas 3.0.3",
+    "focused_tests": {
+      "command": "py -3.11 -m unittest discover -s tests -p test_radle_runtime_reconciliation.py -v",
+      "exit_code": 0,
+      "result": "Ran 13 tests in 0.066s; OK"
+    },
+    "full_tests": {
+      "command": "py -3.11 -m unittest discover -s tests -p \"test_*.py\" -v",
+      "exit_code": 0,
+      "result": "Ran 29 tests in 55.870s; OK"
+    },
+    "compile": {
+      "command": "py -3.11 -c <py_compile to C:\\tmp temporary directory for four Python files>",
+      "exit_code": 0,
+      "result": "COMPILE_OK 4"
+    },
+    "notebook_json": {
+      "command": "PowerShell ConvertFrom-Json for both owned notebooks",
+      "exit_code": 0,
+      "result": [
+        "JSON_OK notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb",
+        "JSON_OK notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb"
+      ]
+    },
+    "diff_check": {
+      "command": "git diff --check -- <owned implementation and test paths>",
+      "exit_code": 0,
+      "result": "No whitespace errors"
+    },
+    "environment_note": "The default Python 3.14 interpreter lacks pandas, and direct py_compile cannot write src/__pycache__. Final validation therefore uses the available dependency-complete Python 3.11 interpreter and temporary bytecode outputs outside the source tree."
+  }
+}

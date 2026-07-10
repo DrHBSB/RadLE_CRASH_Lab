@@ -60,18 +60,20 @@ MODELS = [
         },
     },
     {
+        "name": "claude_fable_5",
+        "id": "claude-fable-5",
+        "provider": "anthropic",
+        "extra": {"output_config": {"effort": "high"}},
+    },
+    {
         "name": "gemini_3_1_pro",
         "id": "gemini-3.1-pro-preview",
         "provider": "google",
         "extra": {"thinking_level": "high"},
     },
     {
-        "name": "grok_4_20",
-        # Vision-only: Grok 4.20 silently drops the image whenever any reasoning
-        # parameter is set (effort/enabled, any provider or the -multi-agent slug),
-        # producing blind hallucinated diagnoses. Reasoning must stay OFF for it to
-        # see images. Verified via OpenRouter probe 2026-06-13.
-        "id": "x-ai/grok-4.20",
+        "name": "grok_4_3",
+        "id": "x-ai/grok-4.3",
         "extra": None,
     },
     {
@@ -101,8 +103,13 @@ MODELS = [
         "extra": None,
     },
     {
-        "name": "glm_4_6v",
-        "id": "z-ai/glm-4.6v",
+        "name": "minimax_m3",
+        "id": "minimax/minimax-m3",
+        "extra": None,
+    },
+    {
+        "name": "glm_5v_turbo",
+        "id": "z-ai/glm-5v-turbo",
         "extra": {"reasoning": {"enabled": True}},
     },
     {
@@ -160,6 +167,88 @@ def get_mime_type(path):
     return "image/jpeg"
 
 
+# Failsafe prose extraction (last resort) for models that describe instead of
+# emitting JSON -- e.g. LLaVA-Med via Ollama. Deliberately CONSERVATIVE: it only
+# fires on an explicit diagnostic commitment ("presence of X", "consistent with
+# X", ...) and rejects anything that is just modality/anatomy description or a
+# list of possibilities, so it never fabricates a diagnosis from a description.
+_PROSE_COMMIT_TRIGGERS = (
+    r"presence of",
+    r"consistent with",
+    r"compatible with",
+    r"suggestive of",
+    r"indicative of",
+    r"diagnostic of",
+    r"diagnosis of",
+    r"diagnosis is",
+    r"findings of",
+    r"most likely represents",
+    r"represents",
+    r"reveals",
+    r"demonstrates",
+)
+_PROSE_MODALITY_STOP = (
+    "ct", "computed tomography", "x-ray", "xray", "radiograph", "radiography",
+    "mri", "magnetic resonance", "ultrasound", "sonograph", "scan", "view",
+    "image", "coronal", "axial", "sagittal", "plane", "section", "projection",
+    "film", "structures", "abnormalities", "various conditions", "anatomy",
+    "the patient", "cavity", "region", "angiogram", "modality",
+)
+# Abstention / non-answer phrases. If the text captured right after a commit
+# trigger is really a declination ("...diagnosis is NOT PROVIDED in this case"),
+# treat it as no-diagnosis, never as a committed diagnosis. Conservative: this
+# only ever suppresses a false commit, it can never manufacture one.
+_PROSE_ABSTAIN = (
+    "not provided", "not specified", "not given", "not available",
+    "not mentioned", "not determined", "cannot be determined",
+    "could not be determined", "not possible to determine", "not clear",
+    "unclear", "not evident", "not identified", "not established",
+    "not stated", "unknown", "indeterminate", "no diagnosis",
+)
+_PROSE_CONFIDENCE = (
+    ("very high confidence", 4),
+    ("high confidence", 3),
+    ("moderate confidence", 2),
+    ("very low confidence", 0),
+    ("low confidence", 1),
+)
+
+
+def _extract_prose_diagnosis(text):
+    """Return (diagnosis, likert) if prose states a committed diagnosis, else (None, None)."""
+    if not text:
+        return None, None
+    lowered = text.lower()
+    for trigger in _PROSE_COMMIT_TRIGGERS:
+        match = re.search(
+            trigger + r"\s+(?:a |an |the )?([A-Za-z][A-Za-z0-9 '\-/()]+?)(?:[.,;:\n]|$)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            continue
+        phrase = match.group(1).strip().strip("()").strip()
+        low = phrase.lower()
+        if not phrase or len(phrase.split()) > 8:
+            continue
+        # Reject a declination captured after the trigger (e.g. "diagnosis is
+        # not provided in this case"): negation right after the trigger, or an
+        # explicit abstention phrase anywhere in the captured span.
+        if re.match(r"(?:not|no|n't|cannot|can't|could not|couldn't)\b", low):
+            continue
+        if any(abstain in low for abstain in _PROSE_ABSTAIN):
+            continue
+        if any(re.search(r"\b" + re.escape(stop) + r"\b", low) for stop in _PROSE_MODALITY_STOP):
+            continue
+        likert = None
+        for words, val in _PROSE_CONFIDENCE:
+            if words in lowered:
+                likert = val
+                break
+        return phrase, likert
+    return None, None
+
+
 def extract_json_safely(raw_text):
     """Extract diagnosis JSON while ignoring Markdown fences or reasoning text."""
     if raw_text is None:
@@ -168,6 +257,19 @@ def extract_json_safely(raw_text):
     text = str(raw_text).strip()
     text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
     text = re.sub(r"```", "", text)
+
+    # Reasoning models (e.g. OctoMed) emit an internal trace in
+    # <think>...</think> BEFORE the final answer. The answer is only what follows
+    # the trace; the trace is full of hedged/rejected hypotheses that must never
+    # be mined as a diagnosis (the prose failsafe would otherwise grab a rejected
+    # differential). Keep only the text after the last </think>. An opened but
+    # unclosed <think> means the output was truncated mid-reasoning with no final
+    # answer -> no diagnosis. This is inert for models that never emit <think>
+    # (LLaVA-Med, cloud models), so their extraction is unchanged.
+    if re.search(r"</think\s*>", text, flags=re.IGNORECASE):
+        text = re.split(r"</think\s*>", text, flags=re.IGNORECASE)[-1].strip()
+    elif re.search(r"<think\b", text, flags=re.IGNORECASE):
+        return "PARSE_FAILED", "PARSE_FAILED"
 
     try:
         data = json.loads(text)
@@ -224,6 +326,42 @@ def extract_json_safely(raw_text):
             likert = "NULL"
 
         return diag, likert
+
+    # VQA-format fallback: LLaVA-Med outputs numbered-list answers instead of JSON,
+    # e.g. "1. Pulmonary tuberculosis: 3 (moderate confidence) 2. Von Hippel-Lindau: 4 ..."
+    # Take the first numbered entry that has a real diagnosis and a numeric 0-4 score.
+    vqa_pattern = re.compile(
+        r"\b\d+\.\s+([^:0-9\n][^:\n]*?):\s*(\d+|null)\b",
+        flags=re.IGNORECASE,
+    )
+    vqa_matches = vqa_pattern.findall(text.split("</s>")[0])  # strip any trailing EOS text
+    if vqa_matches:
+        # Prefer the first entry with a real (non-IDK) diagnosis and numeric score.
+        for diag_raw, score_raw in vqa_matches:
+            diag_raw = diag_raw.strip()
+            score_raw = score_raw.strip().lower()
+            if score_raw == "null":
+                continue
+            try:
+                score_int = int(score_raw)
+            except ValueError:
+                continue
+            if score_int not in range(5):
+                continue
+            if diag_raw.lower() in {"i don't know", "unknown", "none", "n/a"}:
+                continue
+            return diag_raw, score_int
+        # All entries were IDK/null — return the first one.
+        diag_raw, score_raw = vqa_matches[0]
+        diag_raw = diag_raw.strip()
+        score_raw = score_raw.strip().lower()
+        likert = None if score_raw == "null" else score_raw
+        return diag_raw, likert
+
+    # Last resort: pull a committed diagnosis out of descriptive prose.
+    prose_diag, prose_likert = _extract_prose_diagnosis(text)
+    if prose_diag:
+        return prose_diag, prose_likert
 
     return "PARSE_FAILED", "PARSE_FAILED"
 
@@ -1120,21 +1258,6 @@ def audit_benchmark_output(
     return result
 
 
-def is_grok_xhigh_rejection(model, error_text):
-    """Detect likely rejection of reasoning.effort='xhigh' on base Grok 4.20."""
-    text = str(error_text).lower()
-    return (
-        model["name"] == "grok_4_20"
-        and "error code: 400" in text
-        and (
-            "reasoning" in text
-            or "effort" in text
-            or "unsupported" in text
-            or "parameter" in text
-        )
-    )
-
-
 def uses_native_openai(model):
     """Return True for models that should bypass OpenRouter."""
     return model.get("provider") == "openai"
@@ -1202,9 +1325,11 @@ def build_api_params(model, content_array, max_output_tokens, universal_temperat
         }
         if "thinking" in extra:
             params["thinking"] = extra["thinking"]
-            if "output_config" in extra:
-                params["output_config"] = extra["output_config"]
-            # temperature is incompatible with extended thinking
+        if "output_config" in extra:
+            params["output_config"] = extra["output_config"]
+        if "thinking" in extra or "output_config" in extra:
+            # Sampling parameters are incompatible with these Claude request modes.
+            pass
         else:
             params["temperature"] = universal_temperature
         return params
@@ -1348,7 +1473,7 @@ def call_model(
     universal_temperature=UNIVERSAL_TEMPERATURE,
     max_retries=3,
 ):
-    """Call one model with transport retries and Grok xhigh fallback."""
+    """Call one model with transport retries."""
     api_params = build_api_params(
         model,
         content_array,
@@ -1382,13 +1507,6 @@ def call_model(
             break
         except Exception as exc:
             last_error = str(exc)
-
-            if is_grok_xhigh_rejection(model, last_error) and not grok_fallback_used:
-                print("    Grok xhigh rejected; falling back to reasoning.enabled=True.")
-                api_params["extra_body"] = {"reasoning": {"enabled": True}}
-                grok_fallback_used = True
-                response = None
-                continue
 
             fatal_patterns = [
                 "error code: 404",
@@ -1539,7 +1657,7 @@ def extract_result(response, latency, api_params, grok_fallback_used, model):
             _logged_request_extra(model, api_params),
             ensure_ascii=False,
         ),
-        f"Grok_Fallback_Used_{name}": grok_fallback_used if name == "grok_4_20" else "",
+        f"Grok_Fallback_Used_{name}": grok_fallback_used if name.startswith("grok_") else "",
         f"OpenRouter_Response_Model_{name}": getattr(response, "model", ""),
         f"Usage_JSON_{name}": json.dumps(
             make_json_safe(getattr(response, "usage", None)),
@@ -1570,7 +1688,7 @@ def failed_result(error, model, api_params=None, grok_fallback_used=False):
             _logged_request_extra(model, api_params) if api_params else None,
             ensure_ascii=False,
         ),
-        f"Grok_Fallback_Used_{name}": grok_fallback_used if name == "grok_4_20" else "",
+        f"Grok_Fallback_Used_{name}": grok_fallback_used if name.startswith("grok_") else "",
         f"OpenRouter_Response_Model_{name}": "",
         f"Usage_JSON_{name}": "",
         f"Raw_Response_{name}": full_error[:2000],

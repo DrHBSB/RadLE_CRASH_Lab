@@ -14,9 +14,12 @@
   },
   "base_blinding_key": {
     "path": "outputs/radle_v2_stats/blinding_key_blinded_combined.csv",
+    "rows": 30,
+    "columns": 3,
     "sha256": "09EBF4562EB541B59930930C70D5D6D1E3AF76373C49EA1F4F17C1AB471AB633",
     "labels": "Candidate A through Candidate AD"
   },
+  "model_roster_path": "config/radle_v2_model_roster.json",
   "requirements": {
     "requirements_radle_v2_incremental_model_admission.md": "322751F4388E305D7B2BCA056A320F643FBC5F951663C4F2DE4CB27C995F098E",
     "radle_v2_incremental_model_pipeline_requirements_study.md": "1CA43BE159B59042A01CCD6B939C4CCC8B71D03851684F621BE6E8E0599376ED"

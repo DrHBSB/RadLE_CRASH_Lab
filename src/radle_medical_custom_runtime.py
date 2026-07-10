@@ -141,6 +141,7 @@ class MedicalRuntimeModel:
     needs_trust_remote_code: bool = True
     default_max_model_len: int = 8192
     default_gpu_memory_utilization: float = 0.9
+    request_extra_body: dict | None = None
     notes: str = ""
 
     def benchmark_config(self) -> dict:
@@ -148,7 +149,7 @@ class MedicalRuntimeModel:
         return {
             "name": self.name,
             "id": self.model_id,
-            "extra": None,
+            "extra": self.request_extra_body,
         }
 
 
@@ -162,11 +163,19 @@ MEDICAL_CUSTOM_RUNTIME_MODELS = [
     ),
     MedicalRuntimeModel(
         name="llava_med_mistral_7b",
-        model_id="microsoft/llava-med-v1.5-mistral-7b",
-        preferred_engine="sglang",
+        model_id="chaoyinshe/llava-med-v1.5-mistral-7b-hf",
+        preferred_engine="vllm",
+        # min_tokens=16 ONLY. Evidence: with NO extra_body, IMAGE cases emit EOS
+        # immediately (completion_tokens=1, empty), while text-only probes generate
+        # fine -- this checkpoint EOS-terminates on multimodal input at the first
+        # token. min_tokens forces it past that, after which it decodes a real
+        # diagnosis and stops on its own (case 156 -> 21 tokens). The other former
+        # guards were harmful: logit_bias blocked newlines (-> "1. 1. 1." collapse)
+        # and bad_words blocked EOS (-> whitespace loop). Neither is used now.
+        request_extra_body={"min_tokens": 16},
         notes=(
-            "Biomedical LLaVA-Med Mistral 7B checkpoint; serve with SGLang "
-            "because Workbench vLLM 0.23.0 did not recognize model_type llava_mistral."
+            "HF-format LLaVA-Med Mistral 7B checkpoint for vLLM; "
+            "do not route the original Microsoft checkpoint through vLLM by config relabeling."
         ),
     ),
     MedicalRuntimeModel(
@@ -186,6 +195,22 @@ MEDICAL_CUSTOM_RUNTIME_MODELS = [
 
 
 MODEL_BY_NAME = {model.name: model for model in MEDICAL_CUSTOM_RUNTIME_MODELS}
+LLAVA_MED_MISTRAL_CHAT_TEMPLATE_PATH = (
+    pathlib.Path(__file__).parent
+    / "templates"
+    / "llava_med_mistral_vllm_chat_template.jinja"
+)
+
+
+def _extend_args_if_missing(args: list[str], additions: list[str]) -> list[str]:
+    """Append CLI flag/value pairs unless the flag is already present."""
+    merged = list(args)
+    for idx in range(0, len(additions), 2):
+        flag = additions[idx]
+        value = additions[idx + 1]
+        if flag not in merged:
+            merged.extend([flag, value])
+    return merged
 
 
 def configure_cache_environment(cache_root: str = DEFAULT_CACHE_ROOT) -> dict:
@@ -314,6 +339,70 @@ def verify_vllm_importable() -> None:
         )
 
 
+def patch_vllm_rotary_flash_attn_fallback() -> None:
+    """Patch vLLM's optional FlashAttention rotary import to use native fallback."""
+    patch_code = r"""
+import importlib.util
+from pathlib import Path
+
+spec = importlib.util.find_spec("vllm.model_executor.layers.rotary_embedding.common")
+if spec is None or spec.origin is None:
+    raise SystemExit("Could not locate vLLM rotary common.py")
+
+path = Path(spec.origin)
+text = path.read_text(encoding="utf-8")
+needle = "\n".join([
+    "        self.apply_rotary_emb_flash_attn = None",
+    "        if not current_platform.is_cpu() and find_spec(\"flash_attn\") is not None:",
+    "            from flash_attn.ops.triton.rotary import apply_rotary",
+    "",
+    "            self.apply_rotary_emb_flash_attn = apply_rotary",
+    "",
+])
+replacement = "\n".join([
+    "        self.apply_rotary_emb_flash_attn = None",
+    "        if not current_platform.is_cpu() and find_spec(\"flash_attn\") is not None:",
+    "            try:",
+    "                from flash_attn.ops.triton.rotary import apply_rotary",
+    "            except ModuleNotFoundError as exc:",
+    "                if exc.name is None or not exc.name.startswith(\"flash_attn\"):",
+    "                    raise",
+    "                apply_rotary = None",
+    "",
+    "            if apply_rotary is not None:",
+    "                self.apply_rotary_emb_flash_attn = apply_rotary",
+    "",
+])
+
+if "except ModuleNotFoundError as exc:" in text:
+    print("vLLM rotary optional flash_attn patch already present:", path)
+elif needle in text:
+    path.write_text(text.replace(needle, replacement, 1), encoding="utf-8")
+    print("Patched vLLM rotary optional flash_attn fallback:", path)
+else:
+    raise SystemExit("Expected vLLM rotary flash_attn block not found in " + str(path))
+
+for pyc_path in path.parent.joinpath("__pycache__").glob("common*.pyc"):
+    pyc_path.unlink(missing_ok=True)
+"""
+    print("Preflight vLLM rotary optional flash_attn fallback patch...")
+    result = subprocess.run(
+        [sys.executable, "-c", patch_code],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.stdout.strip():
+        print(result.stdout.strip())
+    if result.stderr.strip():
+        print(result.stderr.strip())
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Failed to patch vLLM rotary optional flash_attn fallback before "
+            "server startup."
+        )
+
+
 def build_vllm_command(
     model_name: str,
     host: str = DEFAULT_HOST,
@@ -348,6 +437,18 @@ def build_vllm_command(
         command.append("--trust-remote-code")
     if extra_args:
         command.extend(extra_args)
+    if model.name == "llava_med_mistral_7b":
+        command = _extend_args_if_missing(
+            command,
+            [
+                "--chat-template",
+                str(LLAVA_MED_MISTRAL_CHAT_TEMPLATE_PATH),
+                "--chat-template-content-format",
+                "openai",
+                "--generation-config",
+                "vllm",
+            ],
+        )
     return command
 
 
@@ -404,6 +505,7 @@ def start_model_server(
 
     if engine == "vllm":
         verify_vllm_importable()
+        patch_vllm_rotary_flash_attn_fallback()
         command = build_vllm_command(
             model_name=model_name,
             host=host,

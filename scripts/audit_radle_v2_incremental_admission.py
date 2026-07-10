@@ -22,8 +22,8 @@ from radle_incremental_admission import (
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Audit RadLE v2 incremental admission artifacts")
-    parser.add_argument("--admission-root", required=True)
-    parser.add_argument("--phase", choices=["prepared", "judge", "precommit", "committed-readback", "idk0-lane"], required=True)
+    parser.add_argument("--admission-root", "--root", dest="admission_root", required=True)
+    parser.add_argument("--phase", choices=["prepared", "judge", "precommit", "committed", "committed-readback", "idk0-lane"], required=True)
     parser.add_argument("--no-write", action="store_true")
     args = parser.parse_args(argv)
 
@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
             receipt = audit_judge_evidence(Path(args.admission_root))
         elif args.phase == "precommit":
             receipt = audit_finalized_admission(Path(args.admission_root), require_committed=False)
-        elif args.phase == "committed-readback":
+        elif args.phase in {"committed", "committed-readback"}:
             receipt = audit_finalized_admission(Path(args.admission_root), require_committed=True)
         elif args.phase == "idk0-lane":
             receipt = audit_idk0_score_lane(Path(args.admission_root))

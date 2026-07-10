@@ -56,6 +56,49 @@ REQUIRED_MODEL_FIELDS = {
 }
 PROHIBITED_LIVE_STATS_PATH = "C:/Users/thehb/Documents/" + "RadLE Stats"
 RADIOLOGIST_QUEUE_FIELDS = ["Master_Case_ID", "model_blinded", "Ground_Truth_Diagnosis", "diagnosis", "likert"]
+FINAL_LONG_MASTER_FIELDS = [
+    "run_id",
+    "Master_Case_ID",
+    "Associated_Images",
+    "model_blinded",
+    "candidate",
+    "provider",
+    "access",
+    "domain",
+    "Ground_Truth_Diagnosis",
+    "diagnosis",
+    "likert",
+    "response_valid",
+    "abstained",
+    "technical_failure",
+    "score_required",
+    "final_score_authoritative",
+    "final_score_source",
+    "weighted_score",
+    "rater_seniority",
+    "rater_seniority_rank",
+]
+ADJUDICATION_STATE_FIELDS = [
+    "Master_Case_ID",
+    "model_blinded",
+    "candidate",
+    "terminal_state",
+    "normalized_ground_truth",
+    "normalized_diagnosis",
+    "package_failure",
+    "source_row_sha256",
+    "automatic_score",
+    "requires_judge",
+    "requires_radiologist",
+]
+ALLOWED_NEW_SCORE_SOURCES = {
+    "auto_score_not_required",
+    "canonical_exact",
+    "ai_judges",
+    "radiologist",
+}
+BLIND_MAP_FIELDS = ["model_blinded", "model_key", "provider"]
+CSV_FIELD_LIMIT_TARGET = 2_147_483_647
 
 
 class ValidationError(ValueError):
@@ -76,6 +119,28 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest().upper()
+
+
+def set_csv_field_limit(target: int = CSV_FIELD_LIMIT_TARGET) -> int:
+    """Raise the process CSV limit, backing off on smaller C long platforms."""
+    limit = target
+    while limit > 131_072:
+        try:
+            csv.field_size_limit(limit)
+            return limit
+        except OverflowError:
+            limit //= 10
+    csv.field_size_limit(131_072)
+    return 131_072
+
+
+def canonical_text_bytes(path: Path) -> bytes:
+    text = path.read_text(encoding="utf-8-sig")
+    return text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+
+
+def canonical_text_sha256(path: Path) -> str:
+    return sha256_bytes(canonical_text_bytes(path))
 
 
 def normalize_diagnosis(value: object) -> str:
@@ -135,11 +200,13 @@ def _find_duplicate(values: list[str]) -> str | None:
 
 
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
+    set_csv_field_limit()
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         return list(csv.DictReader(handle))
 
 
 def read_csv_table(path: Path) -> tuple[list[str], list[dict[str, str]]]:
+    set_csv_field_limit()
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         fieldnames = reader.fieldnames or []
@@ -151,13 +218,19 @@ def read_csv_table(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     return fieldnames, rows
 
 
+def serialize_csv_table(fieldnames: list[str], rows: list[dict[str, object]], *, lineterminator: str = "\n", include_header: bool = True) -> bytes:
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore", lineterminator=lineterminator)
+    if include_header:
+        writer.writeheader()
+    for row in rows:
+        writer.writerow({field: row.get(field, "") for field in fieldnames})
+    return output.getvalue().encode("utf-8")
+
+
 def write_csv_table(path: Path, fieldnames: list[str], rows: list[dict[str, object]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore", lineterminator="\n")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({field: row.get(field, "") for field in fieldnames})
+    path.write_bytes(serialize_csv_table(fieldnames, rows))
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -386,7 +459,7 @@ def validate_judges(judges: dict[str, Any], config_root: Path) -> dict[str, Any]
     prompt_path = config_root / str(judges.get("prompt_file", ""))
     if not prompt_path.exists():
         raise ValidationError(f"judge prompt file missing: {prompt_path}")
-    prompt_hash = sha256_file(prompt_path)
+    prompt_hash = canonical_text_sha256(prompt_path)
     evidence = judges.get("source_evidence", {})
     if evidence.get("source_script_git_blob") != "930ae988f1e0a33c068053e75bd4abe1b644fb7a":
         raise ValidationError("judge source_script_git_blob mismatch")
@@ -430,6 +503,159 @@ def validate_configs(
         "terminal_policy": validate_terminal_policy(states, fixture_csv),
     }
     return receipt
+
+
+def compute_case_triplet_sha256(rows: list[dict[str, str]]) -> str:
+    digest = hashlib.sha256()
+    for row in sorted(rows, key=lambda item: case_sort_key(str(item.get(CASE_KEY, "")))):
+        payload = [
+            str(row.get(CASE_KEY, "")),
+            str(row.get("Associated_Images", "")),
+            str(row.get("Image_SHA256", "")),
+        ]
+        digest.update(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def _authority_path(root: Path, descriptor: dict[str, Any], label: str) -> Path:
+    relative = str(descriptor.get("path", "")).strip()
+    if not relative:
+        raise ValidationError(f"{label} authority path is blank")
+    path = (root / Path(relative)).resolve()
+    try:
+        path.relative_to(root.resolve())
+    except ValueError as exc:
+        raise ValidationError(f"{label} authority path escapes authority root: {relative}") from exc
+    if not path.is_file():
+        raise ValidationError(f"{label} authority file missing: {path}")
+    return path
+
+
+def validate_base_authority(
+    *,
+    authority_manifest: Path,
+    authority_root: Path,
+    roster_path: Path | None = None,
+) -> dict[str, Any]:
+    authority = read_json(authority_manifest)
+    if authority.get("schema_version") != "radle_v2_base_authority.v1":
+        raise ValidationError("unsupported base-authority schema")
+
+    wide_desc = authority.get("base_combined_wide", {})
+    long_desc = authority.get("base_final_long_master", {})
+    blind_desc = authority.get("base_blinding_key", {})
+    wide_path = _authority_path(authority_root, wide_desc, "base wide")
+    long_path = _authority_path(authority_root, long_desc, "base final master")
+    blind_path = _authority_path(authority_root, blind_desc, "base blind map")
+
+    for label, path, descriptor in (
+        ("base wide", wide_path, wide_desc),
+        ("base final master", long_path, long_desc),
+        ("base blind map", blind_path, blind_desc),
+    ):
+        expected = str(descriptor.get("sha256", "")).upper()
+        actual = sha256_file(path)
+        if not expected or actual != expected:
+            raise ValidationError(f"{label} SHA256 mismatch: {actual} != {expected}")
+
+    wide_fields, wide_rows = read_csv_table(wide_path)
+    long_fields, long_rows = read_csv_table(long_path)
+    blind_fields, blind_rows = read_csv_table(blind_path)
+    expected_shapes = (
+        ("base wide", wide_fields, wide_rows, wide_desc),
+        ("base final master", long_fields, long_rows, long_desc),
+        ("base blind map", blind_fields, blind_rows, blind_desc),
+    )
+    for label, fields, rows, descriptor in expected_shapes:
+        if "rows" in descriptor and len(rows) != int(descriptor["rows"]):
+            raise ValidationError(f"{label} row count mismatch: {len(rows)} != {descriptor['rows']}")
+        if "columns" in descriptor and len(fields) != int(descriptor["columns"]):
+            raise ValidationError(f"{label} column count mismatch: {len(fields)} != {descriptor['columns']}")
+
+    if long_fields != FINAL_LONG_MASTER_FIELDS:
+        raise ValidationError(f"base final master header mismatch: {long_fields}")
+    if blind_fields != BLIND_MAP_FIELDS:
+        raise ValidationError(f"base blind map header mismatch: {blind_fields}")
+    require_columns(wide_fields, KEY_COLUMNS, "base wide")
+
+    case_ids = validate_case_sets(wide_rows, wide_rows)
+    fingerprint = compute_case_triplet_sha256(wide_rows)
+    expected_fingerprint = str(authority.get("case_fingerprint", {}).get("case_triplet_sha256", "")).lower()
+    if fingerprint != expected_fingerprint:
+        raise ValidationError(f"case fingerprint mismatch: {fingerprint} != {expected_fingerprint}")
+    image_count = sum(len([part for part in str(row["Associated_Images"]).split(",") if part.strip()]) for row in wide_rows)
+    expected_images = int(authority.get("case_fingerprint", {}).get("image_count", -1))
+    if image_count != expected_images:
+        raise ValidationError(f"image count mismatch: {image_count} != {expected_images}")
+
+    blind_by_label: dict[str, dict[str, str]] = {}
+    for row in blind_rows:
+        label = str(row.get("model_blinded", "")).strip()
+        candidate_label_sort_key(label)
+        if label in blind_by_label:
+            raise ValidationError(f"duplicate blind-map label: {label}")
+        blind_by_label[label] = row
+    long_keys: set[tuple[str, str]] = set()
+    long_counts: Counter[str] = Counter()
+    associated_by_case: dict[str, set[str]] = {case_id: set() for case_id in case_ids}
+    for row in long_rows:
+        key = (str(row.get(CASE_KEY, "")).strip(), str(row.get("model_blinded", "")).strip())
+        if key in long_keys:
+            raise ValidationError(f"duplicate final-master key: {key}")
+        long_keys.add(key)
+        if key[0] not in associated_by_case:
+            raise ValidationError(f"final master has unknown case: {key[0]}")
+        if key[1] not in blind_by_label:
+            raise ValidationError(f"final master label missing from blind map: {key[1]}")
+        long_counts[key[1]] += 1
+        associated_by_case[key[0]].add(str(row.get("Associated_Images", "")))
+        blind = blind_by_label[key[1]]
+        if candidate_label_sort_key(key[1]) <= candidate_label_sort_key("Candidate R"):
+            expected_candidate = str(blind.get("model_key", ""))
+            if str(row.get("candidate", "")) != expected_candidate:
+                raise ValidationError(f"candidate identity mismatch for {key}: {row.get('candidate')!r} != {expected_candidate!r}")
+        else:
+            if str(row.get("candidate", "")) not in {"Radiologist", "Trainee"}:
+                raise ValidationError(f"human reader type mismatch for {key}: {row.get('candidate')!r}")
+            if str(row.get("provider", "")) != str(blind.get("model_key", "")):
+                raise ValidationError(f"human provider identity mismatch for {key}")
+    if set(long_counts) != set(blind_by_label):
+        raise ValidationError("final-master and blind-map label sets differ")
+    bad_counts = {label: count for label, count in long_counts.items() if count != 200}
+    if bad_counts:
+        raise ValidationError(f"expected 200 rows per blind label: {bad_counts}")
+    wide_by_case = index_by_case(wide_rows, "base wide")
+    for case_id, values in associated_by_case.items():
+        if values != {wide_by_case[case_id]["Associated_Images"]}:
+            raise ValidationError(f"Associated_Images mismatch for case {case_id}: {values}")
+
+    roster_path = roster_path or authority_manifest.parent / "radle_v2_model_roster.json"
+    if not roster_path.is_file():
+        raise ValidationError(f"model roster missing for base authority: {roster_path}")
+    roster_hash = canonical_text_sha256(roster_path)
+    expected_roster_hash = str(authority.get("model_roster_sha256", "")).upper()
+    if roster_hash != expected_roster_hash:
+        raise ValidationError(f"model roster hash mismatch: {roster_hash} != {expected_roster_hash}")
+    roster = read_json(roster_path)
+    validate_roster(roster)
+    base_model_keys = set(discover_model_keys(wide_fields))
+    pending = {str(model.get("model_key", "")) for model in roster.get("models", []) if model.get("roster_status") == "pending_admission"}
+    if base_model_keys & pending:
+        raise ValidationError(f"base wide already contains pending arms: {sorted(base_model_keys & pending)}")
+
+    return {
+        "result": "PASS",
+        "authority_type": "base",
+        "authority_manifest_sha256": canonical_text_sha256(authority_manifest),
+        "wide": {"path": str(wide_path), "sha256": sha256_file(wide_path), "rows": len(wide_rows), "columns": len(wide_fields)},
+        "final_master": {"path": str(long_path), "sha256": sha256_file(long_path), "rows": len(long_rows), "columns": len(long_fields)},
+        "blind_map": {"path": str(blind_path), "sha256": sha256_file(blind_path), "rows": len(blind_rows), "columns": len(blind_fields)},
+        "case_count": len(case_ids),
+        "image_count": image_count,
+        "case_triplet_sha256": fingerprint,
+        "model_roster_sha256": roster_hash,
+    }
 
 
 def find_incoming_results_csv(incoming_package: Path) -> Path:
@@ -525,14 +751,15 @@ def validate_parent_wide_long_reconciliation(
     parent_long_fieldnames: list[str],
     parent_long_rows: list[dict[str, str]],
 ) -> None:
-    required_long = [CASE_KEY, "model_key", "diagnosis", "likert"]
-    if not all(field in parent_long_fieldnames for field in required_long):
-        return
+    if parent_long_fieldnames != FINAL_LONG_MASTER_FIELDS:
+        raise ValidationError(f"parent final master must use exact production schema: {parent_long_fieldnames}")
     long_by_key: dict[tuple[str, str], dict[str, str]] = {}
     for row in parent_long_rows:
-        model_key = str(row.get("model_key", "")).strip()
+        model_key = str(row.get("candidate", "")).strip()
         case_id = str(row.get(CASE_KEY, "")).strip()
-        if model_key and case_id:
+        if model_key and model_key not in {"Radiologist", "Trainee"} and case_id:
+            if (case_id, model_key) in long_by_key:
+                raise ValidationError(f"duplicate parent final-master key for case {case_id} model {model_key}")
             long_by_key[(case_id, model_key)] = row
     for model_key in discover_model_keys(parent_wide_fieldnames):
         diagnosis_column = f"{DIAGNOSIS_PREFIX}{model_key}"
@@ -548,7 +775,13 @@ def validate_parent_wide_long_reconciliation(
             checked += 1
             if row.get(diagnosis_column, "") != long_row.get("diagnosis", ""):
                 raise ValidationError(f"parent wide/long diagnosis mismatch case {case_id} model {model_key}")
-            if row.get(likert_column, "") != long_row.get("likert", ""):
+            wide_likert = str(row.get(likert_column, "")).strip()
+            long_likert = str(long_row.get("likert", "")).strip()
+            try:
+                likert_equal = Fraction(wide_likert) == Fraction(long_likert)
+            except (ValueError, ZeroDivisionError):
+                likert_equal = wide_likert == long_likert
+            if not likert_equal:
                 raise ValidationError(f"parent wide/long likert mismatch case {case_id} model {model_key}")
         if checked and checked != len(parent_wide_rows):
             raise ValidationError(f"parent wide/long only reconciled {checked} rows for {model_key}")
@@ -563,11 +796,6 @@ def build_scorer_view(fieldnames: list[str], rows: list[dict[str, str]]) -> tupl
     return ordered, [{column: row.get(column, "") for column in ordered} for row in rows]
 
 
-def _set_if_present(row: dict[str, object], fieldnames: list[str], field: str, value: object) -> None:
-    if field in fieldnames:
-        row[field] = value
-
-
 def build_new_model_long_delta(
     parent_long_fieldnames: list[str],
     incoming_rows: list[dict[str, str]],
@@ -576,8 +804,13 @@ def build_new_model_long_delta(
     model_record: dict[str, Any],
     ground_truth_by_case: dict[str, str],
     terminal_policy: dict[str, Any],
-) -> tuple[list[dict[str, object]], Counter[str], list[dict[str, object]]]:
+    *,
+    parent_run_id: str,
+) -> tuple[list[dict[str, object]], list[dict[str, object]], Counter[str], list[dict[str, object]]]:
+    if parent_long_fieldnames != FINAL_LONG_MASTER_FIELDS:
+        raise ValidationError("new-model delta requires exact production final-master schema")
     rows: list[dict[str, object]] = []
+    state_rows: list[dict[str, object]] = []
     judge_worklist: list[dict[str, object]] = []
     counts: Counter[str] = Counter()
     diagnosis_column = f"{DIAGNOSIS_PREFIX}{model_key}"
@@ -596,21 +829,53 @@ def build_new_model_long_delta(
         state = classify_terminal_state(terminal_row, ground_truth, terminal_policy)
         counts[state] += 1
 
-        out_row: dict[str, object] = {field: "" for field in parent_long_fieldnames}
-        _set_if_present(out_row, parent_long_fieldnames, CASE_KEY, case_id)
-        _set_if_present(out_row, parent_long_fieldnames, "model_blinded", model_record.get("blind_label", ""))
-        _set_if_present(out_row, parent_long_fieldnames, "model_key", model_key)
-        _set_if_present(out_row, parent_long_fieldnames, "model_name", model_record.get("display_name", ""))
-        _set_if_present(out_row, parent_long_fieldnames, "reader_type", "model")
-        _set_if_present(out_row, parent_long_fieldnames, "access", model_record.get("access", ""))
-        _set_if_present(out_row, parent_long_fieldnames, "domain", model_record.get("domain", ""))
-        _set_if_present(out_row, parent_long_fieldnames, "Ground_Truth_Diagnosis", ground_truth)
-        _set_if_present(out_row, parent_long_fieldnames, "diagnosis", diagnosis)
-        _set_if_present(out_row, parent_long_fieldnames, "likert", likert)
-        _set_if_present(out_row, parent_long_fieldnames, "terminal_state", state)
-        _set_if_present(out_row, parent_long_fieldnames, "source_file", "one_model_final_wide.csv")
-        _set_if_present(out_row, parent_long_fieldnames, "source_row_sha256", row_sha256(incoming_row, incoming_fieldnames))
+        technical_failure = state == "provider_or_parse_failure"
+        abstained = state in {"idk_exact", "idk_approved_typo"}
+        response_valid = state not in {"provider_or_parse_failure", "invalid_likert"}
+        score_required = state in {"judge_required", "mandatory_radiologist"}
+        source_hash = row_sha256(incoming_row, incoming_fieldnames)
+        out_row: dict[str, object] = {
+            "run_id": parent_run_id,
+            CASE_KEY: case_id,
+            "Associated_Images": incoming_row.get("Associated_Images", ""),
+            "model_blinded": model_record.get("blind_label", ""),
+            "candidate": model_key,
+            "provider": model_record.get("provider_value", ""),
+            "access": model_record.get("access", ""),
+            "domain": model_record.get("domain", ""),
+            "Ground_Truth_Diagnosis": ground_truth,
+            "diagnosis": diagnosis,
+            "likert": likert,
+            "response_valid": str(response_valid),
+            "abstained": str(abstained),
+            "technical_failure": str(technical_failure),
+            "score_required": str(score_required),
+            "final_score_authoritative": "",
+            "final_score_source": "",
+            "weighted_score": "",
+            "rater_seniority": "",
+            "rater_seniority_rank": "",
+        }
         rows.append(out_row)
+
+        automatic_score: object = ""
+        if state == "canonical_exact":
+            automatic_score = 1
+        elif state in {"provider_or_parse_failure", "invalid_likert", "idk_exact", "idk_approved_typo"}:
+            automatic_score = 0
+        state_rows.append({
+            CASE_KEY: case_id,
+            "model_blinded": model_record.get("blind_label", ""),
+            "candidate": model_key,
+            "terminal_state": state,
+            "normalized_ground_truth": normalize_diagnosis(ground_truth),
+            "normalized_diagnosis": normalize_diagnosis(diagnosis),
+            "package_failure": str(technical_failure),
+            "source_row_sha256": source_hash,
+            "automatic_score": automatic_score,
+            "requires_judge": str(state == "judge_required"),
+            "requires_radiologist": str(state == "mandatory_radiologist"),
+        })
 
         if state == "judge_required":
             judge_worklist.append({
@@ -620,11 +885,16 @@ def build_new_model_long_delta(
                 "diagnosis": diagnosis,
                 "likert": likert,
             })
-    return rows, counts, judge_worklist
+    return rows, state_rows, counts, judge_worklist
 
 
 def compute_intake_id(payload: dict[str, Any]) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def canonical_json_sha256(path: Path) -> str:
+    payload = read_json(path)
+    return sha256_bytes(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
 
 
 def write_sha256sums(root: Path, paths: list[Path]) -> None:
@@ -633,6 +903,235 @@ def write_sha256sums(root: Path, paths: list[Path]) -> None:
         relative = path.relative_to(root).as_posix()
         entries.append(f"{sha256_file(path).lower()}  {relative}")
     (root / "SHA256SUMS").write_text("\n".join(entries) + "\n", encoding="utf-8")
+
+
+def audit_package_sha256sums(root: Path) -> dict[str, str]:
+    checksum_path = root / "SHA256SUMS"
+    if not checksum_path.is_file():
+        raise ValidationError(f"SHA256SUMS missing under {root}")
+    lines = [line for line in checksum_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if lines != sorted(lines, key=lambda line: line.split("  ", 1)[1] if "  " in line else line):
+        raise ValidationError("SHA256SUMS must be sorted by relative path")
+    entries: dict[str, str] = {}
+    for line in lines:
+        if "  " not in line:
+            raise ValidationError(f"malformed SHA256SUMS line: {line!r}")
+        digest, relative = line.split("  ", 1)
+        if not re.fullmatch(r"[0-9a-fA-F]{64}", digest):
+            raise ValidationError(f"invalid SHA256SUMS digest for {relative!r}")
+        normalized = Path(relative).as_posix()
+        if relative != normalized or Path(relative).is_absolute() or ".." in Path(relative).parts:
+            raise ValidationError(f"unsafe SHA256SUMS path: {relative!r}")
+        if relative in entries:
+            raise ValidationError(f"duplicate SHA256SUMS path: {relative}")
+        path = (root / Path(relative)).resolve()
+        try:
+            path.relative_to(root.resolve())
+        except ValueError as exc:
+            raise ValidationError(f"SHA256SUMS path escapes root: {relative}") from exc
+        if not path.is_file():
+            raise ValidationError(f"SHA256SUMS file missing: {relative}")
+        actual = sha256_file(path).lower()
+        if actual != digest.lower():
+            raise ValidationError(f"SHA256SUMS mismatch for {relative}: {actual} != {digest.lower()}")
+        entries[relative] = digest.upper()
+    actual_files = {
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if path.is_file() and path.name != "SHA256SUMS"
+    }
+    if actual_files != set(entries):
+        raise ValidationError(
+            f"SHA256SUMS inventory mismatch: unlisted={sorted(actual_files - set(entries))} missing={sorted(set(entries) - actual_files)}"
+        )
+    return entries
+
+
+def _find_package_json(root: Path, names: list[str], label: str) -> Path:
+    matches = [root / name for name in names if (root / name).is_file()]
+    if len(matches) != 1:
+        raise ValidationError(f"incoming package must contain exactly one {label}, found {matches}")
+    return matches[0]
+
+
+def package_content_inventory_sha256(
+    *,
+    root: Path,
+    inventory: dict[str, str],
+    json_paths: list[Path],
+) -> str:
+    normalized = dict(inventory)
+    for path in json_paths:
+        relative = path.resolve().relative_to(root.resolve()).as_posix()
+        normalized[relative] = content_only_json_sha256(path)
+    return sha256_bytes(json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+
+def validate_incoming_package(
+    incoming_package: Path,
+    incoming_csv: Path,
+    incoming_fields: list[str],
+    incoming_rows: list[dict[str, str]],
+    model_key: str,
+    model_record: dict[str, Any],
+) -> dict[str, Any]:
+    if not incoming_package.is_dir():
+        raise ValidationError("prepare requires a sealed incoming package directory, not a bare CSV")
+    inventory = audit_package_sha256sums(incoming_package)
+    relative_results = incoming_csv.resolve().relative_to(incoming_package.resolve()).as_posix()
+    if relative_results not in inventory:
+        raise ValidationError("incoming results CSV is not listed in SHA256SUMS")
+    manifest_path = _find_package_json(
+        incoming_package,
+        ["source_manifest.json", "manifest.json", "final_manifest.json", "provenance/source_manifest.json"],
+        "source manifest",
+    )
+    manifest = read_json(manifest_path)
+    if str(manifest.get("model_key", "")) != model_key:
+        raise ValidationError(f"package model_key mismatch: {manifest.get('model_key')!r} != {model_key!r}")
+    if int(manifest.get("row_count", -1)) != 200 or len(incoming_rows) != 200:
+        raise ValidationError("incoming package is not a full 200-case run")
+    if manifest.get("test_limit", "MISSING") is not None:
+        raise ValidationError("incoming package must record TEST_LIMIT=None")
+    run_label = str(manifest.get("run_label", "")).strip()
+    if not run_label or "smoke" in run_label.casefold() or "5case" in run_label.casefold():
+        raise ValidationError(f"incoming run label is missing or smoke-like: {run_label!r}")
+    runtime_sha = str(manifest.get("runtime_sha", "")).strip()
+    if not re.fullmatch(r"[0-9a-fA-F]{40,64}", runtime_sha):
+        raise ValidationError("incoming package runtime_sha is missing or invalid")
+    recorded_results = str(manifest.get("results_csv_sha256", "")).upper()
+    if recorded_results != sha256_file(incoming_csv):
+        raise ValidationError("source manifest final-wide/results hash mismatch")
+
+    promotion_path = _find_package_json(
+        incoming_package,
+        ["promotion_audit.json", "audit/promotion_audit.json"],
+        "promotion audit",
+    )
+    repair_path = _find_package_json(
+        incoming_package,
+        ["repair_evidence.json", "audit/repair_evidence.json"],
+        "repair evidence",
+    )
+    promotion = read_json(promotion_path)
+    repair = read_json(repair_path)
+    if int(promotion.get("case_count", -1)) != 200 or promotion.get("test_limit", "MISSING") is not None:
+        raise ValidationError("promotion audit does not prove a full 200-case TEST_LIMIT=None run")
+    if int(promotion.get("unresolved_cells", -1)) != 0:
+        raise ValidationError("promotion audit reports unresolved cells")
+    if repair.get("repair_complete") is not True or int(repair.get("unresolved_cells", -1)) != 0:
+        raise ValidationError("repair evidence is incomplete or unresolved")
+
+    provider_column = f"Provider_{model_key}"
+    returned_column = f"OpenRouter_Response_Model_{model_key}"
+    request_extra_column = f"Actual_Request_Extra_{model_key}"
+    require_columns(incoming_fields, [provider_column, returned_column, request_extra_column], "incoming package routing")
+    expected_provider = normalize_diagnosis(model_record.get("provider_value", ""))
+    expected_returned = str(model_record.get("returned_model_pattern", "")).casefold()
+    for row in incoming_rows:
+        case_id = str(row.get(CASE_KEY, ""))
+        provider = normalize_diagnosis(row.get(provider_column, ""))
+        if not provider or (expected_provider and expected_provider not in provider and provider not in expected_provider):
+            raise ValidationError(f"provider routing mismatch for case {case_id}: {row.get(provider_column)!r}")
+        returned = str(row.get(returned_column, "")).casefold()
+        if expected_returned and expected_returned not in returned:
+            raise ValidationError(f"returned-model mismatch for case {case_id}: {row.get(returned_column)!r}")
+        if model_record.get("provider_route") == "openrouter_provider_locked":
+            try:
+                extra = json.loads(str(row.get(request_extra_column, "{}")) or "{}")
+            except json.JSONDecodeError as exc:
+                raise ValidationError(f"invalid request-extra JSON for case {case_id}") from exc
+            provider_policy = extra.get("provider") if isinstance(extra, dict) else None
+            if not isinstance(provider_policy, dict) or provider_policy.get("allow_fallbacks") is not False:
+                raise ValidationError(f"provider lock evidence missing for case {case_id}")
+    content_inventory_sha = package_content_inventory_sha256(
+        root=incoming_package,
+        inventory=inventory,
+        json_paths=[manifest_path, promotion_path, repair_path],
+    )
+    return {
+        "inventory": inventory,
+        "inventory_sha256": sha256_file(incoming_package / "SHA256SUMS"),
+        "content_inventory_sha256": content_inventory_sha,
+        "source_manifest_path": manifest_path,
+        "source_manifest_sha256": sha256_file(manifest_path),
+        "promotion_audit_path": promotion_path,
+        "promotion_audit_sha256": sha256_file(promotion_path),
+        "repair_evidence_path": repair_path,
+        "repair_evidence_sha256": sha256_file(repair_path),
+        "run_label": run_label,
+        "runtime_sha": runtime_sha,
+    }
+
+
+def content_only_payload(value: Any) -> Any:
+    """Remove location-only provenance from a nested identity payload."""
+    if isinstance(value, dict):
+        return {
+            key: content_only_payload(item)
+            for key, item in value.items()
+            if key not in {"path", "source_wide", "incoming_package", "incoming_results_csv", "repo_root", "source_root"}
+            and not key.endswith("_path")
+            and not key.endswith("_paths")
+        }
+    if isinstance(value, list):
+        return [content_only_payload(item) for item in value]
+    return value
+
+
+def content_only_json_sha256(path: Path) -> str:
+    payload = content_only_payload(read_json(path))
+    return sha256_bytes(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+
+
+def validate_parent_authority_inputs(
+    *,
+    parent_wide: Path,
+    parent_final_long_master: Path,
+    parent_authority_manifest: Path,
+    blind_map_path: Path,
+) -> dict[str, Any]:
+    authority = read_json(parent_authority_manifest)
+    schema = str(authority.get("schema_version", ""))
+    if schema == "radle_v2_base_authority.v1":
+        checks = (
+            ("parent wide", parent_wide, authority.get("base_combined_wide", {})),
+            ("parent final master", parent_final_long_master, authority.get("base_final_long_master", {})),
+            ("parent blind map", blind_map_path, authority.get("base_blinding_key", {})),
+        )
+        for label, path, descriptor in checks:
+            expected = str(descriptor.get("sha256", "")).upper()
+            actual = sha256_file(path)
+            if actual != expected:
+                raise ValidationError(f"{label} does not match base authority: {actual} != {expected}")
+        return {
+            "authority_type": "base",
+            "parent_chain_id": "BASE_V2_20260706",
+            "authority_manifest_sha256": content_only_json_sha256(parent_authority_manifest),
+        }
+    if schema == "radle_v2_committed_marker.v1":
+        committed_root = parent_authority_manifest.parent
+        audit = audit_finalized_admission(committed_root, require_committed=True)
+        append_manifest = read_json(committed_root / "append_manifest.json")
+        outputs = append_manifest.get("outputs", {})
+        expected_wide = committed_root / str(outputs.get("combined_wide", "combined_wide/RadLE_v2_results_final.csv"))
+        expected_long = committed_root / str(outputs.get("final_long_master", "final/radle_v2_final_long_master.csv"))
+        expected_blind = committed_root / "roster" / "blind_label_map.csv"
+        supplied = [parent_wide.resolve(), parent_final_long_master.resolve(), blind_map_path.resolve()]
+        expected = [expected_wide.resolve(), expected_long.resolve(), expected_blind.resolve()]
+        if supplied != expected:
+            raise ValidationError(f"committed parent inputs do not match committed root: {supplied} != {expected}")
+        marker_chain = str(authority.get("finalization_id", ""))
+        if marker_chain != str(audit.get("finalization_id", "")):
+            raise ValidationError("committed parent chain identity mismatch")
+        return {
+            "authority_type": "committed",
+            "parent_chain_id": marker_chain,
+            "authority_manifest_sha256": content_only_json_sha256(parent_authority_manifest),
+            "append_manifest_sha256": sha256_file(committed_root / "append_manifest.json"),
+            "checksum_inventory_sha256": sha256_file(committed_root / "SHA256SUMS"),
+        }
+    raise ValidationError(f"unsupported parent authority schema: {schema!r}")
 
 
 def project_one_model_package(
@@ -652,6 +1151,8 @@ def project_one_model_package(
     rows_by_case = index_by_case(source_rows, "source wide")
     if len(rows_by_case) != len(source_rows):
         raise ValidationError("source wide case index mismatch")
+    if len(source_rows) != 200:
+        raise ValidationError(f"one-model projection requires a full 200-case source, got {len(source_rows)}")
     projected_rows = [
         {field: row.get(field, "") for field in selected_fields}
         for row in sorted(source_rows, key=lambda item: case_sort_key(str(item.get(CASE_KEY, ""))))
@@ -663,6 +1164,9 @@ def project_one_model_package(
         "source_model_keys": source_model_keys,
         "selected_fields": selected_fields,
         "row_count": len(projected_rows),
+        "test_limit": None,
+        "run_label": f"projected_full_{model_key}",
+        "runtime_sha": sha256_file(source_wide).lower(),
     }
     projection_id = compute_intake_id(projection_payload)
     receipt = {
@@ -684,10 +1188,24 @@ def project_one_model_package(
     source_manifest_path = output_package / "source_manifest.json"
     manifest = dict(projection_payload)
     manifest["projection_id"] = projection_id
-    manifest["source_wide"] = str(source_wide)
     manifest["results_csv_sha256"] = sha256_file(results_path)
     write_json(source_manifest_path, manifest)
-    write_sha256sums(output_package, [results_path, source_manifest_path])
+    promotion_path = output_package / "promotion_audit.json"
+    write_json(promotion_path, {
+        "schema_version": "radle_v2_projected_promotion_audit.v1",
+        "case_count": len(projected_rows),
+        "test_limit": None,
+        "unresolved_cells": 0,
+        "model_key": model_key,
+    })
+    repair_path = output_package / "repair_evidence.json"
+    write_json(repair_path, {
+        "schema_version": "radle_v2_projected_repair_evidence.v1",
+        "repair_complete": True,
+        "unresolved_cells": 0,
+        "model_key": model_key,
+    })
+    write_sha256sums(output_package, [promotion_path, repair_path, results_path, source_manifest_path])
     receipt["projection_state"] = "PROJECTED"
     receipt["output_package"] = str(output_package.resolve())
     receipt["results_csv_sha256"] = manifest["results_csv_sha256"]
@@ -699,6 +1217,7 @@ def prepare_incremental_admission(
     parent_wide: Path,
     parent_final_long_master: Path,
     parent_authority_manifest: Path,
+    blind_map_path: Path,
     incoming_package: Path,
     model_key: str,
     roster_path: Path,
@@ -712,12 +1231,16 @@ def prepare_incremental_admission(
     parent_long_fields, parent_long_rows = read_csv_table(parent_final_long_master)
     incoming_csv = find_incoming_results_csv(incoming_package)
     incoming_fields, incoming_rows = read_csv_table(incoming_csv)
+    blind_fields, blind_rows = read_csv_table(blind_map_path)
     roster = read_json(roster_path)
     terminal_policy = read_json(states_path)
 
     require_columns(parent_wide_fields, KEY_COLUMNS, "parent wide")
     require_columns(incoming_fields, KEY_COLUMNS, "incoming wide")
-    require_columns(parent_long_fields, [CASE_KEY, "Ground_Truth_Diagnosis"], "parent final long master")
+    if parent_long_fields != FINAL_LONG_MASTER_FIELDS:
+        raise ValidationError(f"parent final master schema mismatch: {parent_long_fields}")
+    if blind_fields != BLIND_MAP_FIELDS:
+        raise ValidationError(f"parent blind-map schema mismatch: {blind_fields}")
     incoming_model_keys = discover_model_keys(incoming_fields)
     if incoming_model_keys != [model_key]:
         raise ValidationError(f"incoming package must contain exactly {model_key}, got {incoming_model_keys}")
@@ -733,6 +1256,27 @@ def prepare_incremental_admission(
     ground_truth_snapshot = build_ground_truth_snapshot(parent_long_rows, case_ids)
     ground_truth_by_case = {row[CASE_KEY]: row["Ground_Truth_Diagnosis"] for row in ground_truth_snapshot}
     model_record = find_model_record(roster, model_key)
+    package_evidence = validate_incoming_package(
+        incoming_package,
+        incoming_csv,
+        incoming_fields,
+        incoming_rows,
+        model_key,
+        model_record,
+    )
+    parent_authority = validate_parent_authority_inputs(
+        parent_wide=parent_wide,
+        parent_final_long_master=parent_final_long_master,
+        parent_authority_manifest=parent_authority_manifest,
+        blind_map_path=blind_map_path,
+    )
+    existing_blind_labels = {str(row.get("model_blinded", "")) for row in blind_rows}
+    if str(model_record.get("blind_label", "")) in existing_blind_labels:
+        raise ValidationError(f"new model blind label already exists in parent map: {model_record.get('blind_label')}")
+    parent_run_ids = {str(row.get("run_id", "")).strip() for row in parent_long_rows}
+    if len(parent_run_ids) != 1 or "" in parent_run_ids:
+        raise ValidationError(f"parent final master must contain one nonblank run_id, got {sorted(parent_run_ids)}")
+    parent_run_id = next(iter(parent_run_ids))
 
     incoming_model_columns = model_result_columns(model_key)
     one_model_fields = KEY_COLUMNS + incoming_model_columns
@@ -748,7 +1292,7 @@ def prepare_incremental_admission(
             combined[field] = incoming_by_case[case_id].get(field, "")
         combined_rows.append(combined)
 
-    long_delta, terminal_counts, judge_worklist = build_new_model_long_delta(
+    long_delta, state_rows, terminal_counts, judge_worklist = build_new_model_long_delta(
         parent_long_fields,
         one_model_rows,
         one_model_fields,
@@ -756,21 +1300,48 @@ def prepare_incremental_admission(
         model_record,
         ground_truth_by_case,
         terminal_policy,
+        parent_run_id=parent_run_id,
     )
     scorer_fields, scorer_rows = build_scorer_view(combined_fields, combined_rows)
+    if not variants_path.is_file():
+        raise ValidationError(f"accepted-variants snapshot missing: {variants_path}")
+
+    requirement_paths = [
+        repo_root / "Documents" / "requirements_radle_v2_incremental_model_admission.md",
+        repo_root / "Documents" / "radle_v2_incremental_model_pipeline_requirements_study.md",
+    ]
+    missing_requirements = [str(path) for path in requirement_paths if not path.is_file()]
+    if missing_requirements:
+        raise ValidationError(f"requirements inputs missing: {missing_requirements}")
+    requirements_hashes = {path.name: canonical_text_sha256(path) for path in requirement_paths}
+    authority_config = read_json(parent_authority_manifest) if read_json(parent_authority_manifest).get("schema_version") == "radle_v2_base_authority.v1" else read_json(repo_root / "config" / "radle_v2_base_authority.json")
+    expected_requirements = authority_config.get("requirements", {})
+    for name, digest in requirements_hashes.items():
+        expected = str(expected_requirements.get(name, "")).upper()
+        if digest != expected:
+            raise ValidationError(f"requirements hash mismatch for {name}: {digest} != {expected}")
 
     input_hashes = {
         "parent_wide": sha256_file(parent_wide),
         "parent_final_long_master": sha256_file(parent_final_long_master),
-        "parent_authority_manifest": sha256_file(parent_authority_manifest),
+        "parent_blind_map": sha256_file(blind_map_path),
+        "parent_authority_manifest": parent_authority["authority_manifest_sha256"],
         "incoming_results_csv": sha256_file(incoming_csv),
-        "roster": sha256_file(roster_path),
-        "terminal_states": sha256_file(states_path),
-        "variants": sha256_file(variants_path) if variants_path.exists() else None,
+        "package_checksum_inventory": package_evidence["content_inventory_sha256"],
+        "package_source_manifest": content_only_json_sha256(package_evidence["source_manifest_path"]),
+        "package_promotion_audit": content_only_json_sha256(package_evidence["promotion_audit_path"]),
+        "package_repair_evidence": content_only_json_sha256(package_evidence["repair_evidence_path"]),
+        "roster": canonical_json_sha256(roster_path),
+        "terminal_states": canonical_json_sha256(states_path),
+        "variants": sha256_file(variants_path),
+        "ground_truth_snapshot": sha256_bytes(serialize_csv_table([CASE_KEY, "Ground_Truth_Diagnosis", "Ground_Truth_Normalized"], ground_truth_snapshot)),
+        "normalizer_code": canonical_text_sha256(Path(__file__)),
+        "requirements": requirements_hashes,
     }
     input_paths = {
         "parent_wide": str(parent_wide),
         "parent_final_long_master": str(parent_final_long_master),
+        "parent_blind_map": str(blind_map_path),
         "parent_authority_manifest": str(parent_authority_manifest),
         "incoming_results_csv": str(incoming_csv),
         "roster": str(roster_path),
@@ -778,13 +1349,16 @@ def prepare_incremental_admission(
         "variants": str(variants_path),
     }
     intake_payload = {
-        "schema_version": "radle_v2_intake_identity.v1",
+        "schema_version": "radle_v2_intake_identity.v2",
         "model_key": model_key,
         "case_count": len(case_ids),
+        "case_triplet_sha256": compute_case_triplet_sha256(parent_wide_rows),
+        "parent_authority": parent_authority,
         "input_hashes": input_hashes,
-        "input_paths": input_paths,
         "normalizer_version": terminal_policy.get("normalizer_version"),
         "model_blinded": model_record.get("blind_label", ""),
+        "package_run_label": package_evidence["run_label"],
+        "package_runtime_sha": package_evidence["runtime_sha"],
     }
     intake_id = compute_intake_id(intake_payload)
 
@@ -798,6 +1372,7 @@ def prepare_incremental_admission(
         "judge_worklist_rows": len(judge_worklist),
         "input_hashes": input_hashes,
         "input_paths": input_paths,
+        "parent_chain_id": parent_authority["parent_chain_id"],
     }
     if dry_run:
         receipt["transaction_state"] = "DRY_RUN_VALIDATED"
@@ -815,23 +1390,30 @@ def prepare_incremental_admission(
             return receipt
         raise ValidationError(f"staging root collision with different manifest: {staging_root}")
 
-    write_csv_table(staging_root / "canonical_ground_truth_snapshot.csv", [CASE_KEY, "Ground_Truth_Diagnosis", "Ground_Truth_Normalized"], ground_truth_snapshot)
+    staged_files: dict[str, Path] = {}
+
+    def staged(label: str, relative: str) -> Path:
+        path = staging_root / relative
+        staged_files[label] = path
+        return path
+
+    write_csv_table(staged("canonical_ground_truth_snapshot", "canonical_ground_truth_snapshot.csv"), [CASE_KEY, "Ground_Truth_Diagnosis", "Ground_Truth_Normalized"], ground_truth_snapshot)
     write_csv_table(staging_root / "one_model_final_wide.csv", one_model_fields, one_model_rows)
+    staged_files["one_model_final_wide"] = staging_root / "one_model_final_wide.csv"
     write_csv_table(staging_root / "combined_wide" / "RadLE_v2_results_final.csv", combined_fields, combined_rows)
+    staged_files["combined_wide"] = staging_root / "combined_wide" / "RadLE_v2_results_final.csv"
     write_csv_table(staging_root / "scorer" / "scorer_view.csv", scorer_fields, scorer_rows)
-    write_csv_table(staging_root / "new_model_long_delta.csv", parent_long_fields, long_delta)
-    write_csv_table(staging_root / "judge_worklist.csv", [CASE_KEY, "model_blinded", "Ground_Truth_Diagnosis", "diagnosis", "likert"], judge_worklist)
-    if variants_path.exists():
-        (staging_root / "accepted_variants_snapshot.csv").parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(variants_path, staging_root / "accepted_variants_snapshot.csv")
-    else:
-        write_csv_table(staging_root / "accepted_variants_snapshot.csv", ["Master_Case_ID", "diagnosis", "decision"], [])
-    write_json(staging_root / "requirements_snapshot.json", {
+    staged_files["scorer_view"] = staging_root / "scorer" / "scorer_view.csv"
+    write_csv_table(staged("new_model_long_delta", "new_model_long_delta.csv"), FINAL_LONG_MASTER_FIELDS, long_delta)
+    write_csv_table(staged("adjudication_state", "adjudication_state.csv"), ADJUDICATION_STATE_FIELDS, state_rows)
+    write_csv_table(staged("judge_worklist", "judge_worklist.csv"), RADIOLOGIST_QUEUE_FIELDS, judge_worklist)
+    shutil.copyfile(variants_path, staged("accepted_variants_snapshot", "accepted_variants_snapshot.csv"))
+    write_json(staged("requirements_snapshot", "requirements_snapshot.json"), {
         "schema_version": "radle_v2_requirements_snapshot.v1",
-        "repo_root": str(repo_root),
         "model_key": model_key,
+        "hashes": requirements_hashes,
     })
-    write_json(staging_root / "provenance" / "source_manifest.json", {
+    write_json(staged("source_manifest", "provenance/source_manifest.json"), {
         "schema_version": "radle_v2_source_manifest.v1",
         "model_key": model_key,
         "incoming_package": str(incoming_package),
@@ -839,22 +1421,53 @@ def prepare_incremental_admission(
         "input_hashes": input_hashes,
         "input_paths": input_paths,
     })
-    write_json(staging_root / "audit" / "promotion_audit.json", {
+    write_json(staged("promotion_audit", "audit/promotion_audit.json"), {
         "schema_version": "radle_v2_promotion_audit.v1",
         "case_count": len(case_ids),
         "incoming_model_keys": incoming_model_keys,
         "metadata_match": True,
         "parent_wide_long_reconciled": True,
     })
-    write_json(staging_root / "audit" / "terminal_state_audit.json", {
+    write_json(staged("terminal_state_audit", "audit/terminal_state_audit.json"), {
         "schema_version": "radle_v2_terminal_state_audit.v1",
         "terminal_state_counts": dict(sorted(terminal_counts.items())),
         "judge_worklist_rows": len(judge_worklist),
     })
-    write_json(staging_root / "roster" / "model_roster.json", roster)
-    write_json(staging_root / "roster" / "blind_label_map.json", {"blind_label_map": roster.get("blind_label_map", [])})
+    write_json(staged("model_roster", "roster/model_roster.json"), roster)
+    extended_blind_rows = list(blind_rows) + [{
+        "model_blinded": model_record.get("blind_label", ""),
+        "model_key": model_key,
+        "provider": model_record.get("provider_value", ""),
+    }]
+    write_csv_table(staged("blind_label_map", "roster/blind_label_map.csv"), BLIND_MAP_FIELDS, extended_blind_rows)
+    package_snapshot = staging_root / "inputs" / "package"
+    shutil.copytree(incoming_package, package_snapshot)
+    write_json(staged("package_inventory_snapshot", "inputs/package_inventory.json"), {
+        "schema_version": "radle_v2_package_inventory_snapshot.v1",
+        "content_inventory_sha256": package_evidence["content_inventory_sha256"],
+        "raw_sha256sums_sha256": package_evidence["inventory_sha256"],
+        "entries": package_evidence["inventory"],
+    })
+    for label, source, relative in (
+        ("parent_wide", parent_wide, "parent/parent_wide.csv"),
+        ("parent_final_long_master", parent_final_long_master, "parent/parent_final_long_master.csv"),
+        ("parent_blind_label_map", blind_map_path, "parent/blind_label_map.csv"),
+        ("parent_authority_manifest", parent_authority_manifest, "parent/parent_authority_manifest.json"),
+        ("incoming_results_csv", incoming_csv, "inputs/incoming_results.csv"),
+        ("terminal_states", states_path, "inputs/terminal_states.json"),
+        ("package_source_manifest", package_evidence["source_manifest_path"], "inputs/package_source_manifest.json"),
+        ("package_promotion_audit", package_evidence["promotion_audit_path"], "inputs/package_promotion_audit.json"),
+        ("package_repair_evidence", package_evidence["repair_evidence_path"], "inputs/package_repair_evidence.json"),
+        ("package_checksum_inventory", incoming_package / "SHA256SUMS", "inputs/package_SHA256SUMS"),
+    ):
+        destination = staged(label, relative)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+    code_snapshot = staged("normalizer_source", "provenance/normalizer_source.py")
+    code_snapshot.parent.mkdir(parents=True, exist_ok=True)
+    code_snapshot.write_bytes(canonical_text_bytes(Path(__file__)))
     manifest = {
-        "schema_version": "radle_v2_append_input_manifest.v1",
+        "schema_version": "radle_v2_append_input_manifest.v2",
         "intake_id": intake_id,
         "transaction_state": "ADJUDICATION_PENDING",
         "model_key": model_key,
@@ -862,16 +1475,13 @@ def prepare_incremental_admission(
         "case_count": len(case_ids),
         "input_hashes": input_hashes,
         "input_paths": input_paths,
+        "intake_identity": intake_payload,
+        "parent_chain_id": parent_authority["parent_chain_id"],
         "terminal_state_counts": dict(sorted(terminal_counts.items())),
         "judge_worklist_rows": len(judge_worklist),
         "outputs": {
-            "canonical_ground_truth_snapshot": "canonical_ground_truth_snapshot.csv",
-            "one_model_final_wide": "one_model_final_wide.csv",
-            "combined_wide": "combined_wide/RadLE_v2_results_final.csv",
-            "scorer_view": "scorer/scorer_view.csv",
-            "new_model_long_delta": "new_model_long_delta.csv",
-            "terminal_state_audit": "audit/terminal_state_audit.json",
-            "judge_worklist": "judge_worklist.csv",
+            label: {"path": path.relative_to(staging_root).as_posix(), "sha256": sha256_file(path)}
+            for label, path in sorted(staged_files.items())
         },
     }
     write_json(manifest_path, manifest)
@@ -886,6 +1496,8 @@ def audit_prepared_staging(staging_root: Path) -> dict[str, Any]:
     if not manifest_path.exists():
         raise ValidationError(f"append_input_manifest.json missing under {staging_root}")
     manifest = read_json(manifest_path)
+    if manifest.get("schema_version") != "radle_v2_append_input_manifest.v2":
+        raise ValidationError(f"unsupported prepared manifest schema: {manifest.get('schema_version')!r}")
     if manifest.get("transaction_state") != "ADJUDICATION_PENDING":
         raise ValidationError(f"prepared staging has wrong transaction_state: {manifest.get('transaction_state')!r}")
     if (staging_root / "COMMITTED.json").exists():
@@ -898,23 +1510,65 @@ def audit_prepared_staging(staging_root: Path) -> dict[str, Any]:
         "combined_wide",
         "scorer_view",
         "new_model_long_delta",
+        "adjudication_state",
         "terminal_state_audit",
         "judge_worklist",
+        "accepted_variants_snapshot",
+        "requirements_snapshot",
+        "model_roster",
+        "blind_label_map",
+        "parent_wide",
+        "parent_final_long_master",
+        "parent_blind_label_map",
+        "parent_authority_manifest",
+        "incoming_results_csv",
+        "terminal_states",
+        "package_source_manifest",
+        "package_promotion_audit",
+        "package_repair_evidence",
+        "package_checksum_inventory",
+        "package_inventory_snapshot",
+        "normalizer_source",
     ]
     missing = [key for key in required_output_keys if key not in outputs]
     if missing:
         raise ValidationError(f"manifest missing output keys: {missing}")
-    output_paths = {key: staging_root / str(outputs[key]) for key in required_output_keys}
+    output_paths: dict[str, Path] = {}
+    for key in required_output_keys:
+        descriptor = outputs[key]
+        if not isinstance(descriptor, dict) or not descriptor.get("path") or not descriptor.get("sha256"):
+            raise ValidationError(f"invalid prepared output descriptor: {key}")
+        path = (staging_root / str(descriptor["path"])).resolve()
+        try:
+            path.relative_to(staging_root.resolve())
+        except ValueError as exc:
+            raise ValidationError(f"prepared output escapes staging root: {key}") from exc
+        output_paths[key] = path
     missing_paths = [str(path) for path in output_paths.values() if not path.exists()]
     if missing_paths:
         raise ValidationError(f"prepared output files missing: {missing_paths}")
+    for key, path in output_paths.items():
+        actual = sha256_file(path)
+        expected = str(outputs[key]["sha256"]).upper()
+        if actual != expected:
+            raise ValidationError(f"prepared output SHA mismatch for {key}: {actual} != {expected}")
+
+    identity = manifest.get("intake_identity")
+    if not isinstance(identity, dict) or compute_intake_id(identity) != manifest.get("intake_id"):
+        raise ValidationError("prepared intake identity does not recompute")
 
     case_count = int(manifest.get("case_count", 0))
     row_counts = {}
-    for key in ["canonical_ground_truth_snapshot", "one_model_final_wide", "combined_wide", "scorer_view", "new_model_long_delta", "judge_worklist"]:
-        _, rows = read_csv_table(output_paths[key])
+    for key in ["canonical_ground_truth_snapshot", "one_model_final_wide", "combined_wide", "scorer_view", "new_model_long_delta", "adjudication_state", "judge_worklist"]:
+        fields, rows = read_csv_table(output_paths[key])
+        if key == "new_model_long_delta" and fields != FINAL_LONG_MASTER_FIELDS:
+            raise ValidationError(f"prepared delta schema mismatch: {fields}")
+        if key == "adjudication_state" and fields != ADJUDICATION_STATE_FIELDS:
+            raise ValidationError(f"adjudication-state schema mismatch: {fields}")
+        if key == "judge_worklist" and fields != RADIOLOGIST_QUEUE_FIELDS:
+            raise ValidationError(f"judge-worklist schema mismatch: {fields}")
         row_counts[key] = len(rows)
-    for key in ["canonical_ground_truth_snapshot", "one_model_final_wide", "combined_wide", "scorer_view", "new_model_long_delta"]:
+    for key in ["canonical_ground_truth_snapshot", "one_model_final_wide", "combined_wide", "scorer_view", "new_model_long_delta", "adjudication_state"]:
         if row_counts[key] != case_count:
             raise ValidationError(f"{key} row count {row_counts[key]} != case_count {case_count}")
     if row_counts["judge_worklist"] != int(manifest.get("judge_worklist_rows", -1)):
@@ -923,6 +1577,100 @@ def audit_prepared_staging(staging_root: Path) -> dict[str, Any]:
     terminal_audit = read_json(output_paths["terminal_state_audit"])
     if terminal_audit.get("terminal_state_counts") != manifest.get("terminal_state_counts"):
         raise ValidationError("terminal_state_counts mismatch between manifest and audit")
+
+    delta_fields, delta_rows = read_csv_table(output_paths["new_model_long_delta"])
+    state_fields, state_rows = read_csv_table(output_paths["adjudication_state"])
+    one_fields, one_rows = read_csv_table(output_paths["one_model_final_wide"])
+    _, gt_rows = read_csv_table(output_paths["canonical_ground_truth_snapshot"])
+    _, worklist_rows = read_csv_table(output_paths["judge_worklist"])
+    policy = read_json(output_paths["terminal_states"])
+    model_key = str(manifest.get("model_key", ""))
+    diagnosis_column = f"Diagnosis_{model_key}"
+    likert_column = f"Likert_{model_key}"
+    one_by_case = index_by_case(one_rows, "staged one-model wide")
+    gt_by_case = {row[CASE_KEY]: row["Ground_Truth_Diagnosis"] for row in gt_rows}
+    delta_by_key = {(row[CASE_KEY], row["model_blinded"]): row for row in delta_rows}
+    state_by_key: dict[tuple[str, str], dict[str, str]] = {}
+    recomputed_counts: Counter[str] = Counter()
+    recomputed_worklist: list[dict[str, str]] = []
+    for state_row in state_rows:
+        key = (state_row.get(CASE_KEY, ""), state_row.get("model_blinded", ""))
+        if key in state_by_key:
+            raise ValidationError(f"duplicate adjudication-state key: {key}")
+        state_by_key[key] = state_row
+        delta = delta_by_key.get(key)
+        if delta is None:
+            raise ValidationError(f"adjudication-state key missing from delta: {key}")
+        incoming = one_by_case.get(key[0])
+        if incoming is None:
+            raise ValidationError(f"adjudication-state case missing from one-model wide: {key[0]}")
+        terminal_row = {
+            CASE_KEY: key[0],
+            "diagnosis": incoming.get(diagnosis_column, ""),
+            "likert": incoming.get(likert_column, ""),
+            "package_failure": state_row.get("package_failure", "false"),
+        }
+        actual_state = classify_terminal_state(terminal_row, gt_by_case[key[0]], policy)
+        if state_row.get("terminal_state") != actual_state:
+            raise ValidationError(f"adjudication-state classification mismatch for {key}: {state_row.get('terminal_state')} != {actual_state}")
+        if state_row.get("candidate") != model_key:
+            raise ValidationError(f"adjudication-state candidate mismatch for {key}")
+        if state_row.get("normalized_ground_truth") != normalize_diagnosis(gt_by_case[key[0]]):
+            raise ValidationError(f"normalized ground truth mismatch for {key}")
+        if state_row.get("normalized_diagnosis") != normalize_diagnosis(incoming.get(diagnosis_column, "")):
+            raise ValidationError(f"normalized diagnosis mismatch for {key}")
+        if state_row.get("source_row_sha256") != row_sha256(incoming, one_fields):
+            raise ValidationError(f"source-row hash mismatch for {key}")
+        expected_auto = "1" if actual_state == "canonical_exact" else "0" if actual_state in {"provider_or_parse_failure", "invalid_likert", "idk_exact", "idk_approved_typo"} else ""
+        if state_row.get("automatic_score", "") != expected_auto:
+            raise ValidationError(f"automatic score mismatch for {key}")
+        expected_judge = str(actual_state == "judge_required")
+        expected_rad = str(actual_state == "mandatory_radiologist")
+        if state_row.get("requires_judge") != expected_judge or state_row.get("requires_radiologist") != expected_rad:
+            raise ValidationError(f"routing flags mismatch for {key}")
+        if delta.get("final_score_authoritative") or delta.get("final_score_source"):
+            raise ValidationError(f"prepared delta score fields must be blank for {key}")
+        recomputed_counts[actual_state] += 1
+        if actual_state == "judge_required":
+            recomputed_worklist.append({field: delta.get(field, "") for field in RADIOLOGIST_QUEUE_FIELDS})
+    if set(state_by_key) != set(delta_by_key) or len(state_by_key) != case_count:
+        raise ValidationError("prepared delta and adjudication-state keys differ")
+    if dict(sorted(recomputed_counts.items())) != manifest.get("terminal_state_counts"):
+        raise ValidationError("terminal-state counts do not independently recompute")
+    recomputed_worklist.sort(key=lambda row: case_sort_key(row[CASE_KEY]))
+    if recomputed_worklist != worklist_rows:
+        raise ValidationError("judge worklist does not independently recompute")
+
+    hashes = manifest.get("input_hashes", {})
+    copied_hash_checks = {
+        "parent_wide": sha256_file(output_paths["parent_wide"]),
+        "parent_final_long_master": sha256_file(output_paths["parent_final_long_master"]),
+        "parent_blind_map": sha256_file(output_paths["parent_blind_label_map"]),
+        "incoming_results_csv": sha256_file(output_paths["incoming_results_csv"]),
+        "terminal_states": canonical_json_sha256(output_paths["terminal_states"]),
+        "package_source_manifest": content_only_json_sha256(output_paths["package_source_manifest"]),
+        "package_promotion_audit": content_only_json_sha256(output_paths["package_promotion_audit"]),
+        "package_repair_evidence": content_only_json_sha256(output_paths["package_repair_evidence"]),
+        "normalizer_code": canonical_text_sha256(output_paths["normalizer_source"]),
+    }
+    for key, actual in copied_hash_checks.items():
+        if actual != hashes.get(key):
+            raise ValidationError(f"prepared copied-input hash mismatch for {key}: {actual} != {hashes.get(key)}")
+    package_root = staging_root / "inputs" / "package"
+    package_inventory = audit_package_sha256sums(package_root)
+    package_snapshot = read_json(output_paths["package_inventory_snapshot"])
+    if package_snapshot.get("entries") != package_inventory:
+        raise ValidationError("staged package inventory differs from prepared snapshot")
+    if package_snapshot.get("raw_sha256sums_sha256") != sha256_file(package_root / "SHA256SUMS"):
+        raise ValidationError("staged package raw checksum inventory hash mismatch")
+    package_json_paths = [
+        _find_package_json(package_root, ["source_manifest.json", "manifest.json", "final_manifest.json", "provenance/source_manifest.json"], "source manifest"),
+        _find_package_json(package_root, ["promotion_audit.json", "audit/promotion_audit.json"], "promotion audit"),
+        _find_package_json(package_root, ["repair_evidence.json", "audit/repair_evidence.json"], "repair evidence"),
+    ]
+    content_inventory = package_content_inventory_sha256(root=package_root, inventory=package_inventory, json_paths=package_json_paths)
+    if content_inventory != hashes.get("package_checksum_inventory") or content_inventory != package_snapshot.get("content_inventory_sha256"):
+        raise ValidationError("staged package content-only inventory identity mismatch")
 
     return {
         "result": "PASS",
@@ -936,6 +1684,7 @@ def audit_prepared_staging(staging_root: Path) -> dict[str, Any]:
 
 
 def audit_judge_evidence(staging_root: Path) -> dict[str, Any]:
+    audit_prepared_staging(staging_root)
     manifest = read_json(staging_root / "append_input_manifest.json")
     evidence_root = staging_root / "judge_evidence"
     index_path = evidence_root / "judge_evidence_index.json"
@@ -949,25 +1698,134 @@ def audit_judge_evidence(staging_root: Path) -> dict[str, Any]:
         "agreement_locks": evidence_root / "agreement_locks.csv",
         "routing_audit": evidence_root / "radiologist_queue_routing_audit.json",
         "radiologist_queue": staging_root / "radiologist_queue.csv",
+        "judge_config": evidence_root / "judge_config.json",
+        "judge_prompt": evidence_root / "judge_prompt.txt",
     }
     for label, path in required.items():
         if not path.exists():
             raise ValidationError(f"{label} evidence file missing: {path}")
-    with (staging_root / "radiologist_queue.csv").open("r", encoding="utf-8", newline="") as handle:
-        queue_reader = csv.DictReader(handle)
-        if queue_reader.fieldnames != RADIOLOGIST_QUEUE_FIELDS:
-            raise ValidationError(f"radiologist_queue.csv columns mismatch: {queue_reader.fieldnames}")
-        queue_rows = list(queue_reader)
-    with (evidence_root / "agreement_locks.csv").open("r", encoding="utf-8", newline="") as handle:
-        lock_rows = list(csv.DictReader(handle))
+    indexed_files = index.get("files", {})
+    for label, path in required.items():
+        descriptor = indexed_files.get(label)
+        if not isinstance(descriptor, dict):
+            raise ValidationError(f"judge evidence index missing descriptor: {label}")
+        if sha256_file(path) != str(descriptor.get("sha256", "")).upper():
+            raise ValidationError(f"judge evidence SHA mismatch: {label}")
+    queue_fields, queue_rows = read_csv_table(staging_root / "radiologist_queue.csv")
+    if queue_fields != RADIOLOGIST_QUEUE_FIELDS:
+        raise ValidationError(f"radiologist_queue.csv columns mismatch: {queue_fields}")
+    lock_fields, lock_rows = read_csv_table(evidence_root / "agreement_locks.csv")
+    if lock_fields != [CASE_KEY, "score", "score_source", "judge_count"]:
+        raise ValidationError(f"agreement-lock columns mismatch: {lock_fields}")
     judge_result_rows = [
         json.loads(line)
         for line in (evidence_root / "judge_results.jsonl").read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
+    request_rows = [
+        json.loads(line)
+        for line in (evidence_root / "request_payloads.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    cache_rows = [
+        json.loads(line)
+        for line in (evidence_root / "judge_cache.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
     request_text = (evidence_root / "request_payloads.jsonl").read_text(encoding="utf-8")
     if str(manifest.get("model_key", "")) in request_text or str(manifest.get("model_blinded", "")) in request_text:
         raise ValidationError("judge request payload leaks model key or blind label")
+    judge_config = read_json(evidence_root / "judge_config.json")
+    configured_ids = [str(judge.get("requested_model_id", "")) for judge in judge_config.get("judges", [])]
+    if len(configured_ids) != 2 or len(set(configured_ids)) != 2:
+        raise ValidationError("judge evidence must configure two distinct judges")
+    config_sha = canonical_json_sha256(evidence_root / "judge_config.json")
+    prompt_sha = canonical_text_sha256(evidence_root / "judge_prompt.txt")
+    worklist_fields, worklist_rows = read_csv_table(staging_root / "judge_worklist.csv")
+    if worklist_fields != RADIOLOGIST_QUEUE_FIELDS:
+        raise ValidationError("staged judge worklist schema mismatch")
+    worklist_by_case = {row[CASE_KEY]: row for row in worklist_rows}
+    if len(worklist_by_case) != len(worklist_rows):
+        raise ValidationError("judge worklist has duplicate cases")
+    requests_by_case: dict[str, dict[str, Any]] = {}
+    for request in request_rows:
+        case_id = str(request.get(CASE_KEY, ""))
+        if case_id in requests_by_case or case_id not in worklist_by_case:
+            raise ValidationError(f"invalid or duplicate judge request case: {case_id}")
+        expected_payload = _request_payload(worklist_by_case[case_id])
+        expected_sha = sha256_bytes(json.dumps(expected_payload, sort_keys=True).encode("utf-8"))
+        if request.get("payload") != expected_payload or request.get("request_payload_sha256") != expected_sha:
+            raise ValidationError(f"judge request payload mismatch for case {case_id}")
+        requests_by_case[case_id] = request
+    if set(requests_by_case) != set(worklist_by_case):
+        raise ValidationError("judge request cases differ from worklist")
+
+    results_by_case: dict[str, list[dict[str, Any]]] = {}
+    cache_by_key = {str(row.get("cache_key", "")): row for row in cache_rows}
+    if len(cache_by_key) != len(cache_rows):
+        raise ValidationError("judge cache contains duplicate keys")
+    identity = manifest.get("intake_identity", {})
+    expected_case_fingerprint = identity.get("case_triplet_sha256", "")
+    terminal_sha = canonical_json_sha256(staging_root / "inputs" / "terminal_states.json")
+    variants_sha = sha256_file(staging_root / "accepted_variants_snapshot.csv")
+    normalizer_sha = canonical_text_sha256(staging_root / "provenance" / "normalizer_source.py")
+    for result in judge_result_rows:
+        case_id = str(result.get(CASE_KEY, ""))
+        if case_id not in worklist_by_case:
+            raise ValidationError(f"judge result case not in worklist: {case_id}")
+        requested = str(result.get("requested_judge_model_id", ""))
+        if requested not in configured_ids or result.get("returned_judge_model_id") != requested:
+            raise ValidationError(f"judge model identity mismatch for case {case_id}")
+        if result.get("intake_id") != manifest.get("intake_id") or result.get("case_triplet_sha256") != expected_case_fingerprint:
+            raise ValidationError(f"judge result intake/case fingerprint mismatch for case {case_id}")
+        expected_row_sha = row_sha256(worklist_by_case[case_id], RADIOLOGIST_QUEUE_FIELDS)
+        if result.get("worklist_row_sha256") != expected_row_sha:
+            raise ValidationError(f"judge worklist-row hash mismatch for case {case_id}")
+        if result.get("case_payload_sha256", result.get("exact_request_payload_sha256")) != requests_by_case[case_id]["request_payload_sha256"]:
+            raise ValidationError(f"judge request hash mismatch for case {case_id}")
+        evidence_values = {
+            "judge_config_sha256": config_sha,
+            "prompt_sha256": prompt_sha,
+            "normalizer_code_sha256": normalizer_sha,
+            "terminal_policy_sha256": terminal_sha,
+            "variants_snapshot_sha256": variants_sha,
+        }
+        for field, expected in evidence_values.items():
+            if result.get(field) != expected:
+                raise ValidationError(f"judge evidence hash mismatch for {field} case {case_id}")
+        cache_key = str(result.get("cache_key", ""))
+        cache = cache_by_key.get(cache_key)
+        if not cache or cache.get("result") != result:
+            raise ValidationError(f"judge cache/result mismatch for case {case_id}")
+        results_by_case.setdefault(case_id, []).append(result)
+
+    recomputed_locks: list[dict[str, object]] = []
+    recomputed_queue: list[dict[str, object]] = []
+    for case_id in sorted(worklist_by_case, key=case_sort_key):
+        results = results_by_case.get(case_id, [])
+        parsed = [row for row in results if row.get("parse_status") == "parsed" and str(row.get("score")) in {"0", "1"}]
+        requested_ids = {str(row.get("requested_judge_model_id", "")) for row in parsed}
+        scores = {str(row.get("score")) for row in parsed}
+        flags = any(bool(row.get("flag_for_review")) for row in results)
+        if len(results) == 2 and len(parsed) == 2 and requested_ids == set(configured_ids) and len(scores) == 1 and not flags:
+            recomputed_locks.append({CASE_KEY: case_id, "score": next(iter(scores)), "score_source": "ai_judges", "judge_count": "2"})
+        else:
+            recomputed_queue.append({field: worklist_by_case[case_id].get(field, "") for field in RADIOLOGIST_QUEUE_FIELDS})
+    state_fields, state_rows = read_csv_table(staging_root / "adjudication_state.csv")
+    if state_fields != ADJUDICATION_STATE_FIELDS:
+        raise ValidationError("adjudication-state schema mismatch during judge audit")
+    delta_by_key = {
+        (row[CASE_KEY], row["model_blinded"]): row
+        for row in read_csv_table(staging_root / "new_model_long_delta.csv")[1]
+    }
+    for state_row in state_rows:
+        if state_row.get("requires_radiologist") == "True":
+            delta = delta_by_key[(state_row[CASE_KEY], state_row["model_blinded"])]
+            recomputed_queue.append({field: delta.get(field, "") for field in RADIOLOGIST_QUEUE_FIELDS})
+    if recomputed_locks != lock_rows:
+        raise ValidationError("agreement locks do not derive from valid two-judge evidence")
+    if recomputed_queue != queue_rows:
+        raise ValidationError("radiologist queue does not independently recompute")
     summary = index.get("summary", {})
     if int(summary.get("judge_result_rows", -1)) != len(judge_result_rows):
         raise ValidationError("judge result row count mismatch")
@@ -1069,40 +1927,50 @@ def finalize_incremental_admission(
     prepared = audit_prepared_staging(intake_root)
     judge_audit = audit_judge_evidence(intake_root)
     manifest = read_json(intake_root / "append_input_manifest.json")
-    parent_master = Path(str(manifest.get("input_paths", {}).get("parent_final_long_master", "")))
-    if not parent_master.exists():
-        raise ValidationError(f"parent final long master path missing or not found: {parent_master}")
+    parent_master = intake_root / "parent" / "parent_final_long_master.csv"
     parent_fields, parent_rows = read_csv_table(parent_master)
     delta_fields, delta_rows = read_csv_table(intake_root / "new_model_long_delta.csv")
-    if parent_fields != delta_fields:
+    state_fields, state_rows = read_csv_table(intake_root / "adjudication_state.csv")
+    if parent_fields != FINAL_LONG_MASTER_FIELDS or delta_fields != FINAL_LONG_MASTER_FIELDS:
         raise ValidationError("new_model_long_delta.csv header does not match parent final long master")
+    if state_fields != ADJUDICATION_STATE_FIELDS:
+        raise ValidationError("adjudication_state.csv header mismatch")
     queue_fields, queue_rows = read_csv_table(intake_root / "radiologist_queue.csv")
     if queue_fields != RADIOLOGIST_QUEUE_FIELDS:
         raise ValidationError("radiologist queue columns mismatch")
     decisions = validate_radiologist_decisions(queue_rows, radiologist_decisions)
     agreement_locks = read_agreement_locks(intake_root / "judge_evidence" / "agreement_locks.csv")
+    state_by_key = {(row[CASE_KEY], row["model_blinded"]): row for row in state_rows}
+    if len(state_by_key) != len(state_rows):
+        raise ValidationError("duplicate adjudication-state keys during finalization")
 
     scored_rows: list[dict[str, object]] = []
     source_counts: Counter[str] = Counter()
     for row in sorted(delta_rows, key=lambda item: case_sort_key(item[CASE_KEY])):
         case_id = row[CASE_KEY]
         model_blinded = row.get("model_blinded", "")
-        state = row.get("terminal_state", "")
+        key = (case_id, model_blinded)
+        state_row = state_by_key.get(key)
+        if state_row is None:
+            raise ValidationError(f"missing adjudication state for {key}")
+        state = state_row.get("terminal_state", "")
         scored = dict(row)
         score: str
         source: str
         if state in {"provider_or_parse_failure", "invalid_likert", "idk_exact", "idk_approved_typo"}:
-            score, source = "0", state
+            score, source = "0", "auto_score_not_required"
         elif state == "canonical_exact":
             score, source = "1", "canonical_exact"
-        elif (case_id, model_blinded) in decisions:
-            decision = decisions[(case_id, model_blinded)]
+        elif key in decisions:
+            decision = decisions[key]
             score, source = str(decision["score_binary"]).strip(), "radiologist"
         elif case_id in agreement_locks:
-            score, source = str(agreement_locks[case_id]["score"]).strip(), "dual_judge_agreement"
+            score, source = str(agreement_locks[case_id]["score"]).strip(), "ai_judges"
         else:
             raise ValidationError(f"case {case_id} has no finalization source")
-        scored["final_score"] = score
+        if source not in ALLOWED_NEW_SCORE_SOURCES:
+            raise ValidationError(f"unapproved final score source for case {case_id}: {source}")
+        scored["final_score_authoritative"] = score
         scored["final_score_source"] = source
         source_counts[source] += 1
         scored_rows.append(scored)
@@ -1110,22 +1978,46 @@ def finalize_incremental_admission(
     if len(scored_rows) != int(manifest.get("case_count", 0)):
         raise ValidationError("scored delta row count mismatch")
 
-    scored_delta_bytes = serialize_csv_with_header(parent_fields, scored_rows)
+    scored_delta_bytes = serialize_csv_table(FINAL_LONG_MASTER_FIELDS, scored_rows)
     scored_delta_sha256 = sha256_bytes(scored_delta_bytes)
+    judge_index = read_json(intake_root / "judge_evidence" / "judge_evidence_index.json")
+    authorization_identity: object = judge_index.get("authorization", "MISSING")
+    paid_auth = intake_root / "judge_evidence" / "paid_judge_authorization.json"
+    if paid_auth.is_file():
+        authorization_identity = {"sha256": sha256_file(paid_auth), "content_sha256": content_only_json_sha256(paid_auth)}
+    finalizer_code_sha = canonical_text_sha256(Path(__file__))
+    evidence_hashes = {
+        "adjudication_state": sha256_file(intake_root / "adjudication_state.csv"),
+        "judge_worklist": sha256_file(intake_root / "judge_worklist.csv"),
+        "judge_config": canonical_json_sha256(intake_root / "judge_evidence" / "judge_config.json"),
+        "judge_prompt": canonical_text_sha256(intake_root / "judge_evidence" / "judge_prompt.txt"),
+        "judge_results": sha256_file(intake_root / "judge_evidence" / "judge_results.jsonl"),
+        "judge_index": sha256_file(intake_root / "judge_evidence" / "judge_evidence_index.json"),
+        "agreement_locks": sha256_file(intake_root / "judge_evidence" / "agreement_locks.csv"),
+        "radiologist_queue": sha256_file(intake_root / "radiologist_queue.csv"),
+        "radiologist_decisions": sha256_file(radiologist_decisions),
+        "scored_append_delta": scored_delta_sha256,
+        "roster": canonical_json_sha256(intake_root / "roster" / "model_roster.json"),
+        "blind_map": sha256_file(intake_root / "roster" / "blind_label_map.csv"),
+        "finalizer_code": finalizer_code_sha,
+    }
     finalization_payload = {
-        "schema_version": "radle_v2_finalization_identity.v1",
+        "schema_version": "radle_v2_finalization_identity.v2",
         "intake_id": manifest.get("intake_id"),
+        "parent_chain_id": manifest.get("parent_chain_id"),
         "parent_master_sha256": sha256_file(parent_master),
-        "radiologist_decisions_sha256": sha256_file(radiologist_decisions) if radiologist_decisions.exists() else None,
-        "judge_summary_sha256": sha256_file(intake_root / "judge_evidence" / "judge_summary.json"),
-        "scored_append_delta_sha256": scored_delta_sha256,
+        "evidence_hashes": evidence_hashes,
+        "authorization": authorization_identity,
         "source_counts": dict(sorted(source_counts.items())),
     }
     finalization_id = compute_intake_id(finalization_payload)
-    final_root = intake_root / "finalized" / finalization_id
+    # Keep content IDs in sibling path components so Windows paths stay below
+    # legacy MAX_PATH even when evidence filenames are descriptive.
+    final_root = intake_root.parent / "finalized" / finalization_id
     if final_root.exists():
         existing_manifest = final_root / "append_manifest.json"
         if existing_manifest.exists() and read_json(existing_manifest).get("finalization_id") == finalization_id:
+            audit_finalized_admission(final_root, require_committed=(final_root / "COMMITTED.json").is_file())
             return {
                 "finalization_id": finalization_id,
                 "final_staging_root": str(final_root.resolve()),
@@ -1139,7 +2031,7 @@ def finalize_incremental_admission(
     scored_delta_path.write_bytes(scored_delta_bytes)
     parent_bytes = parent_master.read_bytes()
     line_terminator = detect_line_terminator(parent_bytes)
-    delta_bytes = serialize_delta_without_header(parent_fields, scored_rows, line_terminator)
+    delta_bytes = serialize_csv_table(FINAL_LONG_MASTER_FIELDS, scored_rows, lineterminator=line_terminator, include_header=False)
     final_master_path = final_root / "final" / "radle_v2_final_long_master.csv"
     final_master_path.parent.mkdir(parents=True, exist_ok=True)
     needs_break = parent_bytes and not parent_bytes.endswith((b"\n", b"\r"))
@@ -1148,23 +2040,33 @@ def finalize_incremental_admission(
         shutil.copyfile(radiologist_decisions, final_root / "radiologist_decisions.csv")
     else:
         write_csv_table(final_root / "radiologist_decisions.csv", RADIOLOGIST_DECISION_FIELDS, [])
+    snapshot_root = final_root / "intake_snapshot"
+    shutil.copytree(intake_root, snapshot_root, ignore=shutil.ignore_patterns("finalized"))
+    finalizer_source = final_root / "provenance" / "finalizer_source.py"
+    finalizer_source.parent.mkdir(parents=True, exist_ok=True)
+    finalizer_source.write_bytes(canonical_text_bytes(Path(__file__)))
     roster_out = final_root / "roster"
     roster_out.mkdir(parents=True, exist_ok=True)
-    for roster_file in ["model_roster.json", "blind_label_map.json"]:
-        source = intake_root / "roster" / roster_file
-        if source.exists():
-            shutil.copyfile(source, roster_out / roster_file)
+    shutil.copyfile(intake_root / "roster" / "model_roster.json", roster_out / "model_roster.json")
+    shutil.copyfile(intake_root / "roster" / "blind_label_map.csv", roster_out / "blind_label_map.csv")
+    combined_out = final_root / "combined_wide" / "RadLE_v2_results_final.csv"
+    combined_out.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(intake_root / "combined_wide" / "RadLE_v2_results_final.csv", combined_out)
+    parent_out = final_root / "parent" / "parent_final_long_master.csv"
+    parent_out.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(parent_master, parent_out)
 
     parent_semantic_hash = sha256_bytes(json.dumps(parent_rows, sort_keys=True).encode("utf-8"))
     append_manifest = {
-        "schema_version": "radle_v2_append_manifest.v1",
+        "schema_version": "radle_v2_append_manifest.v2",
         "intake_id": manifest.get("intake_id"),
         "finalization_id": finalization_id,
         "transaction_state": "PRECOMMIT_VALIDATED",
         "case_count": len(scored_rows),
         "parent_row_count": len(parent_rows),
         "output_row_count": len(parent_rows) + len(scored_rows),
-        "parent_master_path": str(parent_master),
+        "parent_chain_id": manifest.get("parent_chain_id"),
+        "parent_master_path": "parent/parent_final_long_master.csv",
         "parent_master_sha256": sha256_file(parent_master),
         "parent_semantic_sha256": parent_semantic_hash,
         "scored_append_delta_sha256": sha256_file(scored_delta_path),
@@ -1173,11 +2075,25 @@ def finalize_incremental_admission(
         "radiologist_decisions_sha256": sha256_file(final_root / "radiologist_decisions.csv"),
         "roster_sha256": sha256_file(final_root / "roster" / "model_roster.json") if (final_root / "roster" / "model_roster.json").exists() else None,
         "source_counts": dict(sorted(source_counts.items())),
+        "finalization_identity": finalization_payload,
         "line_terminator": "\\r\\n" if line_terminator == "\r\n" else "\\n",
         "checksum_exclusions": ["SHA256SUMS", "COMMITTED.json"],
         "outputs": {
             "scored_append_delta": "scored_append_delta.csv",
             "final_long_master": "final/radle_v2_final_long_master.csv",
+            "combined_wide": "combined_wide/RadLE_v2_results_final.csv",
+            "blind_label_map": "roster/blind_label_map.csv",
+            "model_roster": "roster/model_roster.json",
+            "intake_snapshot": "intake_snapshot",
+        },
+        "output_hashes": {
+            "scored_append_delta": sha256_file(scored_delta_path),
+            "final_long_master": sha256_file(final_master_path),
+            "combined_wide": sha256_file(combined_out),
+            "blind_label_map": sha256_file(roster_out / "blind_label_map.csv"),
+            "model_roster": sha256_file(roster_out / "model_roster.json"),
+            "parent_final_long_master": sha256_file(parent_out),
+            "finalizer_source": sha256_file(finalizer_source),
         },
         "prepared_audit": prepared,
         "judge_audit": judge_audit,
@@ -1211,7 +2127,10 @@ def audit_sha256sums(root: Path) -> dict[str, str]:
         raise ValidationError("SHA256SUMS missing for committed readback")
     expected = [path.relative_to(root).as_posix() for path in finalized_payload_files(root)]
     observed: dict[str, str] = {}
-    for line_number, line in enumerate(sums_path.read_text(encoding="utf-8").splitlines(), start=1):
+    lines = [line for line in sums_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if lines != sorted(lines, key=lambda line: line.split("  ", 1)[1] if "  " in line else line):
+        raise ValidationError("committed SHA256SUMS must be sorted by relative path")
+    for line_number, line in enumerate(lines, start=1):
         if not line.strip():
             continue
         if "  " not in line:
@@ -1219,9 +2138,16 @@ def audit_sha256sums(root: Path) -> dict[str, str]:
         digest, relative = line.split("  ", 1)
         if relative in {"SHA256SUMS", "COMMITTED.json"}:
             raise ValidationError(f"SHA256SUMS must not include mutable marker {relative}")
+        normalized = Path(relative).as_posix()
+        if relative != normalized or Path(relative).is_absolute() or ".." in Path(relative).parts:
+            raise ValidationError(f"unsafe SHA256SUMS path {relative!r}")
         if relative in observed:
             raise ValidationError(f"duplicate SHA256SUMS entry for {relative}")
-        path = root / Path(relative)
+        path = (root / Path(relative)).resolve()
+        try:
+            path.relative_to(root.resolve())
+        except ValueError as exc:
+            raise ValidationError(f"SHA256SUMS path escapes root: {relative}") from exc
         if not path.exists() or not path.is_file():
             raise ValidationError(f"SHA256SUMS references missing file {relative}")
         actual = sha256_file(path).lower()
@@ -1238,32 +2164,129 @@ def audit_finalized_admission(final_root: Path, *, require_committed: bool = Fal
     if not append_manifest_path.exists():
         raise ValidationError(f"append_manifest.json missing under {final_root}")
     manifest = read_json(append_manifest_path)
+    if manifest.get("schema_version") != "radle_v2_append_manifest.v2":
+        raise ValidationError(f"unsupported append manifest schema: {manifest.get('schema_version')!r}")
     if require_committed and not (final_root / "COMMITTED.json").exists():
         raise ValidationError("COMMITTED.json missing for committed readback")
-    parent_master = Path(str(manifest.get("parent_master_path", "")))
+    parent_master = final_root / str(manifest.get("parent_master_path", ""))
     final_master = final_root / str(manifest.get("outputs", {}).get("final_long_master", ""))
     scored_delta = final_root / str(manifest.get("outputs", {}).get("scored_append_delta", ""))
     if not parent_master.exists() or not final_master.exists() or not scored_delta.exists():
         raise ValidationError("finalized admission missing parent/final/scored files")
     parent_bytes = parent_master.read_bytes()
     final_bytes = final_master.read_bytes()
-    if not final_bytes.startswith(parent_bytes):
-        raise ValidationError("final master does not preserve parent bytes as prefix")
-    _, scored_rows = read_csv_table(scored_delta)
+    scored_fields, scored_rows = read_csv_table(scored_delta)
+    if scored_fields != FINAL_LONG_MASTER_FIELDS:
+        raise ValidationError(f"scored delta schema mismatch: {scored_fields}")
     if len(scored_rows) != int(manifest.get("case_count", -1)):
         raise ValidationError("scored delta row count mismatch in audit")
     keys = [(row.get(CASE_KEY, ""), row.get("model_blinded", "")) for row in scored_rows]
     if len(set(keys)) != len(keys):
         raise ValidationError("duplicate scored delta keys")
     for row in scored_rows:
-        if row.get("final_score") not in {"0", "1"}:
-            raise ValidationError("non-binary final_score in scored delta")
-        if not row.get("final_score_source"):
-            raise ValidationError("missing final_score_source in scored delta")
+        if row.get("final_score_authoritative") not in {"0", "1"}:
+            raise ValidationError("non-binary final_score_authoritative in scored delta")
+        if row.get("final_score_source") not in ALLOWED_NEW_SCORE_SOURCES:
+            raise ValidationError("missing or unapproved final_score_source in scored delta")
     if sha256_file(scored_delta) != manifest.get("scored_append_delta_sha256"):
         raise ValidationError("scored delta SHA mismatch")
     if sha256_file(final_master) != manifest.get("output_master_sha256"):
         raise ValidationError("final master SHA mismatch")
+    output_hashes = manifest.get("output_hashes", {})
+    for label, relative in {
+        "scored_append_delta": "scored_append_delta.csv",
+        "final_long_master": "final/radle_v2_final_long_master.csv",
+        "combined_wide": "combined_wide/RadLE_v2_results_final.csv",
+        "blind_label_map": "roster/blind_label_map.csv",
+        "model_roster": "roster/model_roster.json",
+        "parent_final_long_master": "parent/parent_final_long_master.csv",
+        "finalizer_source": "provenance/finalizer_source.py",
+    }.items():
+        path = final_root / relative
+        if not path.is_file() or sha256_file(path) != str(output_hashes.get(label, "")).upper():
+            raise ValidationError(f"finalized output hash mismatch: {label}")
+
+    line_terminator = "\r\n" if manifest.get("line_terminator") == "\\r\\n" else "\n"
+    expected_final_bytes = parent_bytes
+    if expected_final_bytes and not expected_final_bytes.endswith((b"\n", b"\r")):
+        expected_final_bytes += line_terminator.encode("utf-8")
+    expected_final_bytes += serialize_csv_table(FINAL_LONG_MASTER_FIELDS, scored_rows, lineterminator=line_terminator, include_header=False)
+    if final_bytes != expected_final_bytes:
+        raise ValidationError("final master bytes are not exact parent bytes plus serialized scored delta")
+    if not final_bytes.startswith(parent_bytes):
+        raise ValidationError("final master does not preserve parent bytes as prefix")
+    parent_fields, parent_rows = read_csv_table(parent_master)
+    final_fields, final_rows = read_csv_table(final_master)
+    if parent_fields != FINAL_LONG_MASTER_FIELDS or final_fields != FINAL_LONG_MASTER_FIELDS:
+        raise ValidationError("parent/final master schema mismatch")
+    if len(final_rows) != len(parent_rows) + 200 or final_rows[:len(parent_rows)] != parent_rows or final_rows[len(parent_rows):] != scored_rows:
+        raise ValidationError("final master parsed records are not exact parent records plus 200 scored rows")
+
+    snapshot = final_root / "intake_snapshot"
+    prepared_audit = audit_prepared_staging(snapshot)
+    judge_audit = audit_judge_evidence(snapshot)
+    snapshot_manifest = read_json(snapshot / "append_input_manifest.json")
+    if snapshot_manifest.get("intake_id") != manifest.get("intake_id"):
+        raise ValidationError("finalized intake snapshot ID mismatch")
+    state_rows = read_csv_table(snapshot / "adjudication_state.csv")[1]
+    state_by_key = {(row[CASE_KEY], row["model_blinded"]): row for row in state_rows}
+    locks = read_agreement_locks(snapshot / "judge_evidence" / "agreement_locks.csv")
+    decisions_path = final_root / "radiologist_decisions.csv"
+    queue_rows = read_csv_table(snapshot / "radiologist_queue.csv")[1]
+    decisions = validate_radiologist_decisions(queue_rows, decisions_path)
+    recomputed_counts: Counter[str] = Counter()
+    for row in scored_rows:
+        key = (row[CASE_KEY], row["model_blinded"])
+        state = state_by_key.get(key, {}).get("terminal_state")
+        if state in {"provider_or_parse_failure", "invalid_likert", "idk_exact", "idk_approved_typo"}:
+            expected_score, expected_source = "0", "auto_score_not_required"
+        elif state == "canonical_exact":
+            expected_score, expected_source = "1", "canonical_exact"
+        elif key in decisions:
+            expected_score, expected_source = decisions[key]["score_binary"], "radiologist"
+        elif row[CASE_KEY] in locks:
+            expected_score, expected_source = locks[row[CASE_KEY]]["score"], "ai_judges"
+        else:
+            raise ValidationError(f"scored row has no recomputable authority: {key}")
+        if row["final_score_authoritative"] != expected_score or row["final_score_source"] != expected_source:
+            raise ValidationError(f"scored row does not match adjudication evidence: {key}")
+        recomputed_counts[expected_source] += 1
+    if dict(sorted(recomputed_counts.items())) != manifest.get("source_counts"):
+        raise ValidationError("final score-source counts do not recompute")
+
+    judge_index = read_json(snapshot / "judge_evidence" / "judge_evidence_index.json")
+    authorization_identity: object = judge_index.get("authorization", "MISSING")
+    paid_auth = snapshot / "judge_evidence" / "paid_judge_authorization.json"
+    if paid_auth.is_file():
+        authorization_identity = {"sha256": sha256_file(paid_auth), "content_sha256": content_only_json_sha256(paid_auth)}
+    evidence_hashes = {
+        "adjudication_state": sha256_file(snapshot / "adjudication_state.csv"),
+        "judge_worklist": sha256_file(snapshot / "judge_worklist.csv"),
+        "judge_config": canonical_json_sha256(snapshot / "judge_evidence" / "judge_config.json"),
+        "judge_prompt": canonical_text_sha256(snapshot / "judge_evidence" / "judge_prompt.txt"),
+        "judge_results": sha256_file(snapshot / "judge_evidence" / "judge_results.jsonl"),
+        "judge_index": sha256_file(snapshot / "judge_evidence" / "judge_evidence_index.json"),
+        "agreement_locks": sha256_file(snapshot / "judge_evidence" / "agreement_locks.csv"),
+        "radiologist_queue": sha256_file(snapshot / "radiologist_queue.csv"),
+        "radiologist_decisions": sha256_file(decisions_path),
+        "scored_append_delta": sha256_file(scored_delta),
+        "roster": canonical_json_sha256(final_root / "roster" / "model_roster.json"),
+        "blind_map": sha256_file(final_root / "roster" / "blind_label_map.csv"),
+        "finalizer_code": canonical_text_sha256(final_root / "provenance" / "finalizer_source.py"),
+    }
+    recomputed_identity = {
+        "schema_version": "radle_v2_finalization_identity.v2",
+        "intake_id": manifest.get("intake_id"),
+        "parent_chain_id": manifest.get("parent_chain_id"),
+        "parent_master_sha256": sha256_file(parent_master),
+        "evidence_hashes": evidence_hashes,
+        "authorization": authorization_identity,
+        "source_counts": dict(sorted(recomputed_counts.items())),
+    }
+    if recomputed_identity != manifest.get("finalization_identity"):
+        raise ValidationError("finalization identity payload does not independently recompute")
+    if compute_intake_id(recomputed_identity) != manifest.get("finalization_id"):
+        raise ValidationError("finalization ID does not independently recompute")
     checksum_rows: dict[str, str] | None = None
     if require_committed:
         committed_path = final_root / "COMMITTED.json"
@@ -1273,6 +2296,8 @@ def audit_finalized_admission(final_root: Path, *, require_committed: bool = Fal
         checksum_rows = audit_sha256sums(final_root)
         if committed.get("sha256sums_sha256") != sha256_file(final_root / "SHA256SUMS"):
             raise ValidationError("COMMITTED.json sha256sums_sha256 mismatch")
+        if committed.get("parent_chain_id") != manifest.get("parent_chain_id"):
+            raise ValidationError("COMMITTED.json parent-chain mismatch")
     return {
         "result": "PASS",
         "phase": "committed-readback" if require_committed else "precommit",
@@ -1281,6 +2306,8 @@ def audit_finalized_admission(final_root: Path, *, require_committed: bool = Fal
         "output_row_count": manifest.get("output_row_count"),
         "source_counts": manifest.get("source_counts"),
         "checksum_rows": len(checksum_rows) if checksum_rows is not None else None,
+        "prepared_audit": prepared_audit,
+        "judge_audit": judge_audit,
     }
 
 
@@ -1301,6 +2328,7 @@ def commit_finalized_admission(final_staging_root: Path) -> dict[str, Any]:
         "schema_version": "radle_v2_committed_marker.v1",
         "transaction_state": "FINAL_MASTER_COMMITTED",
         "finalization_id": audit["finalization_id"],
+        "parent_chain_id": read_json(final_staging_root / "append_manifest.json").get("parent_chain_id"),
         "append_manifest_sha256": sha256_file(final_staging_root / "append_manifest.json"),
         "sha256sums_sha256": sha256_file(final_staging_root / "SHA256SUMS"),
     }
@@ -1395,22 +2423,49 @@ def terminal_zero_states(states_path: Path) -> set[str]:
 
 
 def score1000_component(row: dict[str, str], zero_states: set[str]) -> int:
-    terminal_state = str(row.get("terminal_state", "")).strip()
     likert_text = str(row.get("likert", "")).strip()
-    final_score = str(row.get("final_score", "")).strip()
-    if terminal_state in zero_states:
+    final_score = str(row.get("final_score_authoritative", row.get("final_score", ""))).strip()
+    normalized_diagnosis = normalize_diagnosis(row.get("diagnosis", ""))
+    if normalized_diagnosis in {"i don t know", "idon t know"}:
+        return 0
+    if str(row.get("technical_failure", "")).strip().lower() == "true":
+        return 0
+    if str(row.get("response_valid", "")).strip().lower() == "false":
         return 0
     try:
-        likert = int(likert_text)
-    except ValueError:
+        likert_fraction = Fraction(likert_text)
+    except (ValueError, ZeroDivisionError):
         return 0
+    if likert_fraction.denominator != 1:
+        return 0
+    likert = int(likert_fraction)
     if likert < 0 or likert > 4:
         return 0
     if final_score == "1":
         return likert + 1
     if final_score == "0":
         return -(likert + 1)
-    raise ValidationError(f"final_score must be binary for case {row.get(CASE_KEY)} model {row.get('model_key')}")
+    raise ValidationError(f"final_score_authoritative must be binary for case {row.get(CASE_KEY)} candidate {row.get('candidate')}")
+
+
+def derive_score_terminal_state(row: dict[str, str]) -> str:
+    normalized = normalize_diagnosis(row.get("diagnosis", ""))
+    if str(row.get("technical_failure", "")).strip().lower() == "true":
+        return "technical_failure"
+    if normalized == "i don t know":
+        return "idk_exact"
+    if normalized == "idon t know":
+        return "idk_approved_typo"
+    likert_text = str(row.get("likert", "")).strip()
+    try:
+        value = Fraction(likert_text)
+    except (ValueError, ZeroDivisionError):
+        return "invalid_likert"
+    if value.denominator != 1 or int(value) not in range(0, 5):
+        return "invalid_likert"
+    if str(row.get("response_valid", "")).strip().lower() == "false":
+        return "invalid_response"
+    return "scored"
 
 
 def human_label_order(roster: dict[str, Any]) -> list[str]:
@@ -1609,30 +2664,51 @@ def build_idk0_score_lane(
     roster_source = roster_path or (committed_root / "roster" / "model_roster.json")
     if not roster_source.exists():
         raise ValidationError(f"roster missing for IDK0 lane: {roster_source}")
-    states_source = states_path or Path("config/radle_v2_terminal_states.json")
+    states_source = states_path or (committed_root / "intake_snapshot" / "inputs" / "terminal_states.json")
     fields, rows = read_csv_table(final_master)
-    require_columns(fields, [CASE_KEY, "model_blinded", "model_key", "reader_type", "likert", "final_score", "terminal_state"], "final master")
+    if fields != FINAL_LONG_MASTER_FIELDS:
+        raise ValidationError(f"IDK0 final-master schema mismatch: {fields}")
     roster = read_json(roster_source)
     zero_states = terminal_zero_states(states_source)
-    present_model_keys = {str(row.get("model_key", "")) for row in rows if str(row.get("reader_type", "")).strip() == "model"}
+    blind_source = committed_root / "roster" / "blind_label_map.csv"
+    blind_fields, blind_rows = read_csv_table(blind_source)
+    if blind_fields != BLIND_MAP_FIELDS:
+        raise ValidationError(f"committed blind-map schema mismatch: {blind_fields}")
+    blind_by_label = {row["model_blinded"]: row for row in blind_rows}
+    if len(blind_by_label) != len(blind_rows):
+        raise ValidationError("committed blind map has duplicate labels")
+    roster_model_keys = {str(model.get("model_key", "")) for model in roster.get("models", [])}
+    present_model_keys = {
+        str(row.get("candidate", ""))
+        for row in rows
+        if str(row.get("model_blinded", "")) in blind_by_label
+        and blind_by_label[str(row.get("model_blinded", ""))].get("model_key") in roster_model_keys
+    }
     effective_roster = build_effective_model_roster(roster, present_model_keys)
     missing_models = sorted(present_model_keys - set(effective_roster))
     if missing_models:
         raise ValidationError(f"model rows missing from roster: {missing_models}")
-    human_order = human_label_order(roster)
+    human_order = [
+        label for label in sorted(blind_by_label, key=candidate_label_sort_key)
+        if blind_by_label[label].get("model_key") not in roster_model_keys
+    ]
 
     score_rows: list[dict[str, object]] = []
     for row in sorted(rows, key=lambda item: (case_sort_key(item.get(CASE_KEY, "")), candidate_label_sort_key(item.get("model_blinded", "Candidate ZZ")))):
-        reader_type = str(row.get("reader_type", "")).strip() or "model"
-        model_key = str(row.get("model_key", "")).strip()
         model_blinded = str(row.get("model_blinded", "")).strip()
-        display_name = row.get("model_name", "") or model_key or model_blinded
+        blind_entry = blind_by_label.get(model_blinded)
+        if blind_entry is None:
+            raise ValidationError(f"final-master label missing from committed blind map: {model_blinded}")
+        reader_type = "model" if blind_entry.get("model_key") in roster_model_keys else "human"
+        model_key = str(row.get("candidate", "")).strip() if reader_type == "model" else str(blind_entry.get("model_key", "")).strip()
+        display_name = model_key or model_blinded
         roster_status = ""
         effective_status = ""
         excluded = False
         active = False
         human_group = ""
         if reader_type == "human":
+            display_name = str(row.get("provider", "")) or model_key
             roster_status = "human_reader"
             effective_status = "human_reader"
             active = True
@@ -1658,11 +2734,11 @@ def build_idk0_score_lane(
             "is_active": str(active).lower(),
             "human_panel_group": human_group,
             "likert": row.get("likert", ""),
-            "final_score": row.get("final_score", ""),
+            "final_score": row.get("final_score_authoritative", ""),
             "final_score_source": row.get("final_score_source", ""),
-            "terminal_state": row.get("terminal_state", ""),
+            "terminal_state": derive_score_terminal_state(row),
             "score1000_component": score1000_component(row, zero_states),
-            "admission_id": row.get("admission_id", ""),
+            "admission_id": committed_audit.get("finalization_id", ""),
         })
 
     summary_rows = summarize_score_rows(score_rows, human_presentation, human_order)
@@ -1691,6 +2767,7 @@ def build_idk0_score_lane(
             "committed_sha256": sha256_file(committed_root / "COMMITTED.json"),
             "final_master_sha256": sha256_file(final_master),
             "roster_sha256": sha256_file(roster_source),
+            "blind_map_sha256": sha256_file(blind_source),
             "terminal_states_sha256": sha256_file(states_source),
         },
         "counts": {
@@ -1768,11 +2845,11 @@ def audit_idk0_score_lane(lane_root: Path) -> dict[str, Any]:
 
 
 def _judge_score_for_case(case_id: str, judge_key: str) -> tuple[int, bool, str]:
-    if case_id == "5":
+    if case_id == "9":
         return 1, False, "synthetic_agreement_correct"
-    if case_id == "6":
-        return (1 if judge_key == "gemini" else 0), False, "synthetic_disagreement"
     if case_id == "7":
+        return (1 if judge_key == "gemini" else 0), False, "synthetic_disagreement"
+    if case_id == "8":
         return 0, judge_key == "gemini", "synthetic_review_flag"
     return 0, False, "synthetic_agreement_incorrect"
 
@@ -1796,11 +2873,11 @@ def run_synthetic_dual_judge_delta(
     judges_config = read_json(judges_path)
     validate_judges(judges_config, repo_root)
     prompt_path = repo_root / str(judges_config.get("prompt_file", ""))
-    prompt_sha = sha256_file(prompt_path)
-    judge_config_sha = sha256_file(judges_path)
-    terminal_policy_sha = sha256_file(repo_root / "config/radle_v2_terminal_states.json")
+    prompt_sha = canonical_text_sha256(prompt_path)
+    judge_config_sha = canonical_json_sha256(judges_path)
+    terminal_policy_sha = canonical_json_sha256(staging_root / "inputs" / "terminal_states.json")
     variants_sha = sha256_file(staging_root / "accepted_variants_snapshot.csv")
-    normalizer_code_sha = sha256_file(Path(__file__))
+    normalizer_code_sha = canonical_text_sha256(staging_root / "provenance" / "normalizer_source.py")
     worklist_fields, worklist_rows = read_csv_table(staging_root / "judge_worklist.csv")
     require_columns(worklist_fields, RADIOLOGIST_QUEUE_FIELDS, "judge worklist")
     max_retries = int(judges_config.get("max_retries", 1))
@@ -1851,6 +2928,8 @@ def run_synthetic_dual_judge_delta(
                 "requested_model_id": judge.get("requested_model_id", ""),
                 "returned_model_id": judge.get("requested_model_id", ""),
                 "request_payload_sha256": payload_sha,
+                "worklist_row_sha256": worklist_row_sha,
+                "case_triplet_sha256": manifest.get("intake_identity", {}).get("case_triplet_sha256", ""),
                 "judge_config_sha256": judge_config_sha,
                 "prompt_sha256": prompt_sha,
                 "normalizer_code_sha256": normalizer_code_sha,
@@ -1861,7 +2940,7 @@ def run_synthetic_dual_judge_delta(
                 "schema_version": "radle_v2_judge_result.v1",
                 "intake_id": manifest.get("intake_id"),
                 CASE_KEY: case_id,
-                "case_triplet_sha256": "",
+                "case_triplet_sha256": manifest.get("intake_identity", {}).get("case_triplet_sha256", ""),
                 "worklist_row_sha256": worklist_row_sha,
                 "judge_key": judge_key,
                 "requested_judge_model_id": judge.get("requested_model_id", ""),
@@ -1904,13 +2983,25 @@ def run_synthetic_dual_judge_delta(
     routing_rows: list[dict[str, object]] = []
     worklist_by_case = {row[CASE_KEY]: row for row in worklist_rows}
     for case_id, results in sorted(by_case.items(), key=lambda item: case_sort_key(item[0])):
-        scores = {int(result["score"]) for result in results if result.get("parse_status") == "parsed"}
+        parsed = [
+            result for result in results
+            if result.get("parse_status") == "parsed" and str(result.get("score")) in {"0", "1"}
+        ]
+        scores = {int(result["score"]) for result in parsed}
         any_flag = any(bool(result.get("flag_for_review")) for result in results)
-        if len(results) == judge_count and len(scores) == 1 and not any_flag:
+        judge_ids = {str(result.get("requested_judge_model_id", "")) for result in parsed}
+        configured_ids = {str(judge.get("requested_model_id", "")) for judge in judges_config.get("judges", [])}
+        evidence_matches = all(
+            result.get("exact_request_payload_sha256") == request_payloads[[item[CASE_KEY] for item in request_payloads].index(case_id)]["request_payload_sha256"]
+            and result.get("judge_config_sha256") == judge_config_sha
+            and result.get("prompt_sha256") == prompt_sha
+            for result in parsed
+        )
+        if len(results) == judge_count and len(parsed) == judge_count and judge_ids == configured_ids and len(scores) == 1 and not any_flag and evidence_matches:
             locked_rows.append({
                 CASE_KEY: case_id,
                 "score": next(iter(scores)),
-                "score_source": "dual_judge_agreement",
+                "score_source": "ai_judges",
                 "judge_count": len(results),
             })
             routing_rows.append({
@@ -1927,8 +3018,11 @@ def run_synthetic_dual_judge_delta(
             })
 
     _, delta_rows = read_csv_table(staging_root / "new_model_long_delta.csv")
-    for row in delta_rows:
-        if row.get("terminal_state") == "mandatory_radiologist":
+    _, state_rows = read_csv_table(staging_root / "adjudication_state.csv")
+    delta_by_key = {(row[CASE_KEY], row["model_blinded"]): row for row in delta_rows}
+    for state_row in state_rows:
+        if state_row.get("requires_radiologist") == "True":
+            row = delta_by_key[(state_row[CASE_KEY], state_row["model_blinded"])]
             queue_rows.append({field: row.get(field, "") for field in RADIOLOGIST_QUEUE_FIELDS})
             routing_rows.append({
                 CASE_KEY: row.get(CASE_KEY, ""),
@@ -1963,6 +3057,10 @@ def run_synthetic_dual_judge_delta(
         "judge_results_sha256": sha256_file(results_path),
     }
     write_json(out_dir / "judge_summary.json", summary)
+    config_snapshot = out_dir / "judge_config.json"
+    write_json(config_snapshot, judges_config)
+    prompt_snapshot = out_dir / "judge_prompt.txt"
+    prompt_snapshot.write_bytes(canonical_text_bytes(prompt_path))
     write_json(out_dir / "judge_evidence_index.json", {
         "schema_version": "radle_v2_judge_evidence_index.v1",
         "summary": summary,
@@ -1976,8 +3074,11 @@ def run_synthetic_dual_judge_delta(
                 "path": "radiologist_queue_routing_audit.json",
                 "sha256": sha256_file(out_dir / "radiologist_queue_routing_audit.json"),
             },
+            "judge_config": {"path": "judge_config.json", "sha256": sha256_file(config_snapshot)},
+            "judge_prompt": {"path": "judge_prompt.txt", "sha256": sha256_file(prompt_snapshot)},
         },
         "malformed_cache_line_count": 0,
+        "authorization": "SYNTHETIC_NO_PAID_AUTHORIZATION",
     })
     receipt.update(summary)
     receipt["result"] = "PASS"
