@@ -1,0 +1,171 @@
+﻿{
+    "purpose":  "RadLE v2 model logo PNG assets for Score1000 / figure work",
+    "asset_dir":  "scripts/assets/radle_score1000_logos",
+    "assets":  [
+                   {
+                       "model_key":  "grok_4_3",
+                       "label":  "Grok 4.3",
+                       "file":  "scripts/assets/radle_score1000_logos/grok_4_3_logo.png",
+                       "sha256":  "F10EC0B2322F9D65A973D3D48FCDC41270D8B123A5D36E2826DABF9DCEFB0762",
+                       "bytes":  6883,
+                       "source_name":  "LobeHub Icons static PNG, Grok (xAI)",
+                       "source_url":  "https://unpkg.com/@lobehub/icons-static-png@1.91.0/light/grok.png",
+                       "transform":  "direct_png_download",
+                       "fetched_utc":  "2026-07-08T04:09:52Z"
+                   },
+                   {
+                       "model_key":  "claude_fable_5",
+                       "label":  "Claude Fable 5",
+                       "file":  "scripts/assets/radle_score1000_logos/claude_fable_5_logo.png",
+                       "sha256":  "97B53FB85B3BF401FFEB8EE7C5EBAD734CE9F6EDC3038F242021C53BCC18E23D",
+                       "bytes":  9337,
+                       "source_name":  "LobeHub Icons static PNG, Claude color",
+                       "source_url":  "https://unpkg.com/@lobehub/icons-static-png@1.91.0/light/claude-color.png",
+                       "transform":  "direct_png_download",
+                       "fetched_utc":  "2026-07-08T04:14:19Z"
+                   },
+                   {
+                       "model_key":  "gemini_3_1_pro",
+                       "label":  "Gemini 3.1 Pro",
+                       "file":  "scripts/assets/radle_score1000_logos/gemini_3_1_pro_logo.png",
+                       "sha256":  "10C628F55D22A9725B9F9FCCCE7CF062B9FB68DA5F7736E87010E0594D7BA6DB",
+                       "bytes":  19333,
+                       "source_name":  "LobeHub Icons static PNG, Gemini color",
+                       "source_url":  "https://unpkg.com/@lobehub/icons-static-png@1.91.0/light/gemini-color.png",
+                       "transform":  "direct_png_download",
+                       "fetched_utc":  "2026-07-08T04:09:52Z"
+                   },
+                   {
+                       "model_key":  "gpt_5_5",
+                       "label":  "GPT-5.5",
+                       "file":  "scripts/assets/radle_score1000_logos/gpt_5_5_logo.png",
+                       "sha256":  "8A33312F6BB17C1EDDDF8F9D7FBAC09CE1D1D697D6601F37227AFA879E94C52E",
+                       "bytes":  11297,
+                       "source_name":  "LobeHub Icons static PNG, OpenAI",
+                       "source_url":  "https://unpkg.com/@lobehub/icons-static-png@1.91.0/light/openai.png",
+                       "transform":  "direct_png_download",
+                       "fetched_utc":  "2026-07-08T04:09:52Z"
+                   },
+                   {
+                       "model_key":  "octomed_7b",
+                       "label":  "OctoMed 7B",
+                       "file":  "scripts/assets/radle_score1000_logos/octomed_7b_logo.png",
+                       "sha256":  "8438706BCAF7A1CC269653AFD137A9D564531DF07D655E77560F0294E157397B",
+                       "bytes":  110509,
+                       "source_name":  "Hugging Face model repo asset, assets/OctoMed.svg",
+                       "source_url":  "https://huggingface.co/OctoMed/OctoMed-7B/resolve/f84fa4b60dc8104273ac2bf3b341f870b74f90c4/assets/OctoMed.svg",
+                       "transform":  "svg_to_1024_png_with_sharp",
+                       "fetched_utc":  "2026-07-08T04:09:52Z"
+                   },
+                   {
+                       "model_key":  "nemotron_3_omni",
+                       "label":  "Nemotron 3 Omni",
+                       "file":  "scripts/assets/radle_score1000_logos/nemotron_3_omni_logo.png",
+                       "sha256":  "5A059CEC39A179D3DE978FB5C83D80882F8BAD61E016B9AC5A87EC8CC8DEE721",
+                       "bytes":  6422,
+                       "source_name":  "LobeHub Icons static PNG, Nvidia color",
+                       "source_url":  "https://unpkg.com/@lobehub/icons-static-png@1.91.0/light/nvidia-color.png",
+                       "transform":  "direct_png_download",
+                       "fetched_utc":  "2026-07-08T12:24:38Z"
+                   },
+                   {
+                       "model_key":  "qwen_3_7_plus",
+                       "label":  "Qwen 3.7 Plus",
+                       "file":  "scripts/assets/radle_score1000_logos/qwen_3_7_plus_logo.png",
+                       "sha256":  "DE9BC7E285164E0D284A7B9555511C7F7767AF7699D6272B3B67B376EEDDBFB3",
+                       "bytes":  10324,
+                       "source_name":  "LobeHub Icons static PNG, Qwen color",
+                       "source_url":  "https://unpkg.com/@lobehub/icons-static-png@1.91.0/light/qwen-color.png",
+                       "transform":  "direct_png_download",
+                       "fetched_utc":  "2026-07-08T12:24:38Z"
+                   },
+                   {
+                       "model_key":  "glm_5v_turbo",
+                       "label":  "GLM-5V Turbo",
+                       "file":  "scripts/assets/radle_score1000_logos/glm_5v_turbo_logo.png",
+                       "sha256":  "73D15F7DDDF3F4908BE028D856903B73BE706B3CFA9FF49471DE6D2CE4FD8950",
+                       "bytes":  12969,
+                       "source_name":  "LobeHub Icons static PNG, GLM-V color",
+                       "source_url":  "https://unpkg.com/@lobehub/icons-static-png@1.91.0/light/glmv-color.png",
+                       "transform":  "direct_png_download",
+                       "fetched_utc":  "2026-07-08T12:24:38Z"
+                   },
+                   {
+                       "model_key":  "minimax_m3",
+                       "label":  "MiniMax M3",
+                       "file":  "scripts/assets/radle_score1000_logos/minimax_m3_logo.png",
+                       "sha256":  "9E596627348DEB4030938A948243CC94E96CC1548D645CE4FAF1DE0E51B9043A",
+                       "bytes":  8665,
+                       "source_name":  "LobeHub Icons static PNG, MiniMax color",
+                       "source_url":  "https://unpkg.com/@lobehub/icons-static-png@1.91.0/light/minimax-color.png",
+                       "transform":  "direct_png_download",
+                       "fetched_utc":  "2026-07-08T12:24:38Z"
+                   },
+                   {
+                       "model_key":  "gemma_4_31b",
+                       "label":  "Gemma 4 31B",
+                       "file":  "scripts/assets/radle_score1000_logos/gemma_4_31b_logo.png",
+                       "sha256":  "5F64463F9E00B29595C3CE7222100E263B67C3F29035C304D1249F30C99D2913",
+                       "bytes":  16826,
+                       "source_name":  "LobeHub Icons static PNG, Gemma color",
+                       "source_url":  "https://unpkg.com/@lobehub/icons-static-png@1.91.0/light/gemma-color.png",
+                       "transform":  "direct_png_download",
+                       "fetched_utc":  "2026-07-08T12:24:38Z"
+                   },
+                   {
+                       "model_key":  "lingshu_32b",
+                       "label":  "Lingshu 32B",
+                       "file":  "scripts/assets/radle_score1000_logos/lingshu_32b_logo.png",
+                       "sha256":  "F1615CC091F78E5557B41B5F1464968334701AFCFECCE61A9A89993604058443",
+                       "bytes":  1178356,
+                       "source_name":  "Hugging Face model repo asset, lingshu_logo.png",
+                       "source_url":  "https://huggingface.co/lingshu-medical-mllm/Lingshu-32B/resolve/36b98277cacb60db86f34b75ce0540b1ea35183c/lingshu_logo.png",
+                       "transform":  "direct_png_download",
+                       "fetched_utc":  "2026-07-08T12:24:38Z"
+                   },
+                   {
+                       "model_key":  "medgemma_1_5_4b",
+                       "label":  "MedGemma 1.5 4B",
+                       "file":  "scripts/assets/radle_score1000_logos/medgemma_1_5_4b_logo.png",
+                       "sha256":  "5F64463F9E00B29595C3CE7222100E263B67C3F29035C304D1249F30C99D2913",
+                       "bytes":  16826,
+                       "source_name":  "LobeHub Icons static PNG, Gemma color; MedGemma is Google Gemma-based",
+                       "source_url":  "https://unpkg.com/@lobehub/icons-static-png@1.91.0/light/gemma-color.png",
+                       "transform":  "direct_png_download",
+                       "fetched_utc":  "2026-07-08T12:24:38Z"
+                   },
+                   {
+                       "model_key":  "llama_4_maverick",
+                       "label":  "Llama 4 Maverick",
+                       "file":  "scripts/assets/radle_score1000_logos/llama_4_maverick_logo.png",
+                       "sha256":  "144FAB9BA427C7D8F7EE415E5A9113A3A66538CA4FC79FB0E01502978AF29A41",
+                       "bytes":  13478,
+                       "source_name":  "LobeHub Icons static PNG, Meta color; Llama is a Meta model family",
+                       "source_url":  "https://unpkg.com/@lobehub/icons-static-png@1.91.0/light/meta-color.png",
+                       "transform":  "direct_png_download",
+                       "fetched_utc":  "2026-07-08T15:37:16Z"
+                   },
+                   {
+                       "model_key":  "internvl3_5_8b",
+                       "label":  "InternVL3.5 8B",
+                       "file":  "scripts/assets/radle_score1000_logos/internvl3_5_8b_logo.png",
+                       "sha256":  "1B3B6158FDF2EA88AC868A4A9DBF7795777772C3EC512092DE6288EAEA043918",
+                       "bytes":  81631,
+                       "source_name":  "Hugging Face OpenGVLab/InternVL3_5-8B model-card InternVL wordmark image",
+                       "source_url":  "https://cdn-uploads.huggingface.co/production/uploads/64006c09330a45b03605bba3/zJsd2hqd3EevgXo6fNgC-.png",
+                       "transform":  "nonblack_left_symbol_crop_to_640_png",
+                       "fetched_utc":  "2026-07-08T15:54:06Z"
+                   },
+                   {
+                       "model_key":  "mistral_large_3_2512",
+                       "label":  "Mistral Large 3 2512",
+                       "file":  "scripts/assets/radle_score1000_logos/mistral_large_3_2512_logo.png",
+                       "sha256":  "F3B97D586F84E68B8031C74B34BEBE4651EE0CB130831AC9B97CB64E1820A2EF",
+                       "bytes":  1803,
+                       "source_name":  "LobeHub Icons static PNG, Mistral color",
+                       "source_url":  "https://unpkg.com/@lobehub/icons-static-png@1.91.0/light/mistral-color.png",
+                       "transform":  "direct_png_download",
+                       "fetched_utc":  "2026-07-08T15:37:16Z"
+                   }
+               ]
+}

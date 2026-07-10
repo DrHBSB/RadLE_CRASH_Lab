@@ -1,0 +1,60 @@
+{
+  "purpose": "RadLE v2 human comparator logo PNG assets for Score1000 / figure work",
+  "asset_dir": "scripts/assets/radle_score1000_logos",
+  "assets": [
+    {
+      "human_key": "board_certified_radiologists",
+      "label": "Board-certified radiologists",
+      "file": "scripts/assets/radle_score1000_logos/board_certified_radiologists_logo.png",
+      "sha256": "C52C7F746A730912D23D6182CE0DF6A7C9A48EE16D17171CB183D4C1493A79B8",
+      "bytes": 27660,
+      "source_name": "Font Awesome Free solid SVG icons, composed into RadLE chart-ready circular marker",
+      "source_urls": [
+        "https://raw.githubusercontent.com/FortAwesome/Font-Awesome/7.x/svgs/solid/user-doctor.svg",
+        "https://raw.githubusercontent.com/FortAwesome/Font-Awesome/7.x/svgs/solid/x-ray.svg"
+      ],
+      "license_note": "Font Awesome Free icons; see Font Awesome Free license for attribution/terms.",
+      "transform": "svg_icons_to_640_png_circle_marker_with_xray_badge; background=#131E35",
+      "fetched_utc": "2026-07-08T04:24:23Z"
+    },
+    {
+      "human_key": "radiology_trainees",
+      "label": "Radiology trainees",
+      "file": "scripts/assets/radle_score1000_logos/radiology_trainees_logo.png",
+      "sha256": "2B154562193CB660348B3A1385254EEA5947EDA58E0E7C77ADF095F70ABEA269",
+      "bytes": 27400,
+      "source_name": "Font Awesome Free solid SVG icons, composed into RadLE chart-ready circular marker",
+      "source_urls": [
+        "https://raw.githubusercontent.com/FortAwesome/Font-Awesome/7.x/svgs/solid/user-graduate.svg",
+        "https://raw.githubusercontent.com/FortAwesome/Font-Awesome/7.x/svgs/solid/x-ray.svg"
+      ],
+      "license_note": "Font Awesome Free icons; see Font Awesome Free license for attribution/terms.",
+      "transform": "svg_icons_to_640_png_circle_marker_with_xray_badge; background=#6F9CDA",
+      "fetched_utc": "2026-07-08T04:24:23Z"
+    },
+    {
+      "human_key": "human_expert_baseline_deep_crimson",
+      "label": "Human Expert Baseline",
+      "file": "scripts/assets/radle_score1000_logos/human_expert_baseline_deep_crimson_logo.png",
+      "sha256": "7FAAC92B2B5D3DAC7DF5979D856121E66ABEF1C34D4D8D0907CC0F028EED1B47",
+      "bytes": 23855,
+      "source_name": "Derivative of board-certified radiologists marker for Human Expert Baseline",
+      "source_file": "scripts/assets/radle_score1000_logos/board_certified_radiologists_logo.png",
+      "license_note": "Font Awesome Free icons; see Font Awesome Free license for attribution/terms.",
+      "transform": "recolor_main_marker_background_to_#A61E2E_keep_xray_badge_detail_dark",
+      "fetched_utc": "2026-07-08T16:38:31Z"
+    },
+    {
+      "human_key": "human_expert_baseline_radiologist_navy",
+      "label": "Human Expert Baseline / Radiologist",
+      "file": "scripts/assets/radle_score1000_logos/human_expert_baseline_radiologist_navy_logo.png",
+      "sha256": "105E664FD4F6F1D2E0363B785058D7BB6DB1FFA9440E2E1959A7128430C86979",
+      "bytes": 20643,
+      "source_name": "Derivative of Human Expert Baseline marker recolored to figure-title navy",
+      "source_file": "scripts/assets/radle_score1000_logos/human_expert_baseline_deep_crimson_logo.png",
+      "license_note": "Font Awesome Free icons; see Font Awesome Free license for attribution/terms.",
+      "transform": "recolor_main_marker_background_to_#1B324D_keep_xray_badge_detail_dark",
+      "fetched_utc": "2026-07-09T05:31:00Z"
+    }
+  ]
+}
