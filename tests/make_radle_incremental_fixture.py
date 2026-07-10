@@ -47,6 +47,7 @@ LONG_MASTER_FIELDS = [
     "notes",
     "admission_id",
 ]
+HUMAN_LABELS = ["S", "T", "U", "V", "W", "X", "Y", "Z", "AA", "AB", "AC", "AD"]
 
 
 def model_fields(model_key: str) -> list[str]:
@@ -172,6 +173,30 @@ def main() -> int:
             "notes": "",
             "admission_id": "synthetic_parent",
         })
+        for human_index, suffix in enumerate(HUMAN_LABELS, start=1):
+            is_first_group = human_index <= 6
+            long_rows.append({
+                "Master_Case_ID": str(case_id),
+                "model_blinded": f"Candidate {suffix}",
+                "model_key": f"human_reader_{human_index:02d}",
+                "model_name": f"Human Reader {human_index:02d}",
+                "reader_type": "human",
+                "access": "human",
+                "domain": "radiology",
+                "Ground_Truth_Diagnosis": gt,
+                "diagnosis": gt if is_first_group else "synthetic wrong answer",
+                "likert": "4",
+                "final_score": "1" if is_first_group else "0",
+                "final_score_source": "fixture",
+                "terminal_state": "human_reference",
+                "score1000_raw": "5" if is_first_group else "-5",
+                "weighted_score": "",
+                "effective_n": "200",
+                "source_file": "human_fixture.csv",
+                "source_row_sha256": "",
+                "notes": "",
+                "admission_id": "synthetic_parent",
+            })
 
     write_csv(out / "parent_wide.csv", parent_fields, parent_rows)
     write_csv(out / "parent_final_long_master.csv", LONG_MASTER_FIELDS, long_rows)
@@ -211,6 +236,15 @@ def main() -> int:
         "blind_label_map": [
             {"blind_label": "Candidate A", "entry_type": "model", "key": parent_model_key, "provider": "Synthetic"},
             {"blind_label": "Candidate AE", "entry_type": "model", "key": incoming_model_key, "provider": "Synthetic"},
+            *[
+                {
+                    "blind_label": f"Candidate {suffix}",
+                    "entry_type": "human",
+                    "key": f"human_reader_{index:02d}",
+                    "provider": "Human",
+                }
+                for index, suffix in enumerate(HUMAN_LABELS, start=1)
+            ],
         ],
     }
     (out / "model_roster.json").write_text(json.dumps(synthetic_roster, indent=2) + "\n", encoding="utf-8")

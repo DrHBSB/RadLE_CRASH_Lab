@@ -18,10 +18,12 @@ if str(SRC_ROOT) not in sys.path:
 from radle_incremental_admission import (
     RADIOLOGIST_QUEUE_FIELDS,
     ValidationError,
+    audit_idk0_score_lane,
     audit_finalized_admission,
     audit_judge_evidence,
     allocate_next_candidate_label,
     audit_prepared_staging,
+    build_idk0_score_lane,
     classify_terminal_state,
     normalize_diagnosis,
     commit_finalized_admission,
@@ -160,6 +162,14 @@ class IncrementalAdmissionPrepareTests(unittest.TestCase):
             dry_run=False,
         )
         return fixture, staging
+
+    def committed_synthetic_admission(self, tmp: str) -> tuple[Path, Path]:
+        fixture, staging = self.prepared_with_judges(tmp)
+        decisions = self.write_radiologist_decisions(staging)
+        receipt = finalize_incremental_admission(intake_root=staging, radiologist_decisions=decisions)
+        final_root = Path(str(receipt["final_staging_root"]))
+        commit_finalized_admission(final_root)
+        return fixture, final_root
 
     def test_prepare_dry_run_is_idempotent_and_writes_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -396,6 +406,66 @@ class IncrementalAdmissionPrepareTests(unittest.TestCase):
             self.assertGreater(readback["checksum_rows"], 0)
             second_commit = commit_finalized_admission(final_root)
             self.assertEqual(second_commit["transaction_state"], "ALREADY_ADMITTED")
+
+    def test_idk0_lane_derives_replacement_counts_and_public_shapes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, committed_root = self.committed_synthetic_admission(tmp)
+            lane_root = Path(tmp) / "idk0_pooled12"
+            receipt = build_idk0_score_lane(
+                committed_root=committed_root,
+                output_root=lane_root,
+                human_presentation="pooled12",
+                states_path=REPO_ROOT / "config/radle_v2_terminal_states.json",
+            )
+            self.assertEqual(receipt["result"], "PASS")
+            self.assertEqual(receipt["counts"]["complete_model_count"], 2)
+            self.assertEqual(receipt["counts"]["active_model_count"], 1)
+            self.assertEqual(receipt["counts"]["excluded_model_count"], 1)
+            self.assertEqual(receipt["counts"]["human_backend_readers"], 12)
+            self.assertEqual(receipt["counts"]["score_rows"], 2800)
+            audit = audit_idk0_score_lane(lane_root)
+            self.assertEqual(audit["result"], "PASS")
+            with self.assertRaises(ValidationError):
+                build_idk0_score_lane(
+                    committed_root=committed_root,
+                    output_root=lane_root,
+                    human_presentation="pooled12",
+                    states_path=REPO_ROOT / "config/radle_v2_terminal_states.json",
+                )
+
+            summaries = {row["comparator_key"]: row for row in self.read_rows(lane_root / "public_candidate_summary.csv")}
+            self.assertEqual(summaries["synthetic_model_v1"]["excluded"], "false")
+            self.assertEqual(summaries["existing_model_v1"]["excluded"], "true")
+            self.assertEqual(summaries["synthetic_model_v1"]["score1000"], "-759")
+            self.assertEqual(summaries["synthetic_model_v1"]["score2000"], "241")
+            self.assertEqual(summaries["existing_model_v1"]["score2000"], "2000")
+            self.assertEqual(summaries["human_pooled12"]["score1000"], "0")
+            panel_keys = [row["comparator_key"] for row in self.read_rows(lane_root / "panel_order.csv")]
+            self.assertEqual(panel_keys, ["human_pooled12", "synthetic_model_v1"])
+            public_fields = set(self.read_rows(lane_root / "public_candidate_summary.csv")[0])
+            self.assertFalse({"diagnosis", "Ground_Truth_Diagnosis", "Raw_Response", "Image_SHA256"} & public_fields)
+
+    def test_idk0_lane_split_human_projection_uses_same_backend_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, committed_root = self.committed_synthetic_admission(tmp)
+            lane_root = Path(tmp) / "idk0_split6x6"
+            build_idk0_score_lane(
+                committed_root=committed_root,
+                output_root=lane_root,
+                human_presentation="split6x6",
+                states_path=REPO_ROOT / "config/radle_v2_terminal_states.json",
+            )
+            audit = audit_idk0_score_lane(lane_root)
+            self.assertEqual(audit["result"], "PASS")
+            summaries = {row["comparator_key"]: row for row in self.read_rows(lane_root / "source1000.csv")}
+            self.assertEqual(summaries["human_group_1"]["score1000"], "1000")
+            self.assertEqual(summaries["human_group_2"]["score1000"], "-1000")
+            self.assertEqual(summaries["human_group_1"]["score2000"], "2000")
+            self.assertEqual(summaries["human_group_2"]["score2000"], "0")
+            score_rows = self.read_rows(lane_root / "score_rows.csv")
+            human_rows = [row for row in score_rows if row["reader_type"] == "human"]
+            self.assertEqual(len(human_rows), 2400)
+            self.assertEqual({row["human_panel_group"] for row in human_rows}, {"human_group_1", "human_group_2"})
 
 
 if __name__ == "__main__":

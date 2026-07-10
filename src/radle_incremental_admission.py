@@ -8,6 +8,7 @@ import re
 import shutil
 import unicodedata
 from collections import Counter
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -1147,6 +1148,12 @@ def finalize_incremental_admission(
         shutil.copyfile(radiologist_decisions, final_root / "radiologist_decisions.csv")
     else:
         write_csv_table(final_root / "radiologist_decisions.csv", RADIOLOGIST_DECISION_FIELDS, [])
+    roster_out = final_root / "roster"
+    roster_out.mkdir(parents=True, exist_ok=True)
+    for roster_file in ["model_roster.json", "blind_label_map.json"]:
+        source = intake_root / "roster" / roster_file
+        if source.exists():
+            shutil.copyfile(source, roster_out / roster_file)
 
     parent_semantic_hash = sha256_bytes(json.dumps(parent_rows, sort_keys=True).encode("utf-8"))
     append_manifest = {
@@ -1164,6 +1171,7 @@ def finalize_incremental_admission(
         "output_master_sha256": sha256_file(final_master_path),
         "judge_evidence_index_sha256": sha256_file(intake_root / "judge_evidence" / "judge_evidence_index.json"),
         "radiologist_decisions_sha256": sha256_file(final_root / "radiologist_decisions.csv"),
+        "roster_sha256": sha256_file(final_root / "roster" / "model_roster.json") if (final_root / "roster" / "model_roster.json").exists() else None,
         "source_counts": dict(sorted(source_counts.items())),
         "line_terminator": "\\r\\n" if line_terminator == "\r\n" else "\\n",
         "checksum_exclusions": ["SHA256SUMS", "COMMITTED.json"],
@@ -1303,6 +1311,459 @@ def commit_finalized_admission(final_staging_root: Path) -> dict[str, Any]:
         "transaction_state": "FINAL_MASTER_COMMITTED",
         "finalization_id": audit["finalization_id"],
         "checksum_rows": committed_audit.get("checksum_rows"),
+    }
+
+
+IDK0_SCORE_ROW_FIELDS = [
+    "Master_Case_ID",
+    "model_blinded",
+    "model_key",
+    "display_name",
+    "reader_type",
+    "roster_status",
+    "effective_roster_status",
+    "excluded",
+    "is_active",
+    "human_panel_group",
+    "likert",
+    "final_score",
+    "final_score_source",
+    "terminal_state",
+    "score1000_component",
+    "admission_id",
+]
+IDK0_SUMMARY_FIELDS = [
+    "display_order",
+    "comparator_key",
+    "display_name",
+    "reader_type",
+    "presentation_type",
+    "roster_status",
+    "effective_roster_status",
+    "excluded",
+    "is_active",
+    "case_rows",
+    "effective_n",
+    "score1000",
+    "score2000",
+    "correct_rows",
+    "incorrect_rows",
+    "zero_rows",
+]
+IDK0_GROUP_FIELDS = [
+    "group",
+    "comparator_count",
+    "row_count",
+    "active_count",
+    "excluded_count",
+    "score1000_mean",
+    "score2000_mean",
+]
+IDK0_PANEL_BIN_FIELDS = [
+    "bin",
+    "lower_inclusive",
+    "upper_inclusive",
+    "comparator_count",
+    "active_count",
+    "excluded_count",
+]
+
+
+def format_fraction(value: Fraction) -> str:
+    if value.denominator == 1:
+        return str(value.numerator)
+    text = f"{float(value):.6f}".rstrip("0").rstrip(".")
+    return text if text else "0"
+
+
+def parse_score_fraction(value: str) -> Fraction:
+    text = str(value).strip()
+    if not text:
+        raise ValidationError("blank score value")
+    return Fraction(text)
+
+
+def terminal_zero_states(states_path: Path) -> set[str]:
+    policy = read_json(states_path)
+    states = {
+        str(row.get("state", ""))
+        for row in policy.get("states", [])
+        if row.get("correctness_action") == "zero"
+    }
+    states.update({"ERROR", "error", "provider_error", "parse_error", "retry_exhausted"})
+    return states
+
+
+def score1000_component(row: dict[str, str], zero_states: set[str]) -> int:
+    terminal_state = str(row.get("terminal_state", "")).strip()
+    likert_text = str(row.get("likert", "")).strip()
+    final_score = str(row.get("final_score", "")).strip()
+    if terminal_state in zero_states:
+        return 0
+    try:
+        likert = int(likert_text)
+    except ValueError:
+        return 0
+    if likert < 0 or likert > 4:
+        return 0
+    if final_score == "1":
+        return likert + 1
+    if final_score == "0":
+        return -(likert + 1)
+    raise ValidationError(f"final_score must be binary for case {row.get(CASE_KEY)} model {row.get('model_key')}")
+
+
+def human_label_order(roster: dict[str, Any]) -> list[str]:
+    humans = [entry for entry in roster.get("blind_label_map", []) if entry.get("entry_type") == "human"]
+    return [str(entry.get("blind_label", "")) for entry in sorted(humans, key=lambda item: candidate_label_sort_key(str(item.get("blind_label", ""))))]
+
+
+def build_effective_model_roster(roster: dict[str, Any], present_model_keys: set[str]) -> dict[str, dict[str, Any]]:
+    effective: dict[str, dict[str, Any]] = {}
+    for model in roster.get("models", []):
+        model_key = str(model.get("model_key", ""))
+        if model_key not in present_model_keys:
+            continue
+        record = dict(model)
+        original_status = str(record.get("roster_status", ""))
+        effective_status = original_status
+        if original_status == "pending_admission":
+            effective_status = "complete_master_active"
+        record["original_roster_status"] = original_status
+        record["effective_roster_status"] = effective_status
+        effective[model_key] = record
+
+    for record in list(effective.values()):
+        if record.get("original_roster_status") == "pending_admission" and record.get("effective_roster_status") == "complete_master_active":
+            replaced = str(record.get("replaces_model_key", "")).strip()
+            if replaced and replaced in effective:
+                effective[replaced]["effective_roster_status"] = "complete_master_excluded"
+    return effective
+
+
+def summary_sort_key(row: dict[str, object]) -> tuple[int, float, str]:
+    reader_type = str(row.get("reader_type", ""))
+    excluded = str(row.get("excluded", "")).lower() == "true"
+    score = float(parse_score_fraction(str(row.get("score2000", "0"))))
+    if reader_type == "human":
+        return (0, 0.0, str(row.get("display_name", "")))
+    if not excluded:
+        return (1, -score, str(row.get("display_name", "")))
+    return (2, -score, str(row.get("display_name", "")))
+
+
+def summarize_score_rows(score_rows: list[dict[str, object]], human_presentation: str, human_order: list[str]) -> list[dict[str, object]]:
+    model_groups: dict[str, list[dict[str, object]]] = {}
+    human_rows: list[dict[str, object]] = []
+    for row in score_rows:
+        if row.get("reader_type") == "human":
+            human_rows.append(row)
+        else:
+            model_groups.setdefault(str(row.get("model_key", "")), []).append(row)
+
+    summaries: list[dict[str, object]] = []
+    for model_key, rows in sorted(model_groups.items(), key=lambda item: str(item[1][0].get("display_name", ""))):
+        score = sum(Fraction(int(row["score1000_component"])) for row in rows)
+        first = rows[0]
+        summaries.append({
+            "comparator_key": model_key,
+            "display_name": first.get("display_name", model_key),
+            "reader_type": "model",
+            "presentation_type": "model",
+            "roster_status": first.get("roster_status", ""),
+            "effective_roster_status": first.get("effective_roster_status", ""),
+            "excluded": first.get("excluded", ""),
+            "is_active": first.get("is_active", ""),
+            "case_rows": len(rows),
+            "effective_n": len({str(row.get(CASE_KEY, "")) for row in rows}),
+            "score1000": format_fraction(score),
+            "score2000": format_fraction(score + 1000),
+            "correct_rows": sum(1 for row in rows if int(row["score1000_component"]) > 0),
+            "incorrect_rows": sum(1 for row in rows if int(row["score1000_component"]) < 0),
+            "zero_rows": sum(1 for row in rows if int(row["score1000_component"]) == 0),
+        })
+
+    if human_rows:
+        by_label: dict[str, list[dict[str, object]]] = {}
+        for row in human_rows:
+            by_label.setdefault(str(row.get("model_blinded", "")), []).append(row)
+        labels = [label for label in human_order if label in by_label]
+        extra_labels = sorted(set(by_label) - set(labels), key=candidate_label_sort_key)
+        labels.extend(extra_labels)
+        if len(labels) != 12:
+            raise ValidationError(f"human projection requires 12 human readers, got {len(labels)}")
+        groups: list[tuple[str, str, list[str], int]]
+        if human_presentation == "pooled12":
+            groups = [("human_pooled12", "Human Expert Baseline", labels, 12)]
+        elif human_presentation == "split6x6":
+            groups = [
+                ("human_group_1", "Human Expert Group 1", labels[:6], 6),
+                ("human_group_2", "Human Expert Group 2", labels[6:], 6),
+            ]
+        else:
+            raise ValidationError(f"unsupported human presentation: {human_presentation}")
+        for comparator_key, display_name, group_labels, divisor in groups:
+            rows = [row for label in group_labels for row in by_label[label]]
+            score = sum(Fraction(int(row["score1000_component"])) for row in rows) / divisor
+            summaries.append({
+                "comparator_key": comparator_key,
+                "display_name": display_name,
+                "reader_type": "human",
+                "presentation_type": human_presentation,
+                "roster_status": "human_reader",
+                "effective_roster_status": "human_reader",
+                "excluded": "false",
+                "is_active": "true",
+                "case_rows": len(rows),
+                "effective_n": len({str(row.get(CASE_KEY, "")) for row in rows}),
+                "score1000": format_fraction(score),
+                "score2000": format_fraction(score + 1000),
+                "correct_rows": sum(1 for row in rows if int(row["score1000_component"]) > 0),
+                "incorrect_rows": sum(1 for row in rows if int(row["score1000_component"]) < 0),
+                "zero_rows": sum(1 for row in rows if int(row["score1000_component"]) == 0),
+            })
+
+    ordered = sorted(summaries, key=summary_sort_key)
+    for index, row in enumerate(ordered, start=1):
+        row["display_order"] = index
+    return ordered
+
+
+def build_group_summary(summary_rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    groups: dict[str, list[dict[str, object]]] = {}
+    for row in summary_rows:
+        if row.get("reader_type") == "human":
+            key = "human"
+        elif str(row.get("excluded", "")).lower() == "true":
+            key = "excluded_model"
+        else:
+            key = "active_model"
+        groups.setdefault(key, []).append(row)
+    out: list[dict[str, object]] = []
+    for key in ["human", "active_model", "excluded_model"]:
+        rows = groups.get(key, [])
+        if rows:
+            score1000_mean = sum(parse_score_fraction(str(row["score1000"])) for row in rows) / len(rows)
+            score2000_mean = sum(parse_score_fraction(str(row["score2000"])) for row in rows) / len(rows)
+        else:
+            score1000_mean = Fraction(0)
+            score2000_mean = Fraction(0)
+        out.append({
+            "group": key,
+            "comparator_count": len(rows),
+            "row_count": sum(int(row.get("case_rows", 0)) for row in rows),
+            "active_count": sum(1 for row in rows if str(row.get("is_active", "")).lower() == "true"),
+            "excluded_count": sum(1 for row in rows if str(row.get("excluded", "")).lower() == "true"),
+            "score1000_mean": format_fraction(score1000_mean),
+            "score2000_mean": format_fraction(score2000_mean),
+        })
+    return out
+
+
+def build_panel_bins(summary_rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    bins = [
+        ("negative", None, -1),
+        ("zero", 0, 0),
+        ("1_to_250", 1, 250),
+        ("251_to_500", 251, 500),
+        ("501_to_750", 501, 750),
+        ("751_to_1000", 751, 1000),
+    ]
+    out: list[dict[str, object]] = []
+    for name, lower, upper in bins:
+        rows: list[dict[str, object]] = []
+        for row in summary_rows:
+            score = parse_score_fraction(str(row["score1000"]))
+            if lower is None:
+                in_bin = score < 0
+            else:
+                in_bin = Fraction(lower) <= score <= Fraction(upper)
+            if in_bin:
+                rows.append(row)
+        out.append({
+            "bin": name,
+            "lower_inclusive": "" if lower is None else lower,
+            "upper_inclusive": upper,
+            "comparator_count": len(rows),
+            "active_count": sum(1 for row in rows if str(row.get("is_active", "")).lower() == "true"),
+            "excluded_count": sum(1 for row in rows if str(row.get("excluded", "")).lower() == "true"),
+        })
+    return out
+
+
+def build_idk0_score_lane(
+    *,
+    committed_root: Path,
+    output_root: Path,
+    human_presentation: str,
+    roster_path: Path | None = None,
+    states_path: Path | None = None,
+) -> dict[str, Any]:
+    if output_root.exists() and any(output_root.iterdir()):
+        raise ValidationError(f"IDK0 lane output root already exists and is not empty: {output_root}")
+    committed_audit = audit_finalized_admission(committed_root, require_committed=True)
+    append_manifest = read_json(committed_root / "append_manifest.json")
+    final_master = committed_root / str(append_manifest.get("outputs", {}).get("final_long_master", ""))
+    if not final_master.exists():
+        raise ValidationError("committed final master missing for IDK0 lane")
+    roster_source = roster_path or (committed_root / "roster" / "model_roster.json")
+    if not roster_source.exists():
+        raise ValidationError(f"roster missing for IDK0 lane: {roster_source}")
+    states_source = states_path or Path("config/radle_v2_terminal_states.json")
+    fields, rows = read_csv_table(final_master)
+    require_columns(fields, [CASE_KEY, "model_blinded", "model_key", "reader_type", "likert", "final_score", "terminal_state"], "final master")
+    roster = read_json(roster_source)
+    zero_states = terminal_zero_states(states_source)
+    present_model_keys = {str(row.get("model_key", "")) for row in rows if str(row.get("reader_type", "")).strip() == "model"}
+    effective_roster = build_effective_model_roster(roster, present_model_keys)
+    missing_models = sorted(present_model_keys - set(effective_roster))
+    if missing_models:
+        raise ValidationError(f"model rows missing from roster: {missing_models}")
+    human_order = human_label_order(roster)
+
+    score_rows: list[dict[str, object]] = []
+    for row in sorted(rows, key=lambda item: (case_sort_key(item.get(CASE_KEY, "")), candidate_label_sort_key(item.get("model_blinded", "Candidate ZZ")))):
+        reader_type = str(row.get("reader_type", "")).strip() or "model"
+        model_key = str(row.get("model_key", "")).strip()
+        model_blinded = str(row.get("model_blinded", "")).strip()
+        display_name = row.get("model_name", "") or model_key or model_blinded
+        roster_status = ""
+        effective_status = ""
+        excluded = False
+        active = False
+        human_group = ""
+        if reader_type == "human":
+            roster_status = "human_reader"
+            effective_status = "human_reader"
+            active = True
+            if human_order and model_blinded in human_order:
+                index = human_order.index(model_blinded)
+                human_group = "human_group_1" if index < 6 else "human_group_2"
+        else:
+            record = effective_roster[model_key]
+            display_name = str(record.get("display_name", display_name))
+            roster_status = str(record.get("original_roster_status", record.get("roster_status", "")))
+            effective_status = str(record.get("effective_roster_status", roster_status))
+            excluded = effective_status != "complete_master_active"
+            active = not excluded
+        score_rows.append({
+            "Master_Case_ID": row.get(CASE_KEY, ""),
+            "model_blinded": model_blinded,
+            "model_key": model_key,
+            "display_name": display_name,
+            "reader_type": reader_type,
+            "roster_status": roster_status,
+            "effective_roster_status": effective_status,
+            "excluded": str(excluded).lower(),
+            "is_active": str(active).lower(),
+            "human_panel_group": human_group,
+            "likert": row.get("likert", ""),
+            "final_score": row.get("final_score", ""),
+            "final_score_source": row.get("final_score_source", ""),
+            "terminal_state": row.get("terminal_state", ""),
+            "score1000_component": score1000_component(row, zero_states),
+            "admission_id": row.get("admission_id", ""),
+        })
+
+    summary_rows = summarize_score_rows(score_rows, human_presentation, human_order)
+    panel_order = [row for row in summary_rows if str(row.get("excluded", "")).lower() != "true"]
+    for row in panel_order:
+        if str(row.get("is_active", "")).lower() != "true":
+            raise ValidationError("panel order contains inactive comparator")
+    group_summary = build_group_summary(summary_rows)
+    panel_bins = build_panel_bins(summary_rows)
+
+    output_root.mkdir(parents=True, exist_ok=True)
+    write_csv_table(output_root / "score_rows.csv", IDK0_SCORE_ROW_FIELDS, score_rows)
+    write_csv_table(output_root / "source1000.csv", IDK0_SUMMARY_FIELDS, summary_rows)
+    write_csv_table(output_root / "public_candidate_summary.csv", IDK0_SUMMARY_FIELDS, summary_rows)
+    write_csv_table(output_root / "panel_order.csv", IDK0_SUMMARY_FIELDS, panel_order)
+    write_csv_table(output_root / "group_summary.csv", IDK0_GROUP_FIELDS, group_summary)
+    write_csv_table(output_root / "panel_bins.csv", IDK0_PANEL_BIN_FIELDS, panel_bins)
+
+    manifest = {
+        "schema_version": "radle_v2_idk0_score_lane.v1",
+        "committed_root": str(committed_root.resolve()),
+        "finalization_id": committed_audit.get("finalization_id"),
+        "human_presentation": human_presentation,
+        "inputs": {
+            "append_manifest_sha256": sha256_file(committed_root / "append_manifest.json"),
+            "committed_sha256": sha256_file(committed_root / "COMMITTED.json"),
+            "final_master_sha256": sha256_file(final_master),
+            "roster_sha256": sha256_file(roster_source),
+            "terminal_states_sha256": sha256_file(states_source),
+        },
+        "counts": {
+            "final_master_rows": len(rows),
+            "score_rows": len(score_rows),
+            "complete_model_count": len(present_model_keys),
+            "active_model_count": sum(1 for row in summary_rows if row.get("reader_type") == "model" and str(row.get("excluded", "")).lower() != "true"),
+            "excluded_model_count": sum(1 for row in summary_rows if row.get("reader_type") == "model" and str(row.get("excluded", "")).lower() == "true"),
+            "human_backend_readers": len({row["model_blinded"] for row in score_rows if row.get("reader_type") == "human"}),
+            "presentation_comparators": len(summary_rows),
+            "panel_comparators": len(panel_order),
+            "active_score_rows": sum(1 for row in score_rows if str(row.get("is_active", "")).lower() == "true"),
+        },
+        "outputs": {
+            "score_rows": {"path": "score_rows.csv", "sha256": sha256_file(output_root / "score_rows.csv")},
+            "source1000": {"path": "source1000.csv", "sha256": sha256_file(output_root / "source1000.csv")},
+            "public_candidate_summary": {"path": "public_candidate_summary.csv", "sha256": sha256_file(output_root / "public_candidate_summary.csv")},
+            "panel_order": {"path": "panel_order.csv", "sha256": sha256_file(output_root / "panel_order.csv")},
+            "group_summary": {"path": "group_summary.csv", "sha256": sha256_file(output_root / "group_summary.csv")},
+            "panel_bins": {"path": "panel_bins.csv", "sha256": sha256_file(output_root / "panel_bins.csv")},
+        },
+    }
+    write_json(output_root / "score_lane_manifest.json", manifest)
+    return {
+        "result": "PASS",
+        "lane_root": str(output_root.resolve()),
+        "finalization_id": committed_audit.get("finalization_id"),
+        "counts": manifest["counts"],
+    }
+
+
+def audit_idk0_score_lane(lane_root: Path) -> dict[str, Any]:
+    manifest_path = lane_root / "score_lane_manifest.json"
+    if not manifest_path.exists():
+        raise ValidationError("score_lane_manifest.json missing")
+    manifest = read_json(manifest_path)
+    outputs = manifest.get("outputs", {})
+    for name, descriptor in outputs.items():
+        path = lane_root / str(descriptor.get("path", ""))
+        if not path.exists():
+            raise ValidationError(f"IDK0 lane output missing: {name}")
+        if sha256_file(path) != descriptor.get("sha256"):
+            raise ValidationError(f"IDK0 lane output SHA mismatch: {name}")
+    summary_fields, summary_rows = read_csv_table(lane_root / "public_candidate_summary.csv")
+    require_columns(summary_fields, IDK0_SUMMARY_FIELDS, "public candidate summary")
+    prohibited_public = {"diagnosis", "Ground_Truth_Diagnosis", "Reasoning", "Raw_Response", "Associated_Images", "Image_SHA256", "source_file"}
+    if prohibited_public & set(summary_fields):
+        raise ValidationError(f"public candidate summary leaks prohibited columns: {sorted(prohibited_public & set(summary_fields))}")
+    orders = [int(row["display_order"]) for row in summary_rows]
+    if orders != list(range(1, len(summary_rows) + 1)):
+        raise ValidationError("public candidate summary display_order is not contiguous")
+    for row in summary_rows:
+        score1000 = parse_score_fraction(row["score1000"])
+        score2000 = parse_score_fraction(row["score2000"])
+        if score2000 != score1000 + 1000:
+            raise ValidationError(f"score2000 shift mismatch for {row.get('comparator_key')}")
+    panel_fields, panel_rows = read_csv_table(lane_root / "panel_order.csv")
+    require_columns(panel_fields, IDK0_SUMMARY_FIELDS, "panel order")
+    for row in panel_rows:
+        if row.get("excluded") == "true":
+            raise ValidationError("panel_order contains excluded comparator")
+    counts = manifest.get("counts", {})
+    if int(counts.get("score_rows", -1)) != sum(1 for _ in read_csv_table(lane_root / "score_rows.csv")[1]):
+        raise ValidationError("manifest score_rows count mismatch")
+    if int(counts.get("presentation_comparators", -1)) != len(summary_rows):
+        raise ValidationError("manifest presentation comparator count mismatch")
+    if int(counts.get("panel_comparators", -1)) != len(panel_rows):
+        raise ValidationError("manifest panel comparator count mismatch")
+    return {
+        "result": "PASS",
+        "phase": "idk0-lane",
+        "finalization_id": manifest.get("finalization_id"),
+        "counts": counts,
     }
 
 

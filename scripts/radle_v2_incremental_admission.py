@@ -13,6 +13,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from radle_incremental_admission import ValidationError, sha256_file, validate_configs
 from radle_incremental_admission import (
+    build_idk0_score_lane,
     commit_finalized_admission,
     finalize_incremental_admission,
     prepare_incremental_admission,
@@ -95,6 +96,20 @@ def _cmd_commit(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_build_idk0_lane(args: argparse.Namespace) -> int:
+    receipt = build_idk0_score_lane(
+        committed_root=Path(args.committed_root),
+        output_root=Path(args.output_root),
+        human_presentation=args.human_presentation,
+        roster_path=Path(args.roster) if args.roster else None,
+        states_path=Path(args.states),
+    )
+    print(json.dumps(receipt, indent=2, sort_keys=True))
+    print(f"IDK0_LANE_ROOT={receipt['lane_root']}")
+    print("IDK0_RESULT=PASS")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="RadLE v2 incremental admission utilities")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -134,6 +149,14 @@ def build_parser() -> argparse.ArgumentParser:
     commit = subparsers.add_parser("commit", help="mark a finalized admission committed")
     commit.add_argument("--final-staging-root", required=True)
     commit.set_defaults(func=_cmd_commit)
+
+    idk0 = subparsers.add_parser("build-idk0-lane", help="derive dynamic IDK0 Score1000/Score2000 lane outputs")
+    idk0.add_argument("--committed-root", required=True)
+    idk0.add_argument("--output-root", required=True)
+    idk0.add_argument("--human-presentation", choices=["pooled12", "split6x6"], required=True)
+    idk0.add_argument("--roster")
+    idk0.add_argument("--states", default="config/radle_v2_terminal_states.json")
+    idk0.set_defaults(func=_cmd_build_idk0_lane)
     return parser
 
 
