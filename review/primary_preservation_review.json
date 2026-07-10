@@ -1,0 +1,321 @@
+{
+  "schema_version": "radle_v2_primary_preservation_review.v1",
+  "reviewed_at_utc": "2026-07-10T07:15:28.9664720Z",
+  "reviewer": {
+    "identity": "OpenAI Codex independent preservation reviewer",
+    "independent": true,
+    "authorship_statement": "The reviewer did not author commits 441b25a, a9e7115, or ee1ea49 and performed this review from repository and filesystem evidence.",
+    "mutation_scope": "Only review/primary_preservation_review.json was written. Preserved files, manifest, ledger, history, source primary checkout, and incremental comparison checkout were not modified."
+  },
+  "reviewed_target": {
+    "worktree": "C:\\tmp\\radle_v2_primary_preservation",
+    "branch": "codex/radle-v2-primary-preservation",
+    "head": "ee1ea491711c7399040db2e8c2cbd6ace94a288d",
+    "base": "8c9de277631813172b391e685e772feccab9de28",
+    "source_root": "C:\\Users\\thehb\\Documents\\RadLE v2",
+    "source_branch": "codex/radle-v2-handwritten-panels",
+    "source_head": "8c9de277631813172b391e685e772feccab9de28",
+    "incremental_root": "C:\\tmp\\radle_v2_incremental_admission",
+    "incremental_head": "77dbfb042f9ee58717204b28803a56a8b2509b56",
+    "manifest_metadata_matches_current_inputs": true
+  },
+  "reviewed_commits": [
+    {
+      "short_sha": "441b25a",
+      "sha": "441b25aa088960d38b56e86af96820c7e5891cdb",
+      "parent": "8c9de277631813172b391e685e772feccab9de28",
+      "subject": "Preserve IDK0 panel core and assets",
+      "changed_path_count": 49,
+      "selected_preservation_path_count": 49,
+      "control_path_count": 0,
+      "required_scope": "panel_core_assets",
+      "scope_exact_match": true,
+      "delete_count": 0
+    },
+    {
+      "short_sha": "a9e7115",
+      "sha": "a9e71151fc029f1dfa7f3a6037a7c8df09a83331",
+      "parent": "441b25aa088960d38b56e86af96820c7e5891cdb",
+      "subject": "Preserve panel experiments and plans",
+      "changed_path_count": 13,
+      "selected_preservation_path_count": 13,
+      "control_path_count": 0,
+      "required_scope": "panel_experiments_docs",
+      "scope_exact_match": true,
+      "delete_count": 0
+    },
+    {
+      "short_sha": "ee1ea49",
+      "sha": "ee1ea491711c7399040db2e8c2cbd6ace94a288d",
+      "parent": "a9e71151fc029f1dfa7f3a6037a7c8df09a83331",
+      "subject": "Preserve runtime documents and replaced-model evidence",
+      "changed_path_count": 25,
+      "selected_preservation_path_count": 20,
+      "control_path_count": 5,
+      "required_scope": "runtime_document_changes plus preservation controls",
+      "scope_exact_match": true,
+      "delete_count": 0
+    }
+  ],
+  "commit_scope_proof": {
+    "linear_parent_chain_matches": true,
+    "commit_path_sets_are_disjoint": true,
+    "selected_paths_across_commits": 82,
+    "preservation_control_paths": [
+      "notebooks/archive/replaced_models/README.md",
+      "notebooks/archive/replaced_models/RadLE_v1_5_Morning_Claude_4_8_Opus_200.ipynb",
+      "preservation/branch_evidence_ledger.json",
+      "preservation/primary_worktree_manifest.json",
+      "scripts/preserve_primary_worktree.py"
+    ],
+    "total_unique_changed_paths": 87,
+    "unexpected_paths": [],
+    "unexpected_deletes": []
+  },
+  "verify_only": {
+    "command": "python -B scripts\\preserve_primary_worktree.py --source \"C:\\Users\\thehb\\Documents\\RadLE v2\" --incremental \"C:\\tmp\\radle_v2_incremental_admission\" --destination \"C:\\tmp\\radle_v2_primary_preservation\" --manifest \"C:\\tmp\\radle_v2_primary_preservation\\preservation\\primary_worktree_manifest.json\" --verify-only",
+    "exit_code": 0,
+    "stdout": "PRESERVATION_RESULT=PASS paths=82 am_paths=5"
+  },
+  "manifest": {
+    "path": "preservation/primary_worktree_manifest.json",
+    "schema_version": "radle_v2_primary_preservation_manifest.v1",
+    "sha256": "61762a5d4af92911e15311a6948203024286629b4ac86383dd5ac4825a8c2b3e",
+    "counts": {
+      "primary_only_changed_path_count": 74,
+      "selected_path_count": 82
+    },
+    "classification_counts": {
+      "panel_core_assets": 49,
+      "panel_experiments_docs": 13,
+      "runtime_document_changes": 20
+    },
+    "counts_rederived_from_current_source_and_incremental_trees": true,
+    "entry_set_matches_rederived_selection": true,
+    "all_source_working_hashes_match_manifest": true,
+    "all_destination_working_hashes_match_manifest": true,
+    "source_to_destination_hash_matches": 82,
+    "hash_mismatches": []
+  },
+  "am_verification": {
+    "expected_count": 5,
+    "actual_count": 5,
+    "manifest_path_set_matches_source_am_path_set": true,
+    "all_have_staged_blob_hash": true,
+    "all_have_staged_sha256": true,
+    "all_have_working_sha256": true,
+    "all_working_sha256_differ_from_staged_sha256": true,
+    "paths": [
+      {
+        "path": "Documents/execplan_radle_v2_idk0_score2000_svg_lane.md",
+        "staged_blob_hash": "2f7a208070720f00a787064f9c40a7f6bc26e46c",
+        "staged_sha256": "6CE6A2123A731362A1D49B68AB55F3B349CAFD121B1E1E50A26210F415061044",
+        "working_sha256": "70F0DE741C16BED0AA9B0CB5C72056F3605BDC4D84DAF22CE0AA38BDB0B91FF2",
+        "differ": true
+      },
+      {
+        "path": "scripts/assets/radle_score1000_logos/human_logo_sources.json",
+        "staged_blob_hash": "231e0c68bdd8fdd5ed07f56d09ba2805c78046c0",
+        "staged_sha256": "3DD35AC1A8C77BFC7129DB6318B2E22C6058AFC36FE3BF67C7427FCA3282A14A",
+        "working_sha256": "917AADF64EBDCA352D284B298951838ECBA4E91691C25168B0525D49F2B53029",
+        "differ": true
+      },
+      {
+        "path": "scripts/audit_radle_v2_score1000_panel23_IDK0.py",
+        "staged_blob_hash": "b1d49bf2e7be9eae5294ab24eeb35103de9be6c9",
+        "staged_sha256": "55904490E910B0820FB82372EA9D54EA405E7423810292BB425110AFD989AE3F",
+        "working_sha256": "356AF97FCFE10B5781A6855DD5833B59FE58435F570B723120AB8A72D9F2280B",
+        "differ": true
+      },
+      {
+        "path": "scripts/make_radle_v2_score1000_panel23_svg_IDK0.py",
+        "staged_blob_hash": "87e1637f93a7b38872e2b74c41beb510b74e4850",
+        "staged_sha256": "412D8F2F5B0AC7CA3C4C2F29A2A29CE40C500B170D4CF80ED9CF298043824A35",
+        "working_sha256": "5A4434103DFC3E50E0837668B97A44EBF6FAAD1A929570DA3229FF08A86670C7",
+        "differ": true
+      },
+      {
+        "path": "scripts/make_radle_v2_score1000_panel5_logo_placement_contact_sheet_IDK0.py",
+        "staged_blob_hash": "d0796bf75ec0d79ed3a6e1c66ccfee9229b2b3f1",
+        "staged_sha256": "2DF79A50ABFDADA8B2016C327A344E73F0CDE7AC564D2F258C3ED4CC2578986D",
+        "working_sha256": "D91A818ADCC5066F4978E50A047182AC7727A2AE9DDDAE24BAEF700824D84464",
+        "differ": true
+      }
+    ]
+  },
+  "exclusions": {
+    "manifest_exact_match": true,
+    "paths": [
+      ".claude/settings.local.json",
+      "Documents/execplan_radle_v2_incremental_model_admission.md",
+      "src/radle_benchmark.py",
+      "src/radle_meta_model_api_runtime.py"
+    ],
+    "local_settings_path": ".claude/settings.local.json",
+    "stale_primary_copies": [
+      "Documents/execplan_radle_v2_incremental_model_admission.md",
+      "src/radle_benchmark.py",
+      "src/radle_meta_model_api_runtime.py"
+    ],
+    "all_present_in_source_change_inventory": true,
+    "all_absent_from_three_commit_diff": true
+  },
+  "non_duplication": {
+    "paths_owned_by_incremental_lane": [
+      "Documents/radle_v2_incremental_model_pipeline_requirements_study.md",
+      "Documents/requirements_radle_v2_incremental_model_admission.md",
+      "notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb"
+    ],
+    "all_present_in_incremental_head": true,
+    "all_absent_from_manifest_entries": true,
+    "all_absent_from_preservation_branch_tree": true,
+    "all_absent_from_three_commit_diff": true,
+    "needless_duplication_detected": false
+  },
+  "archive_blob_proof": {
+    "path": "notebooks/archive/replaced_models/RadLE_v1_5_Morning_Claude_4_8_Opus_200.ipynb",
+    "expected_blob": "4295ae9dc8f97595b791f2063e6da89b17405bb6",
+    "head_tree_blob": "4295ae9dc8f97595b791f2063e6da89b17405bb6",
+    "working_tree_hash_object": "4295ae9dc8f97595b791f2063e6da89b17405bb6",
+    "git_object_type": "blob",
+    "historical_source": "5337c11^:notebooks/RadLE_v1_5_Morning_Claude_4_8_Opus_200.ipynb",
+    "historical_source_blob": "4295ae9dc8f97595b791f2063e6da89b17405bb6",
+    "all_blob_ids_match": true,
+    "valid_json": true,
+    "nbformat": 4,
+    "nbformat_minor": 0,
+    "cell_count": 9
+  },
+  "ledger_proof": {
+    "path": "preservation/branch_evidence_ledger.json",
+    "schema_version": "radle_v2_branch_evidence_ledger.v1",
+    "whole_branch_merge_allowed": false,
+    "required_selective_sources": [
+      {
+        "commit": "0931b0c",
+        "classification": "statistics_and_summary_repairs",
+        "policy": "selective_import_only",
+        "verified": true
+      },
+      {
+        "commit": "071d6ec",
+        "classification": "lingshu_invalid_likert_guardrail",
+        "policy": "selective_import_only",
+        "verified": true
+      }
+    ],
+    "required_entries_match": true
+  },
+  "deletion_and_cleanliness": {
+    "unexpected_deletes": [],
+    "three_commit_stack_has_no_deletes": true,
+    "source_status_has_no_deletes": true,
+    "branch_clean_before_receipt_write": true,
+    "pre_receipt_git_status_porcelain_empty": true,
+    "pre_receipt_git_diff_exit_code": 0,
+    "pre_receipt_git_diff_cached_exit_code": 0,
+    "pre_receipt_git_diff_check_exit_code": 0,
+    "pre_receipt_git_diff_cached_check_exit_code": 0,
+    "post_receipt_tracked_diff_clean": true,
+    "post_receipt_git_diff_check_exit_code": 0,
+    "post_receipt_git_diff_cached_check_exit_code": 0,
+    "post_receipt_only_expected_untracked_path": "review/primary_preservation_review.json"
+  },
+  "command_log": [
+    {
+      "id": "initial_clean_branch",
+      "cwd": "C:\\tmp\\radle_v2_primary_preservation",
+      "command": "git status --short --branch",
+      "exit_code": 0,
+      "result": "Branch codex/radle-v2-primary-preservation; no path entries."
+    },
+    {
+      "id": "head_and_commit_stack",
+      "cwd": "C:\\tmp\\radle_v2_primary_preservation",
+      "command": "git rev-parse --show-toplevel HEAD; git branch --show-current; git log --oneline --decorate --graph -8",
+      "exit_code": 0,
+      "result": "HEAD ee1ea491711c7399040db2e8c2cbd6ace94a288d with linear predecessors a9e7115 and 441b25a."
+    },
+    {
+      "id": "commit_scopes",
+      "cwd": "C:\\tmp\\radle_v2_primary_preservation",
+      "command": "git show --no-renames --format=fuller --stat --summary <441b25a|a9e7115|ee1ea49>",
+      "exit_code": 0,
+      "result": "Path counts 49, 13, and 25; independent set assertions matched 49 panel core, 13 panel experiments, 20 runtime paths, and five preservation controls."
+    },
+    {
+      "id": "verify_only",
+      "cwd": "C:\\tmp\\radle_v2_primary_preservation",
+      "command": "python -B scripts\\preserve_primary_worktree.py --source \"C:\\Users\\thehb\\Documents\\RadLE v2\" --incremental \"C:\\tmp\\radle_v2_incremental_admission\" --destination \"C:\\tmp\\radle_v2_primary_preservation\" --manifest \"C:\\tmp\\radle_v2_primary_preservation\\preservation\\primary_worktree_manifest.json\" --verify-only",
+      "exit_code": 0,
+      "result": "PRESERVATION_RESULT=PASS paths=82 am_paths=5"
+    },
+    {
+      "id": "independent_inventory_hash_scope_audit",
+      "cwd": "C:\\tmp\\radle_v2_primary_preservation",
+      "command": "PowerShell environment-backed embedded Python audit: python -B -c \"import os; exec(os.environ['PYTHON_AUDIT'])\" with command-local core.excludesFile=/dev/null and exact safe.directory overrides",
+      "exit_code": 0,
+      "result": "PASS: re-derived 74 primary-only and 82 selected paths; exact 49/13/20 classes; exact commit scopes; 82 source/destination hash matches; five AM stage/work hash differences; exclusions, non-duplication, archive, ledger, deletes, and pre-receipt cleanliness all passed."
+    },
+    {
+      "id": "archive_blob_and_json",
+      "cwd": "C:\\tmp\\radle_v2_primary_preservation",
+      "command": "git ls-tree HEAD -- <archive>; git hash-object <archive>; git cat-file -t 4295ae9...; git rev-parse 5337c11^:<historical-path>; python -B -c <json-parse>",
+      "exit_code": 0,
+      "result": "All Git blob proofs returned 4295ae9dc8f97595b791f2063e6da89b17405bb6; object type blob; JSON valid, nbformat 4.0, nine cells."
+    },
+    {
+      "id": "non_duplication_tree_and_diff",
+      "cwd": "C:\\tmp\\radle_v2_primary_preservation",
+      "command": "git ls-tree -r --name-only HEAD -- <two requirements paths and Meta notebook>; git diff --name-status 8c9de27..HEAD -- <same paths>",
+      "exit_code": 0,
+      "result": "No output: the three incremental-owned paths are absent from both preservation HEAD and the preservation commit diff."
+    },
+    {
+      "id": "manifest_input_metadata",
+      "cwd": "C:\\tmp\\radle_v2_primary_preservation",
+      "command": "PowerShell Compare manifest source_root/source_branch/source_head/incremental_comparison_head to current git rev-parse and branch outputs using exact safe.directory overrides",
+      "exit_code": 0,
+      "result": "Metadata match true; source 8c9de277631813172b391e685e772feccab9de28 and incremental 77dbfb042f9ee58717204b28803a56a8b2509b56."
+    },
+    {
+      "id": "post_receipt_json_and_git_checks",
+      "cwd": "C:\\tmp\\radle_v2_primary_preservation",
+      "command": "python -B -m json.tool review\\primary_preservation_review.json; git diff --exit-code; git diff --cached --exit-code; git diff --check; git diff --cached --check; git status --porcelain=v1 --untracked-files=all",
+      "exit_code": 0,
+      "result": "JSON valid; tracked and cached diffs clean; diff checks clean; only expected untracked receipt path present."
+    }
+  ],
+  "non_evidentiary_harness_failures": [
+    {
+      "attempt": "Direct Python -c embedded audit",
+      "exit_code": 1,
+      "reason": "PowerShell native argument reconstruction stripped inner Python quotes and caused SyntaxError before checks ran.",
+      "filesystem_changes": false
+    },
+    {
+      "attempt": "Environment-backed audit using core.excludesFile=NUL",
+      "exit_code": 1,
+      "reason": "Git for Windows rejected NUL as an exclude file before checks ran.",
+      "filesystem_changes": false
+    },
+    {
+      "attempt": "Environment-backed audit using /dev/null without safe.directory override",
+      "exit_code": 1,
+      "reason": "The sandbox execution identity triggered Git dubious-ownership protection before checks ran.",
+      "filesystem_changes": false
+    },
+    {
+      "attempt": "Environment-backed audit using /dev/null and exact command-local safe.directory overrides",
+      "exit_code": 0,
+      "reason": "Successful final independent audit harness.",
+      "filesystem_changes": false
+    }
+  ],
+  "findings": [],
+  "blocking_findings": [],
+  "verdict": {
+    "status": "pass",
+    "rationale": "All required preservation checks passed. The branch and three-commit stack are exact and delete-free; the manifest inventory and classifications independently re-derive to 74 primary-only and 82 selected paths with 49/13/20 classifications; all 82 destination files match current source working SHA256 values; all five AM paths retain distinct staged and newer working hashes; required exclusions and incremental-owned non-duplication are correct; the archived Opus notebook matches Git blob 4295ae9dc8f97595b791f2063e6da89b17405bb6 and is valid JSON; the evidence ledger records 0931b0c and 071d6ec as selective-import-only; and Git tracked diff/check state remains clean apart from this requested untracked receipt."
+  }
+}
