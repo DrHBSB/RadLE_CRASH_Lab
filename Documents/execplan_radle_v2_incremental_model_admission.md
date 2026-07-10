@@ -18,7 +18,7 @@ Success is observable when each committed admission has a sealed input manifest,
 
 ## Current State
 
-Current state (2026-07-10 05:28 +05:30, Codex/GPT-5): Milestone 6 dynamic IDK0 Score1000/Score2000 lane is implemented, validated, and committed as `7c19c8b`. The CLI now supports `build-idk0-lane`; the audit CLI supports `--phase idk0-lane`; synthetic tests prove replacement/exclusion, pooled12 and split6x6 human projections, Score2000 shift, public-summary privacy shape, active-only panel order, and non-overwrite output roots. Next: perform Milestone 7 external-results gate when real Grok/GPT/Muse packages are downloaded and sealed; meanwhile, branch-consolidation scouting could not launch because the subagent thread limit was reached.
+Current state (2026-07-10 05:28 +05:30, Codex/GPT-5): Milestone 6 dynamic IDK0 Score1000/Score2000 lane is implemented, validated, and committed as `7c19c8b`. The CLI now supports `build-idk0-lane`; the audit CLI supports `--phase idk0-lane`; synthetic tests prove replacement/exclusion, pooled12 and split6x6 human projections, Score2000 shift, public-summary privacy shape, active-only panel order, and non-overwrite output roots. Next: perform Milestone 7 external-results gate when real Grok/GPT/Muse packages are downloaded and sealed. Extra subagent waves could not launch because the thread agent limit was reached, so branch consolidation was scouted locally and read-only instead.
 
 ## Locked Facts
 
@@ -190,6 +190,10 @@ Current state (2026-07-10 05:28 +05:30, Codex/GPT-5): Milestone 6 dynamic IDK0 S
   Evidence: `Set-Content` and `New-Item` failed on the generated path; `py -3.11 -c ... Path.write_text(...)` wrote the scratch radiologist overlay used for the CLI receipt.
   Date/Author: 2026-07-10, Codex/GPT-5
 
+- Observation: adjacent branch consolidation must be file-level, not branch-level. `codex/radle-v2-handwritten-panels` has a potentially useful `0931b0c` stats commit adding `scripts/radle_metrics.py`, `scripts/radle_v2_finalize_summaries.py`, and `scripts/summary_*.py`, but the branch diff would also delete this plan, configs, incremental scripts, and runtime notebooks. Runtime smoke branches contain useful Grok/GPT/Meta runtime commits but also long LLaVA/Ollama history.
+  Evidence: `git show --name-status 0931b0c`, `git show --name-status 8c9de27`, and `git diff --name-status codex/radle-v2-incremental-admission..codex/radle-v2-handwritten-panels -- scripts src config Documents notebooks`.
+  Date/Author: 2026-07-10, Codex/GPT-5
+
 ## Decision Log
 
 - Decision: use transaction states distinct from roster status: `intake_prepared`, `adjudication_pending`, `radiologist_pending`, `precommit_validated`, and `final_master_committed`.
@@ -276,6 +280,10 @@ Current state (2026-07-10 05:28 +05:30, Codex/GPT-5): Milestone 6 dynamic IDK0 S
   Rationale: this matches the locked requirement that human storage remains individual while pooled12 or split6x6 is a downstream presentation decision.
   Date/Author: 2026-07-10, Codex/GPT-5
 
+- Decision: do not merge `codex/radle-v2-handwritten-panels`, Grok/GPT smoke branches, Meta Muse branches, or LLaVA runtime branches wholesale into incremental admission.
+  Rationale: needed runtime blobs have already been copied and reviewed; future stats/panel imports should be selected by exact file path/commit after review because adjacent branches contain unrelated histories and, in the handwritten branch, deletions of current incremental-admission files.
+  Date/Author: 2026-07-10, Codex/GPT-5
+
 ## Revision Notes
 
 - v1 (2026-07-10 03:19 +05:30, Codex/GPT-5): drafted the first implementation-ready plan from the requirements and research ledger; added transaction-state separation, exact judge configuration, old-byte immutability, dynamic expected counts, and small-agent stop gates.
@@ -290,7 +298,7 @@ Current state (2026-07-10 05:28 +05:30, Codex/GPT-5): Milestone 6 dynamic IDK0 S
 - v10 (2026-07-10 05:19 +05:30, Codex/GPT-5): recorded Milestone 4 local/synthetic judge routing, evidence sidecars, judge audit, and paid-call boundary.
 - v11 (2026-07-10 05:20 +05:30, Codex/GPT-5): recorded Milestone 4 commit `d36938d` and advanced Current State to Milestone 5.
 - v12 (2026-07-10 05:28 +05:30, Codex/GPT-5): recorded Milestone 5 finalization, checksum/commit semantics, validation receipts, and commit `ec76ec4`; advanced Current State to Milestone 6.
-- v13 (2026-07-10 05:28 +05:30, Codex/GPT-5): recorded Milestone 6 dynamic IDK0 score lane, implemented output schemas, scout receipt, CLI receipts, validation evidence, and commit `7c19c8b`; advanced Current State to the external-results gate.
+- v13 (2026-07-10 05:28 +05:30, Codex/GPT-5): recorded Milestone 6 dynamic IDK0 score lane, implemented output schemas, scout receipt, local branch-consolidation scout, CLI receipts, validation evidence, and commit `7c19c8b`; advanced Current State to the external-results gate.
 
 ## Outcomes & Retrospective
 
