@@ -10,7 +10,7 @@ The user asked to read the RadLE arXiv paper and use it to improve the basic que
 
 ## Current State
 
-Current state (2026-07-06 02:26 +05:30, Codex/GPT-5): Work is in the separate worktree `C:\Users\thehb\Documents\RadLE v2 - final scoring questions` on branch `codex/final-scoring-csv-questions`. The arXiv HTML for `arXiv:2509.25559` has been read for benchmark framing. The current v2 final-scoring folder now contains `radle_v2_final_long_master.csv`, audit JSON, summary CSVs, and `SUMMARY_SPEC.md`. The old RadLE Stats figure package has been inspected for its six-panel confidence-risk story, and v2 confidence-risk quantities were derived from the master. Next: deliver chat synthesis; do not generate new figures unless the user asks.
+Current state (2026-07-12 04:04 +05:30, Codex/GPT-5): this plan is preserved on `codex/radle-v2-primary-preservation` in worktree `C:/tmp/radle_v2_primary_preservation`. The former `C:/Users/thehb/Documents/RadLE v2 - final scoring questions` worktree and local `codex/final-scoring-csv-questions` branch were closed only after the file was committed byte-for-byte as `f04fffb`. The arXiv and v2 statistics review remains complete, but its final concise recommendation set has not been delivered in this plan. Next project action if resumed: revalidate the current final master before citing old 6000-row values, then deliver the pending synthesis; do not generate figures unless the user asks. Next consolidation action: retain this worktree/local branch until the preservation commits are pushed or integrated.
 
 ## Locked Facts
 
@@ -38,6 +38,7 @@ Current state (2026-07-06 02:26 +05:30, Codex/GPT-5): Work is in the separate wo
 - [x] (2026-07-06 02:26 +05:30, Codex/GPT-5) Derived v2 confidence-risk quantities from the master for non-excluded access/domain/role groups and per-arm peak-confidence wrong burden.
 - [x] (2026-07-06 02:31 +05:30, Codex/GPT-5) Incorporated user correction: individual human names do not matter for the stats story; humans should be grouped by experience/qualification.
 - [x] (2026-07-06 02:33 +05:30, Codex/GPT-5) Computed two possible human two-bin groupings from the final master: qualification split and experience-gradient split.
+- [x] (2026-07-12 04:04 +05:30, Codex/GPT-5) Preserved this formerly untracked plan byte-for-byte in commit `f04fffb`, then closed the redundant final-scoring worktree and local branch.
 - [ ] (pending) Deliver a concise recommendation set for questions to retire, questions to keep, and improved stats-story figures.
 
 ## Surprises & Discoveries
@@ -72,13 +73,18 @@ Current state (2026-07-06 02:26 +05:30, Codex/GPT-5): Work is in the separate wo
   Rationale: Individual names are not meaningful manuscript entities; the scientific question is where AI sits relative to trainees, radiologists, and seniority/experience tiers.
   Date/Author: 2026-07-06, Codex/GPT-5 and user
 
+- Decision: Preserve this plan on `codex/radle-v2-primary-preservation` and close its former final-scoring worktree.
+  Rationale: the preservation lineage already owns the final-scoring pipeline, panel experiments, and archival evidence; the source branch tip was contained there, and the file was the source worktree's only untracked path.
+  Date/Author: 2026-07-12, Codex/GPT-5
+
 ## Revision Notes
 
+- v2 (2026-07-12, Codex/GPT-5): recorded the branch-consolidation preservation handoff and replaced the closed source-worktree path with the current preservation home.
 - v1 (2026-07-06, Codex/GPT-5): Initial plan for arXiv-grounded stats-story review.
 
 ## Outcomes & Retrospective
 
-Pending final synthesis. No reusable skill should be created from this pass without explicit user permission.
+The research and data inspection are preserved, and the stale source worktree has been retired. Final synthesis remains pending and must revalidate any drift-prone master counts before publication use. No reusable skill should be created from this pass without explicit user permission.
 
 ## Suggested Skills By Phase
 
@@ -91,7 +97,7 @@ Pending final synthesis. No reusable skill should be created from this pass with
 
 ## Context And Orientation
 
-The v2 final scoring artifacts are local generated files outside this worktree at `C:\Users\thehb\Documents\RadLE v2\outputs\radle_v2_stats\final_scoring_radiologist_20260706_001147`. The old RadLE Stats figure package is in a separate non-git workspace at `C:\Users\thehb\Documents\RadLE Stats\outputs\Data visualization`. This plan is saved in the worktree only, so it does not mutate the main checkout's generated outputs.
+The v2 final scoring artifacts are local generated files outside this worktree at `C:\Users\thehb\Documents\RadLE v2\outputs\radle_v2_stats\final_scoring_radiologist_20260706_001147`. The old RadLE Stats figure package is in a separate non-git workspace at `C:\Users\thehb\Documents\RadLE Stats\outputs\Data visualization`. This plan is now tracked on the primary-preservation branch; it does not mutate the main checkout's generated outputs.
 
 ## Plan Of Work
 
