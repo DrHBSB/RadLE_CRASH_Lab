@@ -12,12 +12,12 @@ The admission-side factual handoff is `Documents/execplan_radle_v2_incremental_m
 
 ## Current State
 
-Current state (2026-07-12 03:53 +05:30, Codex/GPT-5): the consolidated branch remains clean at ledger checkpoint `eed1dda` after four local closure sets. Eight local branches and six worktrees have been closed, with every committed tip preserved on a named successor or retained remote ref. The pre-M7 worktree and local branch are gone after an independent audit proved its six ignored reasoning-probe CSVs were transient projections of the committed JSON receipts. The next bounded action is to merge the one fetched `origin/main` baseline commit into the consolidation branch after a synthetic conflict gate, then classify every remaining branch as active, dirty hold, divergent hold, or synchronized baseline.
+Current state (2026-07-12 04:05 +05:30, Codex/GPT-5): the scoped local consolidation phase is complete. `codex/radle-v2-branch-consolidation` contains current `origin/main` through merge `351b3af`, the full pre-M7 admission continuation, and the production panel integration. Eleven local branches and seven worktrees were closed after preservation gates; five local branches and four worktrees remain. The formerly untracked arXiv stats-story plan is preserved and reconciled in commits `f04fffb` and `11fd85c` on `codex/radle-v2-primary-preservation`, which is intentionally retained two commits ahead of its remote. The next action requires explicit external authority: push the consolidation and primary-preservation branches, then process the remote deletion queue. The 91-path dirty handwritten checkout and the unique Morning/Meta lanes remain separate follow-up work, not cleanup failures.
 
 ## Locked Facts
 
 - The primary checkout `C:/Users/thehb/Documents/RadLE v2` is heavily dirty on `codex/radle-v2-handwritten-panels` and is preservation-only during consolidation.
-- The consolidation worktree is `C:/tmp/radle_v2_branch_consolidation` on `codex/radle-v2-branch-consolidation`, based at `2f70441`.
+- The consolidation worktree is `C:/tmp/radle_v2_branch_consolidation` on `codex/radle-v2-branch-consolidation`; merge `351b3af` makes current `origin/main` an exact ancestor.
 - `codex/radle-v2-post-admission-panels` contains the repaired admission base through `b543827` plus panel commits `9727248` and `2f70441`.
 - `codex/radle-v2-pre-m7-repair` contains two additional local commits after `b543827`: `410b447` and plan-only checkpoint `e2e0c2b`.
 - Merge commit `44b6f70` preserves both `codex/radle-v2-post-admission-panels` and `codex/radle-v2-pre-m7-repair` as exact ancestors of the consolidation branch.
@@ -29,6 +29,8 @@ Current state (2026-07-12 03:53 +05:30, Codex/GPT-5): the consolidated branch re
 - Local closure set 2 removed only Morning smoke refs that are exact ancestors of `codex/morning-meta-muse-spark-append`; both corresponding remote refs remain available.
 - Local closure set 3 removed two clean detached Claude worktrees and their local branch pointers after proving both tips are ancestors of `origin/main`.
 - Local closure set 4 removed the pre-M7 worktree and local branch after its two local-only commits were merged and its ignored probe CSVs were proven semantically redundant with committed JSON receipts.
+- Local closure set 5 preserved the unique arXiv stats-story plan on primary-preservation, then removed the final-scoring worktree and local branch plus redundant local llava and Meta Muse pointers.
+- Final local state is five branches (`main`, consolidation, Morning append, handwritten panels, and primary preservation) across four worktrees; primary preservation is ahead of its remote by two documentation commits.
 
 ## Do Not Revisit
 
@@ -37,6 +39,7 @@ Current state (2026-07-12 03:53 +05:30, Codex/GPT-5): the consolidated branch re
 - Do not treat patch-equivalent branches as ancestry-contained until `git cherry` or an equivalent diff proof is recorded. See Decision Log 2026-07-12.
 - Do not delete branches merely because their names look obsolete; closure requires preservation proof and clean worktree status. See Decision Log 2026-07-12.
 - Do not merge the Morning append lane into the admission/panel lane without a project-level reason beyond cleanup. See Decision Log 2026-07-12.
+- Do not delete `origin/codex/radle-v2-post-admission-panels` until the local consolidation branch is pushed, and do not close primary-preservation locally until `f04fffb` and `11fd85c` are pushed or integrated. See Decision Log 2026-07-12.
 
 ## Progress
 
@@ -51,30 +54,49 @@ Current state (2026-07-12 03:53 +05:30, Codex/GPT-5): the consolidated branch re
 - [x] (2026-07-12 03:49 +05:30, Codex/GPT-5) Closed two clean detached Claude worktrees and local branch pointers after proving their tips are in `origin/main`; fast-forwarded unused local `main` to `f3c7d72`.
 - [x] (2026-07-12 03:53 +05:30, Codex/GPT-5) Closed pre-M7 local branch/worktree after independent ignored-artifact audit proved six CSV probes were non-unique projections of committed JSON evidence.
 - [x] (2026-07-12 03:53 +05:30, Codex/GPT-5) Audited the separate Morning append stack and closed only the two exact-ancestor smoke branches; retained divergent Meta Muse and active Morning target.
-- [ ] (2026-07-12 03:04 +05:30, Codex/GPT-5) Produce the final remaining-branches register and explicit remote-action queue.
+- [x] (2026-07-12 04:05 +05:30, Codex/GPT-5) Merged fetched `origin/main` in conflict-free commit `351b3af`; validated its one 280216-byte output notebook, reran 37 tests, config gate, diff checks, ancestry checks, and 52-file panel-tree preservation.
+- [x] (2026-07-12 04:05 +05:30, Codex/GPT-5) Preserved and reconciled the unique arXiv stats-story ExecPlan on primary-preservation, then closed the final-scoring worktree/local branch, redundant llava local branch, and remote-backed Meta Muse local alias.
+- [x] (2026-07-12 04:05 +05:30, Codex/GPT-5) Produced the final remaining-branches register and explicit remote-action queue.
 
 ## Branch Register
 
-Status values are `active target`, `integrate next`, `closure candidate`, `patch-equivalence review`, `preserve`, and `separate lane`. A closure candidate is not deleted until its worktree gate is also green.
+Final status values distinguish active local targets, synchronized baseline, dirty/unique holds, closed local refs, and retained remote refs. No remote-retained row implies authorization to delete it.
 
-| Branch / ref | Tip at inventory | Current classification | Preservation target | Next gate |
+| Branch / ref | Recorded tip | Current classification | Preservation target | Next gate |
 | --- | --- | --- | --- | --- |
-| `codex/radle-v2-branch-consolidation` | `44b6f70` | active target | itself | first local closure wave |
+| `codex/radle-v2-branch-consolidation` | `351b3af` plus this ledger checkpoint | active target; current baseline integrated | itself | push after explicit authorization |
 | `codex/radle-v2-post-admission-panels` | `2f70441` | local branch/worktree closed; remote retained | consolidation branch | optional remote cleanup queue |
 | `codex/radle-v2-pre-m7-repair` | `e2e0c2b` | local branch/worktree closed; older remote retained | consolidation branch | optional remote cleanup queue after push decision |
 | `codex/radle-v2-incremental-admission` | `77dbfb0` | local branch/worktree closed | consolidation branch | none |
-| `codex/radle-v2-primary-preservation` | `88d66e0` | patch-equivalence review | post-admission panel commits | `git cherry` and tree-diff proof |
-| `codex/radle-v2-handwritten-panels` | `8c9de27` plus dirty files | preserve | unresolved | inventory only; no mutation |
-| `codex/morning-meta-muse-spark-append` | `37a0f44` | separate lane | itself | Wave 2 containment audit |
+| `codex/radle-v2-primary-preservation` | `11fd85c` | active archival target; ahead 2 | remote `88d66e0` plus local plan commits | push before local closure |
+| `codex/radle-v2-handwritten-panels` | `8c9de27` plus 91 dirty paths | dirty hold | unresolved | separate preservation audit |
+| `codex/morning-meta-muse-spark-append` | `37a0f44` | active separate lane; clean | itself | reconcile remote Meta Muse side lane separately |
 | `codex/gpt56-openrouter-smoke` | `8feeb7b` | local branch/worktree closed; remote retained | Morning append stack | optional remote cleanup queue |
 | `codex/grok45-morning-smoke` | `1faee5a` | local branch closed; remote retained | Morning append stack | optional remote cleanup queue |
-| `codex/meta-muse-spark-colab` | `e4f2e84` | preserve / divergent | Morning append stack unresolved | patch-distinct and file-diff review |
-| `codex/final-scoring-csv-questions` | `071d6ec` | preserve until dirty file is captured | Morning append stack | untracked plan plus ancestry proof |
+| `codex/meta-muse-spark-colab` | `e4f2e84` | local alias closed; unique remote retained | remote side lane | separate reconciliation with Morning |
+| `codex/final-scoring-csv-questions` | `071d6ec` | local branch/worktree closed | primary preservation and Morning | arXiv plan preserved at `11fd85c` |
 | `fix/stats-combiner-scorer-from-final` | `2d1028c` | local branch closed; remote retained | `origin/main` | optional remote cleanup queue |
 | `claude/elated-germain-35c138` | `e03b2e0` | local branch/worktree closed | `origin/main` | none |
 | `claude/sad-meninsky-7102e8` | `f8a529d` | local branch/worktree closed; remote retained | `origin/main` | optional remote cleanup queue |
-| `codex/llava-vllm-runtime` | `56a882b` | preserve | unresolved | inspect unique local commits and remote mismatch |
+| `codex/llava-vllm-runtime` | `56a882b` | local branch closed | handwritten and primary-preservation lineages | optional old remote cleanup queue |
 | local `main` | `f3c7d72` | synchronized baseline | `origin/main` | refresh before future closure waves |
+
+## Remote Action Queue
+
+No remote action was executed. Each row requires explicit authorization immediately before use and a fresh fetch/ancestry recheck.
+
+| Remote ref | Status | Preserved by | Required predecessor |
+| --- | --- | --- | --- |
+| `origin/claude/sad-meninsky-7102e8` | deletion-ready | `origin/main` | authorization only |
+| `origin/codex/gpt56-openrouter-smoke` | deletion-ready | `origin/codex/morning-meta-muse-spark-append` | authorization only |
+| `origin/codex/grok45-morning-smoke` | deletion-ready | `origin/codex/morning-meta-muse-spark-append` | authorization only |
+| `origin/codex/llava-vllm-runtime` | deletion-ready | Morning append and primary-preservation remotes | authorization only |
+| `origin/codex/radle-v2-pre-m7-repair` | deletion-ready | post-admission remote and local consolidation | authorization only |
+| `origin/fix/stats-combiner-scorer-from-final` | deletion-ready | `origin/main` | authorization only |
+| `origin/codex/radle-v2-post-admission-panels` | wait for successor push | local consolidation branch | push `codex/radle-v2-branch-consolidation` first |
+| `origin/codex/meta-muse-spark-colab` | unique remote hold | no current integrated successor | separate Meta/Morning decision |
+| `origin/codex/morning-meta-muse-spark-append` | active hold | itself | complete separate lane work |
+| `origin/codex/radle-v2-primary-preservation` | active archival hold | local branch is ahead 2 | push `f04fffb` and `11fd85c` first |
 
 ## Surprises & Discoveries
 
@@ -109,6 +131,14 @@ Status values are `active target`, `integrate next`, `closure candidate`, `patch
 - Observation: the six ignored pre-M7 reasoning-probe CSVs were not unique evidence.
   Evidence: independent Wave 2 comparison found zero semantic mismatches against the six committed JSON receipts; CSV sizes were 336, 502, 588, 740, 905, and 1687 bytes, with hashes recorded in the agent receipt.
   Date/Author: 2026-07-12, Rawls subagent
+
+- Observation: primary-preservation contains three unique archival commits but no production panel behavior missing from consolidation.
+  Evidence: `441b25a` is stable-patch-equivalent to `9727248`; the production effect of `88d66e0` is represented by adapted integration commit `2f70441`; `a9e7115`, `ee1ea49`, and `5e6fd51` remain archival-only on the retained primary-preservation remote.
+  Date/Author: 2026-07-12, Laplace subagent and Codex/GPT-5
+
+- Observation: the final-scoring worktree's only untracked file was a unique 9524-byte arXiv statistics ExecPlan.
+  Evidence: source SHA-256 `9A68A1D99A799EF0235809FF69642A8EE2AFE6169AD0D21011EB9F08999437B8` matched the path created on primary-preservation; committed blob is `486e84a0ae13bd46a3eab0a992c0f089bb72862b`.
+  Date/Author: 2026-07-12, Pauli subagent and Codex/GPT-5
 
 ## Decision Log
 
@@ -148,8 +178,21 @@ Status values are `active target`, `integrate next`, `closure candidate`, `patch
   Rationale: merge `44b6f70` preserves both local-only commits, the worktree had no tracked or untracked changes, and the only potentially unique ignored probes were independently proven redundant with committed JSON receipts; remaining ignored content was caches and generated test output.
   Date/Author: 2026-07-12, Codex/GPT-5
 
+- Decision: merge the single current `origin/main` commit into the consolidation target.
+  Rationale: the synthetic merge was conflict-free, the unique file was a valid token-clean notebook, and making the fetched baseline an ancestor removes avoidable future integration drift.
+  Date/Author: 2026-07-12, Codex/GPT-5
+
+- Decision: preserve the unique arXiv stats-story plan on primary-preservation before closing final-scoring.
+  Rationale: that lineage owns final-scoring and panel archival evidence; byte and line comparisons passed, and the source worktree had no other untracked content.
+  Date/Author: 2026-07-12, Codex/GPT-5
+
+- Decision: stop local branch deletion at the five-branch/four-worktree state.
+  Rationale: every remaining local branch is active, dirty, uniquely ahead, or the canonical baseline. Further reduction requires pushing local successors, triaging the dirty primary checkout, or deciding how the unique Meta Muse remote should integrate.
+  Date/Author: 2026-07-12, Codex/GPT-5
+
 ## Revision Notes
 
+- v7 (2026-07-12, Codex/GPT-5): completed local consolidation, integrated current `origin/main`, preserved the arXiv plan, recorded closure set 5, and added the final remote-action queue.
 - v6 (2026-07-12, Codex/GPT-5): recorded pre-M7 closure set 4, independent probe-equivalence evidence, and completion of the Morning smoke audit.
 - v5 (2026-07-12, Codex/GPT-5): recorded local Claude closure set 3 and synchronized local `main` with fetched `origin/main`.
 - v4 (2026-07-12, Codex/GPT-5): recorded local Morning smoke closure set 2 and the guarded removal of its read-only stale checkout shell.
@@ -159,7 +202,7 @@ Status values are `active target`, `integrate next`, `closure candidate`, `patch
 
 ## Outcomes & Retrospective
 
-Milestones 0 through 3 are complete and Milestone 4 is in progress. The isolated ledger exists, both admission/panel histories are consolidated at `44b6f70`, combined validation passes, and four exact-ancestry/equivalence local closure sets removed six worktrees and eight local branches. Local `main` is synchronized; remote refs and every dirty/divergent lane remain preserved. The preservation-plus-cleanliness closure gate is useful but already captured by the installed workflow guidance; no new skill promotion is needed.
+All five milestones are complete for the authorized local scope. The admission/panel histories and current baseline are consolidated, validation passes, eleven local branches and seven worktrees were removed, one unique untracked ExecPlan was preserved and reconciled, and every remaining local/remote ref has a named disposition. The repo is materially simpler without deleting remote refs or touching the 91-path dirty primary checkout. No new skill promotion is needed; the preservation-plus-cleanliness closure gate is already represented by the installed workflow guidance.
 
 ## Suggested Skills By Phase
 
@@ -173,9 +216,9 @@ Milestones 0 through 3 are complete and Milestone 4 is in progress. The isolated
 
 ## Context And Orientation
 
-The repository contains several concurrent bodies of work. The admission/panel stack is the first consolidation lane. `codex/radle-v2-post-admission-panels` carries panel assets and scripts, while `codex/radle-v2-pre-m7-repair` carries the latest admission continuation. The Morning stack is operationally separate. A Git worktree is a second checkout attached to the same repository; deleting a branch that is checked out in a worktree is blocked and removing a dirty worktree can lose uncommitted work.
+The repository now has four worktrees: the dirty primary handwritten checkout, the clean Morning append lane, the clean consolidation target, and the clean-but-ahead primary-preservation lane. The former post-admission and pre-M7 source histories are ancestors of consolidation; their local worktrees are closed. A Git worktree is a second checkout attached to the same repository; deleting a branch that is checked out in a worktree is blocked and removing a dirty worktree can lose uncommitted work.
 
-All mutation in this plan occurs from `C:/tmp/radle_v2_branch_consolidation`. Read-only audits may inspect other worktrees. The primary checkout is never used for stage, commit, merge, branch deletion, or worktree removal during this plan.
+Consolidation mutations occurred from `C:/tmp/radle_v2_branch_consolidation`; the one path-only archival preservation occurred in `C:/tmp/radle_v2_primary_preservation`. Read-only audits inspected other worktrees. The dirty primary checkout was never used for stage, commit, merge, branch deletion, or cleanup.
 
 ## Plan Of Work
 
@@ -185,7 +228,7 @@ Milestone 2 validates both sides of the combined stack. Admission gates include 
 
 Milestone 3 closes only local branches and worktrees that are proven redundant and clean. Each deletion is preceded by a fresh status and ancestry check, then recorded in this register. Remote branches are queued separately and are not deleted by implication.
 
-Milestone 4 repeats the method for the Morning append lane, without merging it into the admission/panel stack. Remaining unique branches such as the dirty handwritten checkout and the llava runtime lane remain open with an explicit reason.
+Milestone 4 classified the Morning append lane without merging it into the admission/panel stack, closed contained smoke branches, retained the unique Meta remote, and produced the residual/remote action register. The llava local alias was later closed after exact containment by retained branches was proven.
 
 ## Milestones
 
@@ -269,6 +312,16 @@ Combined validation receipt:
     MERGE_DIFF_CHECK=PASS
     MERGE_SECRET_SCAN=PASS
 
+Current-baseline validation receipt:
+
+    ORIGIN_MAIN_MERGE=351b3af
+    NOTEBOOK_JSON=PASS nbformat=4 cells=10 code=10 outputs=29
+    NOTEBOOK_SECRET_SCAN=PASS
+    Ran 37 tests in 77.091s
+    OK
+    CONFIG_RESULT=PASS
+    PANEL_TREE_PRESERVED_AFTER_BASELINE=PASS files=52
+
 Local closure set 1:
 
     WORKTREE_CLOSED=C:/tmp/radle_v2_incremental_admission
@@ -296,6 +349,16 @@ Local closure set 4:
     PROBE_CSV_EQUIVALENCE=PASS count=6 semantic_mismatches=0
     WORKTREE_CLOSED=C:/tmp/radle_v2_pre_m7_repair tip=e2e0c2b
     BRANCH_CLOSED=codex/radle-v2-pre-m7-repair tip=e2e0c2b successor=eed1dda remote_retained=b543827
+
+Local closure set 5:
+
+    ARXIV_PLAN_PRESERVED=f04fffb handoff=11fd85c blob=486e84a0
+    WORKTREE_CLOSED=C:/Users/thehb/Documents/RadLE v2 - final scoring questions
+    BRANCH_CLOSED=codex/final-scoring-csv-questions tip=071d6ec
+    BRANCH_CLOSED=codex/llava-vllm-runtime tip=56a882b
+    LOCAL_ALIAS_CLOSED=codex/meta-muse-spark-colab tip=e4f2e84 remote_retained=true
+    FINAL_LOCAL_BRANCHES=5
+    FINAL_WORKTREES=4
 
 ## Interfaces And Dependencies
 
