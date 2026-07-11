@@ -22,6 +22,7 @@ from radle_incremental_admission import (
     FINAL_LONG_MASTER_FIELDS,
     RADIOLOGIST_DECISION_FIELDS,
     ValidationError,
+    audit_package_sha256sums,
     audit_finalized_admission,
     audit_idk0_score_lane,
     audit_judge_evidence,
@@ -30,9 +31,12 @@ from radle_incremental_admission import (
     commit_finalized_admission,
     finalize_incremental_admission,
     prepare_incremental_admission,
+    project_one_model_package,
     read_csv_table,
     run_synthetic_dual_judge_delta,
     sha256_file,
+    split_combined_radiologist_scores,
+    validate_radiologist_decisions,
 )
 from tests.make_radle_incremental_fixture import make_fixture
 
@@ -98,6 +102,17 @@ class IncrementalAdmissionProductionTests(unittest.TestCase):
         path = staging / ("radiologist_decisions_incomplete.csv" if incomplete else "radiologist_decisions.csv")
         self.write_csv(path, RADIOLOGIST_DECISION_FIELDS, rows)
         return path
+
+    def combined_score_rows(self, staging: Path, *, score: str = "1") -> list[dict[str, object]]:
+        _, queue = read_csv_table(staging / "radiologist_queue.csv")
+        rows: list[dict[str, object]] = []
+        for row in queue:
+            combined = {field: row.get(field, "") for field in ["Master_Case_ID", "model_blinded", "Ground_Truth_Diagnosis", "diagnosis", "likert"]}
+            if str(combined["likert"]).endswith(".0"):
+                combined["likert"] = str(combined["likert"])[:-2]
+            combined["human_score"] = score
+            rows.append(combined)
+        return rows
 
     @staticmethod
     def write_csv(path: Path, fields: list[str], rows: list[dict[str, object]]) -> None:
@@ -226,6 +241,38 @@ class IncrementalAdmissionProductionTests(unittest.TestCase):
                     prepare_incremental_admission(**self.prepare_args(fixture, root / "out"), dry_run=False)
                 self.assertFalse((root / "out").exists())
 
+    def test_projection_requires_real_runtime_sha_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixture = root / "fixture"
+            make_fixture(fixture)
+            source = fixture / "incoming_package" / "results.csv"
+            with self.assertRaisesRegex(ValidationError, "must not be the source wide CSV hash"):
+                project_one_model_package(
+                    source_wide=source,
+                    model_key="grok_4_5",
+                    output_package=root / "bad_projection",
+                    runtime_sha=sha256_file(source).lower(),
+                    dry_run=True,
+                )
+
+            projected = root / "projection"
+            receipt = project_one_model_package(
+                source_wide=source,
+                model_key="grok_4_5",
+                output_package=projected,
+                runtime_sha="8029ad46d90b7bc8ab67af1e805ffaa2619b85a2",
+                runtime_sha_status="inferred",
+                runtime_sha_note="fixture mirrors the handoff metadata-only runtime SHA caveat",
+                source_manifest_path=fixture / "incoming_package" / "source_manifest.json",
+            )
+            self.assertEqual(receipt["projection_state"], "PROJECTED")
+            manifest = json.loads((projected / "source_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["runtime_sha"], "8029ad46d90b7bc8ab67af1e805ffaa2619b85a2")
+            self.assertEqual(manifest["runtime_sha_status"], "inferred")
+            self.assertEqual(manifest["source_manifest_evidence"]["source_manifest_test_limit"], None)
+            audit_package_sha256sums(projected)
+
     def test_same_logical_key_different_content_gets_new_identity(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -240,6 +287,35 @@ class IncrementalAdmissionProductionTests(unittest.TestCase):
             first = prepare_incremental_admission(**self.prepare_args(fixture_a, root / "out"), dry_run=True)
             second = prepare_incremental_admission(**self.prepare_args(fixture_b, root / "out"), dry_run=True)
             self.assertNotEqual(first["intake_id"], second["intake_id"])
+
+    def test_previous_authoritative_same_case_score_is_reused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixture = root / "fixture"
+            make_fixture(fixture)
+            fields, rows = read_csv_table(fixture / "parent_final_long_master.csv")
+            for row in rows:
+                if row["Master_Case_ID"] == "7" and row["candidate"] == "Radiologist":
+                    row["diagnosis"] = "Candidate alternate"
+                    row["final_score_authoritative"] = "0"
+                    row["final_score_source"] = "fixture_prior_radiologist"
+                    break
+            else:
+                self.fail("fixture human prior row not found")
+            self.write_csv(fixture / "parent_final_long_master.csv", FINAL_LONG_MASTER_FIELDS, rows)
+            authority_path = fixture / "parent_authority.json"
+            authority = json.loads(authority_path.read_text(encoding="utf-8"))
+            authority["base_final_long_master"]["sha256"] = sha256_file(fixture / "parent_final_long_master.csv")
+            authority_path.write_text(json.dumps(authority, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            staging = self.prepare(root, fixture)
+            _, state_rows = read_csv_table(staging / "adjudication_state.csv")
+            case7 = next(row for row in state_rows if row["Master_Case_ID"] == "7")
+            self.assertEqual(case7["terminal_state"], "previous_authoritative_score")
+            self.assertEqual(case7["automatic_score"], "0")
+            _, worklist_rows = read_csv_table(staging / "judge_worklist.csv")
+            self.assertNotIn("7", {row["Master_Case_ID"] for row in worklist_rows})
+            self.assertEqual(audit_prepared_staging(staging)["result"], "PASS")
 
     def test_prepared_tamper_is_detected_even_when_manifest_hash_is_forged(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -301,6 +377,103 @@ class IncrementalAdmissionProductionTests(unittest.TestCase):
                     self.write_csv(decisions, fields, rows)
                     with self.assertRaisesRegex(ValidationError, error):
                         finalize_incremental_admission(intake_root=staging, radiologist_decisions=decisions)
+
+    def test_split_combined_radiologist_scores_for_multi_model_sheet(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first_staging = self.prepare_with_judges(root / "first")
+            first_final = Path(str(finalize_incremental_admission(
+                intake_root=first_staging,
+                radiologist_decisions=self.write_decisions(first_staging),
+            )["final_staging_root"]))
+            commit_finalized_admission(first_final)
+            second_package = root / "gpt_package"
+            self.clone_package_for_model(
+                self.fixture / "incoming_package",
+                second_package,
+                source_model="grok_4_5",
+                target_model="gpt_5_6_sol_pro",
+                provider="OpenAI",
+                returned_model="openai/gpt-5.6-sol-pro",
+            )
+            second = prepare_incremental_admission(
+                parent_wide=first_final / "combined_wide/RadLE_v2_results_final.csv",
+                parent_final_long_master=first_final / "final/radle_v2_final_long_master.csv",
+                parent_authority_manifest=first_final / "COMMITTED.json",
+                blind_map_path=first_final / "roster/blind_label_map.csv",
+                incoming_package=second_package,
+                model_key="gpt_5_6_sol_pro",
+                roster_path=self.fixture / "roster.json",
+                variants_path=self.fixture / "accepted_variants.csv",
+                states_path=REPO_ROOT / "config/radle_v2_terminal_states.json",
+                output_root=root / "second",
+                repo_root=REPO_ROOT,
+                dry_run=False,
+            )
+            second_staging = Path(str(second["staging_root"]))
+            run_synthetic_dual_judge_delta(
+                staging_root=second_staging,
+                judges_path=REPO_ROOT / "config/radle_v2_judges.json",
+                out_dir=second_staging / "judge_evidence",
+                repo_root=REPO_ROOT,
+                dry_run=False,
+            )
+            combined_path = root / "combined_scores.csv"
+            self.write_csv(
+                combined_path,
+                ["Master_Case_ID", "model_blinded", "Ground_Truth_Diagnosis", "diagnosis", "likert", "human_score"],
+                self.combined_score_rows(first_staging) + self.combined_score_rows(second_staging, score="0.0"),
+            )
+            receipt = split_combined_radiologist_scores(
+                combined_scores=combined_path,
+                staging_roots=[first_staging, second_staging],
+                output_root=root / "split",
+                reviewer_pseudonym="fixture_rad",
+                reviewed_utc="2026-07-10T08:00:00+00:00",
+            )
+            queue_counts = [
+                len(read_csv_table(first_staging / "radiologist_queue.csv")[1]),
+                len(read_csv_table(second_staging / "radiologist_queue.csv")[1]),
+            ]
+            self.assertEqual(receipt["expected_rows"], sum(queue_counts))
+            self.assertEqual([row["radiologist_queue_rows"] for row in receipt["per_model"]], queue_counts)
+            for item, staging in zip(receipt["per_model"], [first_staging, second_staging]):
+                fields, decision_rows = read_csv_table(Path(item["decisions_path"]))
+                self.assertEqual(fields, RADIOLOGIST_DECISION_FIELDS)
+                _, queue_rows = read_csv_table(staging / "radiologist_queue.csv")
+                validate_radiologist_decisions(queue_rows, Path(item["decisions_path"]))
+                self.assertEqual(len(decision_rows), len(queue_rows))
+            second_output = next(row for row in receipt["per_model"] if row["model_key"] == "gpt_5_6_sol_pro")
+            finalized = finalize_incremental_admission(
+                intake_root=second_staging,
+                radiologist_decisions=Path(second_output["decisions_path"]),
+            )
+            self.assertEqual(finalized["source_counts"]["radiologist"], queue_counts[1])
+
+    def test_split_combined_radiologist_scores_rejects_bad_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            staging = self.prepare_with_judges(root)
+            valid_rows = self.combined_score_rows(staging)
+            valid_fields = ["Master_Case_ID", "model_blinded", "Ground_Truth_Diagnosis", "diagnosis", "likert", "human_score"]
+            scenarios = {
+                "missing": (valid_rows[:-1], "missing expected queue keys"),
+                "duplicate": (valid_rows + [dict(valid_rows[0])], "duplicate combined radiologist row"),
+                "nonbinary": ([{**row, "human_score": "2"} if idx == 0 else row for idx, row in enumerate(valid_rows)], "must be binary"),
+                "mismatch": ([{**row, "diagnosis": "wrong row"} if idx == 0 else row for idx, row in enumerate(valid_rows)], "do not match queue evidence"),
+            }
+            for name, (rows, error) in scenarios.items():
+                with self.subTest(name=name):
+                    combined_path = root / f"combined_{name}.csv"
+                    self.write_csv(combined_path, valid_fields, rows)
+                    with self.assertRaisesRegex(ValidationError, error):
+                        split_combined_radiologist_scores(
+                            combined_scores=combined_path,
+                            staging_roots=[staging],
+                            output_root=root / f"split_{name}",
+                            reviewer_pseudonym="fixture_rad",
+                            reviewed_utc="2026-07-10T08:00:00+00:00",
+                        )
 
     def test_full_commit_readback_and_idk0_lane(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -394,6 +567,63 @@ class IncrementalAdmissionProductionTests(unittest.TestCase):
             self.assertEqual({row["model_blinded"] for row in second_delta}, {"Candidate AF"})
             _, second_blind = read_csv_table(second_staging / "roster/blind_label_map.csv")
             self.assertEqual(len(second_blind), 32)
+
+    def test_muse_projection_can_rename_high_effort_source_family(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_package = root / "muse_high_source"
+            self.clone_package_for_model(
+                self.fixture / "incoming_package",
+                source_package,
+                source_model="grok_4_5",
+                target_model="muse_spark_1_1_high",
+                provider="Meta Model API",
+                returned_model="muse-spark-1.1",
+            )
+            bad_package = root / "muse_projected_bad"
+            project_one_model_package(
+                source_wide=source_package / "results.csv",
+                source_model_key="muse_spark_1_1_high",
+                model_key="muse_spark_1_1",
+                output_package=bad_package,
+                runtime_sha="8029ad46d90b7bc8ab67af1e805ffaa2619b85a2",
+                runtime_sha_status="inferred",
+                runtime_sha_note="fixture high-effort source family projects into normal Muse identity",
+            )
+            args = {
+                **self.prepare_args(self.fixture, root / "out"),
+                "incoming_package": bad_package,
+                "model_key": "muse_spark_1_1",
+            }
+            with self.assertRaisesRegex(ValidationError, "required request-extra mismatch"):
+                prepare_incremental_admission(**args, dry_run=True)
+
+            fields, rows = read_csv_table(source_package / "results.csv")
+            for row in rows:
+                row["Actual_Request_Extra_muse_spark_1_1_high"] = json.dumps(
+                    {"reasoning_effort": "high"},
+                    sort_keys=True,
+                )
+            self.write_csv(source_package / "results.csv", fields, rows)
+            self.reseal_package(source_package)
+            good_package = root / "muse_projected_good"
+            projection = project_one_model_package(
+                source_wide=source_package / "results.csv",
+                source_model_key="muse_spark_1_1_high",
+                model_key="muse_spark_1_1",
+                output_package=good_package,
+                runtime_sha="8029ad46d90b7bc8ab67af1e805ffaa2619b85a2",
+                runtime_sha_status="inferred",
+                runtime_sha_note="fixture high-effort source family projects into normal Muse identity",
+            )
+            self.assertEqual(projection["source_model_key"], "muse_spark_1_1_high")
+            projected_fields, _ = read_csv_table(good_package / "results.csv")
+            self.assertIn("Actual_Request_Extra_muse_spark_1_1", projected_fields)
+            self.assertNotIn("Actual_Request_Extra_muse_spark_1_1_high", projected_fields)
+            args["incoming_package"] = good_package
+            receipt = prepare_incremental_admission(**args, dry_run=True)
+            self.assertEqual(receipt["model_blinded"], "Candidate AG")
+            self.assertEqual(receipt["transaction_state"], "DRY_RUN_VALIDATED")
 
     def test_committed_tamper_and_roster_tamper_block_readback(self) -> None:
         for target in ["scored_append_delta.csv", "roster/model_roster.json", "roster/blind_label_map.csv"]:

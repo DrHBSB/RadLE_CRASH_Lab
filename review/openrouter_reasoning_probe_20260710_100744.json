@@ -1,0 +1,311 @@
+[
+  {
+    "completion_tokens": 594,
+    "content_chars": 67,
+    "elapsed_seconds": 5.731,
+    "error": "",
+    "finish_reason": "stop",
+    "http_status": 200,
+    "listed_in_openrouter_models": true,
+    "metadata_reasoning": {
+      "default_effort": "high",
+      "default_enabled": true,
+      "mandatory": true,
+      "supported_efforts": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "model": "x-ai/grok-4.5",
+    "ok": true,
+    "prompt_tokens": 249,
+    "provider": "xAI",
+    "reasoning_chars": 198,
+    "reasoning_details_count": 2,
+    "reasoning_present": true,
+    "reasoning_tokens": 573,
+    "request_payload": {
+      "max_tokens": 768,
+      "messages": [
+        {
+          "content": "Solve this compact diagnostic-style reasoning task. A 7-year-old has a metaphyseal corner fracture pattern after minor trauma. Return only JSON: {\"answer\":\"...\",\"confidence\":0-4}.",
+          "role": "user"
+        }
+      ],
+      "model": "x-ai/grok-4.5",
+      "provider": {
+        "allow_fallbacks": false,
+        "only": [
+          "xAI"
+        ]
+      }
+    },
+    "response_id": "gen-1783678031-NqxhqfqhQhtmN9PyquRX",
+    "returned_model": "x-ai/grok-4.5-20260708",
+    "thinking_variant": false,
+    "total_tokens": 843,
+    "variant": "baseline"
+  },
+  {
+    "completion_tokens": 273,
+    "content_chars": 63,
+    "elapsed_seconds": 3.468,
+    "error": "",
+    "finish_reason": "stop",
+    "http_status": 200,
+    "listed_in_openrouter_models": true,
+    "metadata_reasoning": {
+      "default_effort": "high",
+      "default_enabled": true,
+      "mandatory": true,
+      "supported_efforts": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "model": "x-ai/grok-4.5",
+    "ok": true,
+    "prompt_tokens": 249,
+    "provider": "xAI",
+    "reasoning_chars": 198,
+    "reasoning_details_count": 2,
+    "reasoning_present": true,
+    "reasoning_tokens": 255,
+    "request_payload": {
+      "max_tokens": 768,
+      "messages": [
+        {
+          "content": "Solve this compact diagnostic-style reasoning task. A 7-year-old has a metaphyseal corner fracture pattern after minor trauma. Return only JSON: {\"answer\":\"...\",\"confidence\":0-4}.",
+          "role": "user"
+        }
+      ],
+      "model": "x-ai/grok-4.5",
+      "provider": {
+        "allow_fallbacks": false,
+        "only": [
+          "xAI"
+        ]
+      },
+      "reasoning": {
+        "effort": "low"
+      }
+    },
+    "response_id": "gen-1783678037-Eky1wi5eOCwmPBHizz3i",
+    "returned_model": "x-ai/grok-4.5-20260708",
+    "thinking_variant": false,
+    "total_tokens": 522,
+    "variant": "low"
+  },
+  {
+    "completion_tokens": 706,
+    "content_chars": 61,
+    "elapsed_seconds": 7.411,
+    "error": "",
+    "finish_reason": "stop",
+    "http_status": 200,
+    "listed_in_openrouter_models": true,
+    "metadata_reasoning": {
+      "default_effort": "high",
+      "default_enabled": true,
+      "mandatory": true,
+      "supported_efforts": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "model": "x-ai/grok-4.5",
+    "ok": true,
+    "prompt_tokens": 249,
+    "provider": "xAI",
+    "reasoning_chars": 816,
+    "reasoning_details_count": 2,
+    "reasoning_present": true,
+    "reasoning_tokens": 689,
+    "request_payload": {
+      "max_tokens": 768,
+      "messages": [
+        {
+          "content": "Solve this compact diagnostic-style reasoning task. A 7-year-old has a metaphyseal corner fracture pattern after minor trauma. Return only JSON: {\"answer\":\"...\",\"confidence\":0-4}.",
+          "role": "user"
+        }
+      ],
+      "model": "x-ai/grok-4.5",
+      "provider": {
+        "allow_fallbacks": false,
+        "only": [
+          "xAI"
+        ]
+      },
+      "reasoning": {
+        "effort": "medium"
+      }
+    },
+    "response_id": "gen-1783678040-btHfHYSNZeMcibFNxRHW",
+    "returned_model": "x-ai/grok-4.5-20260708",
+    "thinking_variant": false,
+    "total_tokens": 955,
+    "variant": "medium"
+  },
+  {
+    "completion_tokens": 823,
+    "content_chars": 72,
+    "elapsed_seconds": 8.104,
+    "error": "",
+    "finish_reason": "stop",
+    "http_status": 200,
+    "listed_in_openrouter_models": true,
+    "metadata_reasoning": {
+      "default_effort": "high",
+      "default_enabled": true,
+      "mandatory": true,
+      "supported_efforts": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "model": "x-ai/grok-4.5",
+    "ok": true,
+    "prompt_tokens": 249,
+    "provider": "xAI",
+    "reasoning_chars": 739,
+    "reasoning_details_count": 2,
+    "reasoning_present": true,
+    "reasoning_tokens": 799,
+    "request_payload": {
+      "max_tokens": 768,
+      "messages": [
+        {
+          "content": "Solve this compact diagnostic-style reasoning task. A 7-year-old has a metaphyseal corner fracture pattern after minor trauma. Return only JSON: {\"answer\":\"...\",\"confidence\":0-4}.",
+          "role": "user"
+        }
+      ],
+      "model": "x-ai/grok-4.5",
+      "provider": {
+        "allow_fallbacks": false,
+        "only": [
+          "xAI"
+        ]
+      },
+      "reasoning": {
+        "effort": "high"
+      }
+    },
+    "response_id": "gen-1783678048-uFzWlnLqcp17vBZHlIjh",
+    "returned_model": "x-ai/grok-4.5-20260708",
+    "thinking_variant": false,
+    "total_tokens": 1072,
+    "variant": "high"
+  },
+  {
+    "completion_tokens": null,
+    "content_chars": 0,
+    "elapsed_seconds": 0.282,
+    "error": {
+      "code": 400,
+      "message": "Reasoning is mandatory for this endpoint and cannot be disabled.",
+      "metadata": {
+        "provider_name": null
+      }
+    },
+    "finish_reason": "",
+    "http_status": 400,
+    "listed_in_openrouter_models": true,
+    "metadata_reasoning": {
+      "default_effort": "high",
+      "default_enabled": true,
+      "mandatory": true,
+      "supported_efforts": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "model": "x-ai/grok-4.5",
+    "ok": false,
+    "prompt_tokens": null,
+    "provider": "",
+    "reasoning_chars": 0,
+    "reasoning_details_count": 0,
+    "reasoning_present": false,
+    "reasoning_tokens": null,
+    "request_payload": {
+      "max_tokens": 768,
+      "messages": [
+        {
+          "content": "Solve this compact diagnostic-style reasoning task. A 7-year-old has a metaphyseal corner fracture pattern after minor trauma. Return only JSON: {\"answer\":\"...\",\"confidence\":0-4}.",
+          "role": "user"
+        }
+      ],
+      "model": "x-ai/grok-4.5",
+      "provider": {
+        "allow_fallbacks": false,
+        "only": [
+          "xAI"
+        ]
+      },
+      "reasoning": {
+        "effort": "none"
+      }
+    },
+    "response_id": "",
+    "returned_model": "",
+    "thinking_variant": false,
+    "total_tokens": null,
+    "variant": "none"
+  },
+  {
+    "completion_tokens": 844,
+    "content_chars": 72,
+    "elapsed_seconds": 8.273,
+    "error": "",
+    "finish_reason": "stop",
+    "http_status": 200,
+    "listed_in_openrouter_models": true,
+    "metadata_reasoning": {
+      "default_effort": "high",
+      "default_enabled": true,
+      "mandatory": true,
+      "supported_efforts": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "model": "x-ai/grok-4.5",
+    "ok": true,
+    "prompt_tokens": 249,
+    "provider": "xAI",
+    "reasoning_chars": 851,
+    "reasoning_details_count": 2,
+    "reasoning_present": true,
+    "reasoning_tokens": 820,
+    "request_payload": {
+      "max_tokens": 768,
+      "messages": [
+        {
+          "content": "Solve this compact diagnostic-style reasoning task. A 7-year-old has a metaphyseal corner fracture pattern after minor trauma. Return only JSON: {\"answer\":\"...\",\"confidence\":0-4}.",
+          "role": "user"
+        }
+      ],
+      "model": "x-ai/grok-4.5",
+      "provider": {
+        "allow_fallbacks": false,
+        "only": [
+          "xAI"
+        ]
+      },
+      "reasoning": {
+        "effort": "xhigh"
+      }
+    },
+    "response_id": "gen-1783678056-mUDmePXbXYZ1J6wC0Rpp",
+    "returned_model": "x-ai/grok-4.5-20260708",
+    "thinking_variant": false,
+    "total_tokens": 1093,
+    "variant": "xhigh"
+  }
+]

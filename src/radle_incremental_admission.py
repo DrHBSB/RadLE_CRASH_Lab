@@ -96,15 +96,34 @@ ADJUDICATION_STATE_FIELDS = [
 ALLOWED_NEW_SCORE_SOURCES = {
     "auto_score_not_required",
     "canonical_exact",
+    "previous_authoritative_score",
     "ai_judges",
     "radiologist",
 }
+PRIOR_SCORE_REUSE_FIELDS = [
+    "Master_Case_ID",
+    "normalized_diagnosis",
+    "score_binary",
+    "support_count",
+    "score_sources",
+    "source_candidates",
+    "conflict",
+]
 BLIND_MAP_FIELDS = ["model_blinded", "model_key", "provider"]
 CSV_FIELD_LIMIT_TARGET = 2_147_483_647
 
 
 class ValidationError(ValueError):
     """Raised when a RadLE incremental-admission contract check fails."""
+
+
+def model_id_matches_request(requested_model_id: str, returned_model_id: object) -> bool:
+    if not isinstance(returned_model_id, str) or not returned_model_id:
+        return False
+    if returned_model_id == requested_model_id:
+        return True
+    suffix = returned_model_id.removeprefix(f"{requested_model_id}-")
+    return suffix != returned_model_id and bool(re.fullmatch(r"\d{8}", suffix))
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -293,7 +312,12 @@ def _bool_from_fixture(value: str) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "y"}
 
 
-def classify_terminal_state(row: dict[str, str], ground_truth: str, policy: dict[str, Any]) -> str:
+def classify_terminal_state(
+    row: dict[str, str],
+    ground_truth: str,
+    policy: dict[str, Any],
+    prior_score_reuse: dict[tuple[str, str], dict[str, str]] | None = None,
+) -> str:
     diagnosis = row.get("diagnosis", "")
     likert = row.get("likert", "")
     normalized = normalize_diagnosis(diagnosis)
@@ -307,10 +331,10 @@ def classify_terminal_state(row: dict[str, str], ground_truth: str, policy: dict
     raw_likert = str(likert).strip()
     if raw_likert:
         try:
-            parsed_likert = int(raw_likert)
-        except ValueError:
+            parsed_likert = Fraction(raw_likert)
+        except (ValueError, ZeroDivisionError):
             return "invalid_likert"
-        if parsed_likert not in range(5):
+        if parsed_likert.denominator != 1 or int(parsed_likert) not in range(5):
             return "invalid_likert"
 
     if not normalized:
@@ -333,6 +357,9 @@ def classify_terminal_state(row: dict[str, str], ground_truth: str, policy: dict
         ):
             return "mandatory_radiologist"
 
+    if prior_score_reuse is not None and (case_id, normalized) in prior_score_reuse:
+        return "previous_authoritative_score"
+
     return "judge_required"
 
 
@@ -348,6 +375,7 @@ def validate_terminal_policy(policy: dict[str, Any], fixture_csv: Path | None = 
         "idk_approved_typo",
         "canonical_exact",
         "mandatory_radiologist",
+        "previous_authoritative_score",
         "judge_required",
     ]
     if names != expected:
@@ -798,6 +826,44 @@ def build_scorer_view(fieldnames: list[str], rows: list[dict[str, str]]) -> tupl
     return ordered, [{column: row.get(column, "") for column in ordered} for row in rows]
 
 
+def build_prior_score_reuse_snapshot(
+    parent_long_rows: list[dict[str, str]],
+) -> tuple[dict[tuple[str, str], dict[str, str]], list[dict[str, object]]]:
+    buckets: dict[tuple[str, str], list[dict[str, str]]] = {}
+    for row in parent_long_rows:
+        case_id = str(row.get(CASE_KEY, "")).strip()
+        normalized = normalize_diagnosis(row.get("diagnosis", ""))
+        score = str(row.get("final_score_authoritative", "")).strip()
+        if not case_id or not normalized or score not in {"0", "1"}:
+            continue
+        buckets.setdefault((case_id, normalized), []).append(row)
+
+    reusable: dict[tuple[str, str], dict[str, str]] = {}
+    snapshot_rows: list[dict[str, object]] = []
+    for (case_id, normalized), rows in sorted(buckets.items(), key=lambda item: (case_sort_key(item[0][0]), item[0][1])):
+        scores = {str(row.get("final_score_authoritative", "")).strip() for row in rows}
+        score_sources = sorted({str(row.get("final_score_source", "")).strip() for row in rows if str(row.get("final_score_source", "")).strip()})
+        source_candidates = sorted({str(row.get("candidate", "")).strip() for row in rows if str(row.get("candidate", "")).strip()})
+        conflict = len(scores) != 1
+        score_binary = "" if conflict else next(iter(scores))
+        snapshot_row = {
+            CASE_KEY: case_id,
+            "normalized_diagnosis": normalized,
+            "score_binary": score_binary,
+            "support_count": str(len(rows)),
+            "score_sources": ";".join(score_sources),
+            "source_candidates": ";".join(source_candidates),
+            "conflict": str(conflict),
+        }
+        snapshot_rows.append(snapshot_row)
+        if not conflict:
+            reusable[(case_id, normalized)] = {
+                key: str(value)
+                for key, value in snapshot_row.items()
+            }
+    return reusable, snapshot_rows
+
+
 def build_new_model_long_delta(
     parent_long_fieldnames: list[str],
     incoming_rows: list[dict[str, str]],
@@ -806,6 +872,7 @@ def build_new_model_long_delta(
     model_record: dict[str, Any],
     ground_truth_by_case: dict[str, str],
     terminal_policy: dict[str, Any],
+    prior_score_reuse: dict[tuple[str, str], dict[str, str]],
     *,
     parent_run_id: str,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], Counter[str], list[dict[str, object]]]:
@@ -828,7 +895,7 @@ def build_new_model_long_delta(
             "likert": likert,
             "package_failure": "false",
         }
-        state = classify_terminal_state(terminal_row, ground_truth, terminal_policy)
+        state = classify_terminal_state(terminal_row, ground_truth, terminal_policy, prior_score_reuse)
         counts[state] += 1
 
         technical_failure = state == "provider_or_parse_failure"
@@ -863,6 +930,8 @@ def build_new_model_long_delta(
         automatic_score: object = ""
         if state == "canonical_exact":
             automatic_score = 1
+        elif state == "previous_authoritative_score":
+            automatic_score = prior_score_reuse[(case_id, normalize_diagnosis(diagnosis))]["score_binary"]
         elif state in {"provider_or_parse_failure", "invalid_likert", "idk_exact", "idk_approved_typo"}:
             automatic_score = 0
         state_rows.append({
@@ -1001,6 +1070,15 @@ def validate_incoming_package(
     runtime_sha = str(manifest.get("runtime_sha", "")).strip()
     if not re.fullmatch(r"[0-9a-fA-F]{40,64}", runtime_sha):
         raise ValidationError("incoming package runtime_sha is missing or invalid")
+    source_wide_sha = str(manifest.get("source_wide_sha256", "")).strip()
+    if source_wide_sha and runtime_sha.upper() == source_wide_sha.upper():
+        raise ValidationError("incoming package runtime_sha must not be the source wide CSV hash")
+    runtime_sha_status = str(manifest.get("runtime_sha_status", "confirmed")).strip()
+    if runtime_sha_status not in {"confirmed", "inferred"}:
+        raise ValidationError(f"incoming package runtime_sha_status is invalid: {runtime_sha_status!r}")
+    runtime_sha_note = str(manifest.get("runtime_sha_note", "")).strip()
+    if runtime_sha_status != "confirmed" and not runtime_sha_note:
+        raise ValidationError("incoming package inferred runtime_sha requires runtime_sha_note")
     recorded_results = str(manifest.get("results_csv_sha256", "")).upper()
     if recorded_results != sha256_file(incoming_csv):
         raise ValidationError("source manifest final-wide/results hash mismatch")
@@ -1038,14 +1116,26 @@ def validate_incoming_package(
         returned = str(row.get(returned_column, "")).casefold()
         if expected_returned and expected_returned not in returned:
             raise ValidationError(f"returned-model mismatch for case {case_id}: {row.get(returned_column)!r}")
-        if model_record.get("provider_route") == "openrouter_provider_locked":
+        request_extra_required = bool(model_record.get("required_request_extra"))
+        request_extra: Any = None
+        if model_record.get("provider_route") == "openrouter_provider_locked" or request_extra_required:
             try:
-                extra = json.loads(str(row.get(request_extra_column, "{}")) or "{}")
+                request_extra = json.loads(str(row.get(request_extra_column, "{}")) or "{}")
             except json.JSONDecodeError as exc:
                 raise ValidationError(f"invalid request-extra JSON for case {case_id}") from exc
-            provider_policy = extra.get("provider") if isinstance(extra, dict) else None
+        if model_record.get("provider_route") == "openrouter_provider_locked":
+            provider_policy = request_extra.get("provider") if isinstance(request_extra, dict) else None
             if not isinstance(provider_policy, dict) or provider_policy.get("allow_fallbacks") is not False:
                 raise ValidationError(f"provider lock evidence missing for case {case_id}")
+        required_extra = model_record.get("required_request_extra")
+        if isinstance(required_extra, dict):
+            if not isinstance(request_extra, dict):
+                raise ValidationError(f"required request-extra evidence missing for case {case_id}")
+            for key, expected in sorted(required_extra.items()):
+                if request_extra.get(key) != expected:
+                    raise ValidationError(
+                        f"required request-extra mismatch for case {case_id}: {key}={request_extra.get(key)!r}"
+                    )
     content_inventory_sha = package_content_inventory_sha256(
         root=incoming_package,
         inventory=inventory,
@@ -1063,6 +1153,8 @@ def validate_incoming_package(
         "repair_evidence_sha256": sha256_file(repair_path),
         "run_label": run_label,
         "runtime_sha": runtime_sha,
+        "runtime_sha_status": runtime_sha_status,
+        "runtime_sha_note": runtime_sha_note,
     }
 
 
@@ -1141,39 +1233,77 @@ def project_one_model_package(
     source_wide: Path,
     model_key: str,
     output_package: Path,
+    runtime_sha: str,
+    runtime_sha_status: str = "confirmed",
+    runtime_sha_note: str = "",
+    source_manifest_path: Path | None = None,
+    source_model_key: str | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     source_fields, source_rows = read_csv_table(source_wide)
     require_columns(source_fields, KEY_COLUMNS, "source wide")
     source_model_keys = discover_model_keys(source_fields)
-    if model_key not in source_model_keys:
-        raise ValidationError(f"model {model_key!r} not found in source families {source_model_keys}")
+    source_model_key = str(source_model_key or model_key).strip()
+    if source_model_key not in source_model_keys:
+        raise ValidationError(f"source model {source_model_key!r} not found in source families {source_model_keys}")
+    source_selected_fields = KEY_COLUMNS + model_result_columns(source_model_key)
     selected_fields = KEY_COLUMNS + model_result_columns(model_key)
-    require_columns(source_fields, selected_fields, "source wide")
+    require_columns(source_fields, source_selected_fields, "source wide")
     rows_by_case = index_by_case(source_rows, "source wide")
     if len(rows_by_case) != len(source_rows):
         raise ValidationError("source wide case index mismatch")
     if len(source_rows) != 200:
         raise ValidationError(f"one-model projection requires a full 200-case source, got {len(source_rows)}")
-    projected_rows = [
-        {field: row.get(field, "") for field in selected_fields}
-        for row in sorted(source_rows, key=lambda item: case_sort_key(str(item.get(CASE_KEY, ""))))
-    ]
+    runtime_sha = runtime_sha.strip()
+    if not re.fullmatch(r"[0-9a-fA-F]{40,64}", runtime_sha):
+        raise ValidationError("project-one-model requires an explicit 40-64 hex runtime SHA")
+    source_wide_sha = sha256_file(source_wide)
+    if runtime_sha.upper() == source_wide_sha.upper():
+        raise ValidationError("runtime SHA must not be the source wide CSV hash")
+    runtime_sha_status = runtime_sha_status.strip()
+    if runtime_sha_status not in {"confirmed", "inferred"}:
+        raise ValidationError(f"runtime SHA status must be confirmed or inferred, got {runtime_sha_status!r}")
+    runtime_sha_note = runtime_sha_note.strip()
+    if runtime_sha_status != "confirmed" and not runtime_sha_note:
+        raise ValidationError("inferred runtime SHA requires a provenance note")
+    source_manifest_evidence: dict[str, Any] = {}
+    if source_manifest_path is not None:
+        if not source_manifest_path.is_file():
+            raise ValidationError(f"source manifest does not exist: {source_manifest_path}")
+        source_manifest = read_json(source_manifest_path)
+        source_manifest_evidence = {
+            "source_manifest_sha256": sha256_file(source_manifest_path),
+            "source_manifest_content_sha256": content_only_json_sha256(source_manifest_path),
+            "source_manifest_test_limit": source_manifest.get("test_limit", "MISSING"),
+            "source_manifest_runtime_sha_present": bool(str(source_manifest.get("runtime_sha", "")).strip()),
+        }
+    projected_rows: list[dict[str, object]] = []
+    for row in sorted(source_rows, key=lambda item: case_sort_key(str(item.get(CASE_KEY, "")))):
+        projected: dict[str, object] = {field: row.get(field, "") for field in KEY_COLUMNS}
+        for suffix in MODEL_SUFFIXES:
+            projected[f"{suffix}_{model_key}"] = row.get(f"{suffix}_{source_model_key}", "")
+        projected_rows.append(projected)
     projection_payload = {
         "schema_version": "radle_v2_one_model_projection.v1",
         "model_key": model_key,
-        "source_wide_sha256": sha256_file(source_wide),
+        "source_model_key": source_model_key,
+        "source_wide_sha256": source_wide_sha,
         "source_model_keys": source_model_keys,
+        "source_selected_fields": source_selected_fields,
         "selected_fields": selected_fields,
         "row_count": len(projected_rows),
         "test_limit": None,
         "run_label": f"projected_full_{model_key}",
-        "runtime_sha": sha256_file(source_wide).lower(),
+        "runtime_sha": runtime_sha.lower(),
+        "runtime_sha_status": runtime_sha_status,
+        "runtime_sha_note": runtime_sha_note,
+        "source_manifest_evidence": source_manifest_evidence,
     }
     projection_id = compute_intake_id(projection_payload)
     receipt = {
         "projection_id": projection_id,
         "model_key": model_key,
+        "source_model_key": source_model_key,
         "source_model_keys": source_model_keys,
         "selected_field_count": len(selected_fields),
         "row_count": len(projected_rows),
@@ -1257,6 +1387,7 @@ def prepare_incremental_admission(
     validate_parent_wide_long_reconciliation(parent_wide_fields, parent_wide_rows, parent_long_fields, parent_long_rows)
     ground_truth_snapshot = build_ground_truth_snapshot(parent_long_rows, case_ids)
     ground_truth_by_case = {row[CASE_KEY]: row["Ground_Truth_Diagnosis"] for row in ground_truth_snapshot}
+    prior_score_reuse, prior_score_rows = build_prior_score_reuse_snapshot(parent_long_rows)
     model_record = find_model_record(roster, model_key)
     package_evidence = validate_incoming_package(
         incoming_package,
@@ -1302,6 +1433,7 @@ def prepare_incremental_admission(
         model_record,
         ground_truth_by_case,
         terminal_policy,
+        prior_score_reuse,
         parent_run_id=parent_run_id,
     )
     scorer_fields, scorer_rows = build_scorer_view(combined_fields, combined_rows)
@@ -1336,6 +1468,7 @@ def prepare_incremental_admission(
         "roster": canonical_json_sha256(roster_path),
         "terminal_states": canonical_json_sha256(states_path),
         "variants": sha256_file(variants_path),
+        "prior_score_reuse_snapshot": sha256_bytes(serialize_csv_table(PRIOR_SCORE_REUSE_FIELDS, prior_score_rows)),
         "ground_truth_snapshot": sha256_bytes(serialize_csv_table([CASE_KEY, "Ground_Truth_Diagnosis", "Ground_Truth_Normalized"], ground_truth_snapshot)),
         "normalizer_code": canonical_text_sha256(Path(__file__)),
         "requirements": requirements_hashes,
@@ -1400,6 +1533,7 @@ def prepare_incremental_admission(
         return path
 
     write_csv_table(staged("canonical_ground_truth_snapshot", "canonical_ground_truth_snapshot.csv"), [CASE_KEY, "Ground_Truth_Diagnosis", "Ground_Truth_Normalized"], ground_truth_snapshot)
+    write_csv_table(staged("prior_score_reuse_snapshot", "prior_score_reuse_snapshot.csv"), PRIOR_SCORE_REUSE_FIELDS, prior_score_rows)
     write_csv_table(staging_root / "one_model_final_wide.csv", one_model_fields, one_model_rows)
     staged_files["one_model_final_wide"] = staging_root / "one_model_final_wide.csv"
     write_csv_table(staging_root / "combined_wide" / "RadLE_v2_results_final.csv", combined_fields, combined_rows)
@@ -1508,6 +1642,7 @@ def audit_prepared_staging(staging_root: Path) -> dict[str, Any]:
     outputs = manifest.get("outputs", {})
     required_output_keys = [
         "canonical_ground_truth_snapshot",
+        "prior_score_reuse_snapshot",
         "one_model_final_wide",
         "combined_wide",
         "scorer_view",
@@ -1561,8 +1696,10 @@ def audit_prepared_staging(staging_root: Path) -> dict[str, Any]:
 
     case_count = int(manifest.get("case_count", 0))
     row_counts = {}
-    for key in ["canonical_ground_truth_snapshot", "one_model_final_wide", "combined_wide", "scorer_view", "new_model_long_delta", "adjudication_state", "judge_worklist"]:
+    for key in ["canonical_ground_truth_snapshot", "prior_score_reuse_snapshot", "one_model_final_wide", "combined_wide", "scorer_view", "new_model_long_delta", "adjudication_state", "judge_worklist"]:
         fields, rows = read_csv_table(output_paths[key])
+        if key == "prior_score_reuse_snapshot" and fields != PRIOR_SCORE_REUSE_FIELDS:
+            raise ValidationError(f"prior-score reuse snapshot schema mismatch: {fields}")
         if key == "new_model_long_delta" and fields != FINAL_LONG_MASTER_FIELDS:
             raise ValidationError(f"prepared delta schema mismatch: {fields}")
         if key == "adjudication_state" and fields != ADJUDICATION_STATE_FIELDS:
@@ -1579,6 +1716,17 @@ def audit_prepared_staging(staging_root: Path) -> dict[str, Any]:
     terminal_audit = read_json(output_paths["terminal_state_audit"])
     if terminal_audit.get("terminal_state_counts") != manifest.get("terminal_state_counts"):
         raise ValidationError("terminal_state_counts mismatch between manifest and audit")
+
+    parent_long_fields, parent_long_rows = read_csv_table(output_paths["parent_final_long_master"])
+    if parent_long_fields != FINAL_LONG_MASTER_FIELDS:
+        raise ValidationError("prepared parent final-master schema mismatch")
+    _, expected_prior_score_rows = build_prior_score_reuse_snapshot(parent_long_rows)
+    prior_score_fields, prior_score_rows = read_csv_table(output_paths["prior_score_reuse_snapshot"])
+    if prior_score_fields != PRIOR_SCORE_REUSE_FIELDS:
+        raise ValidationError("prior-score reuse snapshot schema mismatch")
+    if expected_prior_score_rows != prior_score_rows:
+        raise ValidationError("prior-score reuse snapshot does not independently recompute")
+    prior_score_reuse, _ = build_prior_score_reuse_snapshot(parent_long_rows)
 
     delta_fields, delta_rows = read_csv_table(output_paths["new_model_long_delta"])
     state_fields, state_rows = read_csv_table(output_paths["adjudication_state"])
@@ -1612,7 +1760,7 @@ def audit_prepared_staging(staging_root: Path) -> dict[str, Any]:
             "likert": incoming.get(likert_column, ""),
             "package_failure": state_row.get("package_failure", "false"),
         }
-        actual_state = classify_terminal_state(terminal_row, gt_by_case[key[0]], policy)
+        actual_state = classify_terminal_state(terminal_row, gt_by_case[key[0]], policy, prior_score_reuse)
         if state_row.get("terminal_state") != actual_state:
             raise ValidationError(f"adjudication-state classification mismatch for {key}: {state_row.get('terminal_state')} != {actual_state}")
         if state_row.get("candidate") != model_key:
@@ -1623,7 +1771,14 @@ def audit_prepared_staging(staging_root: Path) -> dict[str, Any]:
             raise ValidationError(f"normalized diagnosis mismatch for {key}")
         if state_row.get("source_row_sha256") != row_sha256(incoming, one_fields):
             raise ValidationError(f"source-row hash mismatch for {key}")
-        expected_auto = "1" if actual_state == "canonical_exact" else "0" if actual_state in {"provider_or_parse_failure", "invalid_likert", "idk_exact", "idk_approved_typo"} else ""
+        if actual_state == "canonical_exact":
+            expected_auto = "1"
+        elif actual_state == "previous_authoritative_score":
+            expected_auto = prior_score_reuse[(key[0], normalize_diagnosis(incoming.get(diagnosis_column, "")))]["score_binary"]
+        elif actual_state in {"provider_or_parse_failure", "invalid_likert", "idk_exact", "idk_approved_typo"}:
+            expected_auto = "0"
+        else:
+            expected_auto = ""
         if state_row.get("automatic_score", "") != expected_auto:
             raise ValidationError(f"automatic score mismatch for {key}")
         expected_judge = str(actual_state == "judge_required")
@@ -1776,7 +1931,7 @@ def audit_judge_evidence(staging_root: Path) -> dict[str, Any]:
         if case_id not in worklist_by_case:
             raise ValidationError(f"judge result case not in worklist: {case_id}")
         requested = str(result.get("requested_judge_model_id", ""))
-        if requested not in configured_ids or result.get("returned_judge_model_id") != requested:
+        if requested not in configured_ids or not model_id_matches_request(requested, result.get("returned_judge_model_id")):
             raise ValidationError(f"judge model identity mismatch for case {case_id}")
         if result.get("intake_id") != manifest.get("intake_id") or result.get("case_triplet_sha256") != expected_case_fingerprint:
             raise ValidationError(f"judge result intake/case fingerprint mismatch for case {case_id}")
@@ -1854,6 +2009,9 @@ RADIOLOGIST_DECISION_FIELDS = [
     "reviewed_utc",
     "rationale",
 ]
+COMBINED_RADIOLOGIST_SCORE_REQUIRED_FIELDS = [CASE_KEY, "model_blinded", "human_score"]
+COMBINED_RADIOLOGIST_SCORE_ALIGNMENT_FIELDS = ["Ground_Truth_Diagnosis", "diagnosis", "likert"]
+COMBINED_RADIOLOGIST_SCORE_NOTE_FIELDS = ["rationale", "notes", "review_notes", "comment", "comments"]
 
 
 def validate_radiologist_decisions(queue_rows: list[dict[str, str]], decisions_path: Path) -> dict[tuple[str, str], dict[str, str]]:
@@ -1895,6 +2053,187 @@ def validate_radiologist_decisions(queue_rows: list[dict[str, str]], decisions_p
     if missing:
         raise ValidationError(f"radiologist decisions missing queue keys: {missing[:10]}")
     return decisions
+
+
+def _format_case_model_key(key: tuple[str, str]) -> str:
+    return f"{key[0]} / {key[1]}"
+
+
+def _case_model_key_sort_key(key: tuple[str, str]) -> tuple[tuple[int, object], str]:
+    return (case_sort_key(key[0]), key[1])
+
+
+def _normalize_binary_human_score(value: object, key: tuple[str, str]) -> str:
+    raw = "" if value is None else str(value).strip()
+    if raw in {"0", "1"}:
+        return raw
+    if not raw:
+        raise ValidationError(f"combined radiologist human_score is blank for {_format_case_model_key(key)}")
+    try:
+        parsed = Fraction(raw)
+    except (ValueError, ZeroDivisionError) as exc:
+        raise ValidationError(
+            f"combined radiologist human_score must be binary 0 or 1 for {_format_case_model_key(key)}"
+        ) from exc
+    if parsed.denominator == 1 and parsed.numerator in {0, 1}:
+        return str(parsed.numerator)
+    raise ValidationError(f"combined radiologist human_score must be binary 0 or 1 for {_format_case_model_key(key)}")
+
+
+def _likert_values_match(left: object, right: object) -> bool:
+    left_text = "" if left is None else str(left).strip()
+    right_text = "" if right is None else str(right).strip()
+    if left_text == right_text:
+        return True
+    try:
+        return Fraction(left_text) == Fraction(right_text)
+    except (ValueError, ZeroDivisionError):
+        return False
+
+
+def _combined_output_name(model_key: str, model_blinded: str) -> str:
+    base = model_key.strip() or model_blinded.strip() or "model"
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", base).strip("_") or "model"
+
+
+def split_combined_radiologist_scores(
+    *,
+    combined_scores: Path,
+    staging_roots: list[Path],
+    output_root: Path,
+    reviewer_pseudonym: str,
+    reviewed_utc: str,
+    rationale_prefix: str = "combined_human_score",
+    allow_extra: bool = False,
+) -> dict[str, Any]:
+    """Convert one combined long human-score sheet into exact per-model overlays."""
+    if not staging_roots:
+        raise ValidationError("at least one staging root is required")
+    reviewer_pseudonym = str(reviewer_pseudonym).strip()
+    reviewed_utc = str(reviewed_utc).strip()
+    if not reviewer_pseudonym:
+        raise ValidationError("reviewer_pseudonym is required")
+    if not reviewed_utc:
+        raise ValidationError("reviewed_utc is required")
+
+    combined_fields, combined_rows = read_csv_table(combined_scores)
+    require_columns(combined_fields, COMBINED_RADIOLOGIST_SCORE_REQUIRED_FIELDS, "combined radiologist scores")
+
+    stage_specs: list[dict[str, Any]] = []
+    expected_rows: dict[tuple[str, str], dict[str, str]] = {}
+    expected_stage_index: dict[tuple[str, str], int] = {}
+    output_names: set[str] = set()
+    for raw_root in staging_roots:
+        staging_root = Path(raw_root)
+        manifest = read_json(staging_root / "append_input_manifest.json")
+        model_key = str(manifest.get("model_key", "")).strip()
+        model_blinded = str(manifest.get("model_blinded", "")).strip()
+        if not model_key or not model_blinded:
+            raise ValidationError(f"staging root manifest missing model identity: {staging_root}")
+        output_name = _combined_output_name(model_key, model_blinded)
+        if output_name in output_names:
+            raise ValidationError(f"duplicate combined split output name: {output_name}")
+        output_names.add(output_name)
+        queue_fields, queue_rows = read_csv_table(staging_root / "radiologist_queue.csv")
+        if queue_fields != RADIOLOGIST_QUEUE_FIELDS:
+            raise ValidationError(f"radiologist queue columns mismatch under {staging_root}")
+        stage_index = len(stage_specs)
+        for queue_row in queue_rows:
+            key = (queue_row.get(CASE_KEY, ""), queue_row.get("model_blinded", ""))
+            if key in expected_rows:
+                raise ValidationError(f"duplicate expected radiologist queue key: {_format_case_model_key(key)}")
+            expected_rows[key] = queue_row
+            expected_stage_index[key] = stage_index
+        stage_specs.append({
+            "staging_root": staging_root,
+            "model_key": model_key,
+            "model_blinded": model_blinded,
+            "output_name": output_name,
+            "queue_rows": queue_rows,
+        })
+
+    combined_by_key: dict[tuple[str, str], dict[str, str]] = {}
+    for row_number, row in enumerate(combined_rows, start=2):
+        key = (str(row.get(CASE_KEY, "")).strip(), str(row.get("model_blinded", "")).strip())
+        if key in combined_by_key:
+            raise ValidationError(f"duplicate combined radiologist row for {_format_case_model_key(key)}")
+        if not key[0] or not key[1]:
+            raise ValidationError(f"combined radiologist row {row_number} is missing case/model key")
+        combined_by_key[key] = row
+
+    expected_keys = set(expected_rows)
+    combined_keys = set(combined_by_key)
+    missing = sorted(expected_keys - combined_keys, key=_case_model_key_sort_key)
+    if missing:
+        preview = ", ".join(_format_case_model_key(key) for key in missing[:10])
+        raise ValidationError(f"combined radiologist scores missing expected queue keys: {preview}")
+    unexpected = sorted(combined_keys - expected_keys, key=_case_model_key_sort_key)
+    if unexpected and not allow_extra:
+        preview = ", ".join(_format_case_model_key(key) for key in unexpected[:10])
+        raise ValidationError(f"combined radiologist scores contain unexpected keys: {preview}")
+
+    decisions_by_stage: list[list[dict[str, object]]] = [[] for _ in stage_specs]
+    for key in sorted(expected_keys, key=_case_model_key_sort_key):
+        combined_row = combined_by_key[key]
+        queue_row = expected_rows[key]
+        for field in COMBINED_RADIOLOGIST_SCORE_ALIGNMENT_FIELDS:
+            if field not in combined_fields:
+                continue
+            combined_value = combined_row.get(field, "")
+            queue_value = queue_row.get(field, "")
+            matches = _likert_values_match(combined_value, queue_value) if field == "likert" else str(combined_value) == str(queue_value)
+            if not matches:
+                raise ValidationError(
+                    "combined radiologist scores do not match queue evidence for "
+                    f"{_format_case_model_key(key)} field {field!r}"
+                )
+        score = _normalize_binary_human_score(combined_row.get("human_score", ""), key)
+        note = next((str(combined_row.get(field, "")).strip() for field in COMBINED_RADIOLOGIST_SCORE_NOTE_FIELDS if str(combined_row.get(field, "")).strip()), "")
+        rationale = str(rationale_prefix).strip()
+        if note:
+            rationale = f"{rationale}: {note}" if rationale else note
+        decisions_by_stage[expected_stage_index[key]].append({
+            CASE_KEY: key[0],
+            "model_blinded": key[1],
+            "score_binary": score,
+            "reviewer_pseudonym": reviewer_pseudonym,
+            "reviewed_utc": reviewed_utc,
+            "rationale": rationale,
+        })
+
+    output_root.mkdir(parents=True, exist_ok=True)
+    per_model: list[dict[str, Any]] = []
+    for spec, decision_rows in zip(stage_specs, decisions_by_stage):
+        decision_rows.sort(key=lambda row: case_sort_key(str(row[CASE_KEY])))
+        decisions_path = output_root / str(spec["output_name"]) / "radiologist_decisions.csv"
+        write_csv_table(decisions_path, RADIOLOGIST_DECISION_FIELDS, decision_rows)
+        validate_radiologist_decisions(spec["queue_rows"], decisions_path)
+        per_model.append({
+            "model_key": spec["model_key"],
+            "model_blinded": spec["model_blinded"],
+            "staging_root": str(spec["staging_root"].resolve()),
+            "radiologist_queue_rows": len(spec["queue_rows"]),
+            "decisions_path": str(decisions_path.resolve()),
+            "decisions_sha256": sha256_file(decisions_path),
+        })
+
+    receipt = {
+        "schema_version": "radle_v2_combined_radiologist_split.v1",
+        "combined_scores": str(combined_scores.resolve()),
+        "combined_scores_sha256": sha256_file(combined_scores),
+        "combined_rows": len(combined_rows),
+        "expected_rows": len(expected_rows),
+        "ignored_extra_rows": len(unexpected) if allow_extra else 0,
+        "reviewer_pseudonym": reviewer_pseudonym,
+        "reviewed_utc": reviewed_utc,
+        "output_root": str(output_root.resolve()),
+        "per_model": per_model,
+    }
+    summary_path = output_root / "split_summary.json"
+    write_json(summary_path, receipt)
+    receipt["split_summary_path"] = str(summary_path.resolve())
+    receipt["split_summary_sha256"] = sha256_file(summary_path)
+    return receipt
 
 
 def read_agreement_locks(path: Path) -> dict[str, dict[str, str]]:
@@ -1977,6 +2316,8 @@ def finalize_incremental_admission(
             score, source = "0", "auto_score_not_required"
         elif state == "canonical_exact":
             score, source = "1", "canonical_exact"
+        elif state == "previous_authoritative_score":
+            score, source = str(state_row.get("automatic_score", "")).strip(), "previous_authoritative_score"
         elif key in decisions:
             decision = decisions[key]
             score, source = str(decision["score_binary"]).strip(), "radiologist"
@@ -1986,6 +2327,8 @@ def finalize_incremental_admission(
             raise ValidationError(f"case {case_id} has no finalization source")
         if source not in ALLOWED_NEW_SCORE_SOURCES:
             raise ValidationError(f"unapproved final score source for case {case_id}: {source}")
+        if score not in {"0", "1"}:
+            raise ValidationError(f"non-binary final score for case {case_id}: {score!r}")
         scored["final_score_authoritative"] = score
         scored["final_score_source"] = source
         source_counts[source] += 1
@@ -2258,6 +2601,8 @@ def audit_finalized_admission(final_root: Path, *, require_committed: bool = Fal
             expected_score, expected_source = "0", "auto_score_not_required"
         elif state == "canonical_exact":
             expected_score, expected_source = "1", "canonical_exact"
+        elif state == "previous_authoritative_score":
+            expected_score, expected_source = str(state_by_key[key].get("automatic_score", "")).strip(), "previous_authoritative_score"
         elif key in decisions:
             expected_score, expected_source = decisions[key]["score_binary"], "radiologist"
         elif row[CASE_KEY] in locks:

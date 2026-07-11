@@ -1,0 +1,113 @@
+[
+  {
+    "completion_tokens": 512,
+    "content_chars": 0,
+    "effort": "baseline",
+    "finish_reason": "length",
+    "model": "muse-spark-1.1",
+    "ok": true,
+    "prompt_tokens": 49,
+    "provider": "",
+    "reasoning_chars": 0,
+    "reasoning_details_count": 0,
+    "reasoning_present": false,
+    "reasoning_tokens": 509,
+    "request_kwargs": {
+      "max_tokens": 512,
+      "messages": [
+        {
+          "content": "Solve this compact diagnostic-style reasoning task. A 7-year-old has a metaphyseal corner fracture pattern after minor trauma. Return only JSON: {\"answer\":\"...\",\"confidence\":0-4}.",
+          "role": "user"
+        }
+      ],
+      "model": "muse-spark-1.1"
+    },
+    "response_id": "chatcmpl-93d7f2f4-f355-4116-b10a-2caa174e2202",
+    "returned_model": "muse-spark-1.1",
+    "total_tokens": 561
+  },
+  {
+    "completion_tokens": 450,
+    "content_chars": 230,
+    "effort": "minimal",
+    "finish_reason": "stop",
+    "model": "muse-spark-1.1",
+    "ok": true,
+    "prompt_tokens": 49,
+    "provider": "",
+    "reasoning_chars": 0,
+    "reasoning_details_count": 0,
+    "reasoning_present": false,
+    "reasoning_tokens": 390,
+    "request_kwargs": {
+      "max_tokens": 512,
+      "messages": [
+        {
+          "content": "Solve this compact diagnostic-style reasoning task. A 7-year-old has a metaphyseal corner fracture pattern after minor trauma. Return only JSON: {\"answer\":\"...\",\"confidence\":0-4}.",
+          "role": "user"
+        }
+      ],
+      "model": "muse-spark-1.1",
+      "reasoning_effort": "minimal"
+    },
+    "response_id": "chatcmpl-e2b75805-1196-4e75-bc78-f7afcb68871d",
+    "returned_model": "muse-spark-1.1",
+    "total_tokens": 499
+  },
+  {
+    "completion_tokens": 512,
+    "content_chars": 0,
+    "effort": "high",
+    "finish_reason": "length",
+    "model": "muse-spark-1.1",
+    "ok": true,
+    "prompt_tokens": 49,
+    "provider": "",
+    "reasoning_chars": 0,
+    "reasoning_details_count": 0,
+    "reasoning_present": false,
+    "reasoning_tokens": 509,
+    "request_kwargs": {
+      "max_tokens": 512,
+      "messages": [
+        {
+          "content": "Solve this compact diagnostic-style reasoning task. A 7-year-old has a metaphyseal corner fracture pattern after minor trauma. Return only JSON: {\"answer\":\"...\",\"confidence\":0-4}.",
+          "role": "user"
+        }
+      ],
+      "model": "muse-spark-1.1",
+      "reasoning_effort": "high"
+    },
+    "response_id": "chatcmpl-b5469e8b-10c4-47ca-b080-737856f13900",
+    "returned_model": "muse-spark-1.1",
+    "total_tokens": 561
+  },
+  {
+    "completion_tokens": 512,
+    "content_chars": 0,
+    "effort": "xhigh",
+    "finish_reason": "length",
+    "model": "muse-spark-1.1",
+    "ok": true,
+    "prompt_tokens": 49,
+    "provider": "",
+    "reasoning_chars": 0,
+    "reasoning_details_count": 0,
+    "reasoning_present": false,
+    "reasoning_tokens": 509,
+    "request_kwargs": {
+      "max_tokens": 512,
+      "messages": [
+        {
+          "content": "Solve this compact diagnostic-style reasoning task. A 7-year-old has a metaphyseal corner fracture pattern after minor trauma. Return only JSON: {\"answer\":\"...\",\"confidence\":0-4}.",
+          "role": "user"
+        }
+      ],
+      "model": "muse-spark-1.1",
+      "reasoning_effort": "xhigh"
+    },
+    "response_id": "chatcmpl-95909f53-8731-497b-9473-7fdb6857c785",
+    "returned_model": "muse-spark-1.1",
+    "total_tokens": 561
+  }
+]

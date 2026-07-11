@@ -130,6 +130,13 @@ class OpenRouterJudgeTests(unittest.TestCase):
     def success_responses(self) -> list[dict[str, object]]:
         return [judge_response(model) for _ in range(self.worklist_count) for model in self.judge_ids]
 
+    def versioned_success_responses(self) -> list[dict[str, object]]:
+        return [
+            judge_response(f"{model}-20260219" if model.startswith("google/") else f"{model}-20260616")
+            for _ in range(self.worklist_count)
+            for model in self.judge_ids
+        ]
+
     def run_real(self, staging: Path, transport: FakeTransport, *, api_key: str = "fake-key") -> dict[str, object]:
         return run_openrouter_dual_judge_delta(
             staging_root=staging,
@@ -159,6 +166,17 @@ class OpenRouterJudgeTests(unittest.TestCase):
             self.assertNotIn("Candidate AE", request_text)
             index = json.loads((staging / "judge_evidence/judge_evidence_index.json").read_text(encoding="utf-8"))
             self.assertEqual(index["files"]["paid_judge_authorization"]["path"], "paid_judge_authorization.json")
+
+    def test_openrouter_versioned_returned_model_ids_are_auditable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            staging = self.make_staging(Path(tmp))
+            self.write_authorization(staging)
+            transport = FakeTransport(self.versioned_success_responses())
+            receipt = self.run_real(staging, transport)
+            self.assertEqual(receipt["result"], "PASS")
+            self.assertEqual(audit_judge_evidence(staging)["result"], "PASS")
+            _, lock_rows = read_csv_table(staging / "judge_evidence/agreement_locks.csv")
+            self.assertEqual(len(lock_rows), self.worklist_count)
 
     def test_authorization_failures_make_zero_transport_calls(self) -> None:
         scenarios = {
