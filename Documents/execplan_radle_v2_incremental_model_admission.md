@@ -18,7 +18,259 @@ Success is observable when each committed admission has a sealed input manifest,
 
 ## Current State
 
-Current state (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol): child Milestone 6.5 has passed and `PRE_M7_REPAIR_RESULT=PASS` is recorded in `Documents/execplan_radle_v2_pre_m7_production_repair.md` with review receipt `review/pre_m7_production_repair_review.json`. Next: commit and push the repair branch, then begin Milestone 7 by inventorying and sealing the already downloaded three-model source. Real `prepare` may consume only sealed one-model packages after source hash, manifest, runtime provenance, parent-chain, and no-paid-judge gates pass.
+Current state (2026-07-12 02:25 +05:30, Codex/GPT-5): the previously dirty `C:/tmp/radle_v2_pre_m7_repair` admission-continuation state has been checkpointed in commit `410b447` (`Checkpoint three-model admission continuation`). That commit preserves the three-model admission SOP, high-effort Muse carry-forward helper, runtime/judge/projection repairs, tests, and probe receipts. Candidate AE / `grok_4_5`, Candidate AF / `gpt_5_6_sol_pro`, and Candidate AG / high-effort `muse_spark_1_1` remain finalized/read back, with the private final master at 6600 rows. This checkpoint is a branch-consolidation preservation step only; it does not close branches, push, publish, or modify the primary checkout. Next consolidation action: compare `410b447` against `codex/radle-v2-post-admission-panels` and decide the minimal merge/cherry-pick path. Next project action remains building/auditing the active IDK0 Score1000/Score2000 lane and regenerating candidate-public/panel artifacts only after the separate privacy/publication approval gate.
+
+## Repeatable Admission SOP
+
+This section is the short operating manual for admitting every future model version. A fresh agent should start here, then use `Locked Facts`, `Do Not Revisit`, and the active milestone for the current concrete paths. Do not use old chat memory, copied shell history, or a previous staging root as authority when this SOP and the current committed root disagree.
+
+### Bind These Inputs First
+
+Before any command, write the actual values into the working notes for the run:
+
+- `ModelKey`: the roster model key to admit, for example `grok_4_5`, `gpt_5_6_sol_pro`, or `muse_spark_1_1`.
+- `SourceModelKey`: only when a shared/source CSV uses a temporary family name that must project into `ModelKey`, for example `muse_spark_1_1_high` into `muse_spark_1_1`; otherwise omit it.
+- `ParentCommittedRoot`: the latest committed parent root containing `COMMITTED.json`, `SHA256SUMS`, `append_manifest.json`, and `final/radle_v2_final_long_master.csv`.
+- `ParentWide`: the current complete wide results CSV that matches the parent.
+- `ParentAuthorityManifest`: the frozen parent authority manifest for the parent chain.
+- `BlindMap`: the stable blinding map that allocates the next unused candidate label.
+- `SourceWide`: the downloaded full-run source wide CSV or already projected one-model package source.
+- `RuntimeSha`: the full runtime commit SHA. Use `--runtime-sha-status inferred` only when the manifest records why a direct checkout SHA is unavailable.
+- `PackageRoot`, `AdmissionOutputRoot`, `RadiologistOutputRoot`, and `Idk0LaneRoot`: new dated, non-empty-safe roots for this run. Do not reuse an existing output root for a new input hash.
+- `ReviewerPseudonym`, `ReviewedUtc`, and optional `RationalePrefix`: required when splitting radiologist handback rows.
+- `JudgeAuthorization`: a real `paid_judge_authorization.json` path. Paid LLM judging is blocked without this explicit file.
+
+### Normal Sequential Admission Path
+
+Use this path for ordinary model N, including model replacements. One transaction admits exactly one model arm and appends exactly 200 rows.
+
+1. Validate repo/config readiness.
+
+       py -3.11 scripts/radle_v2_incremental_admission.py check-config
+       py -3.11 scripts/radle_v2_incremental_admission.py check-base
+
+   Expected: both commands print `PASS` states. Any config/hash failure blocks admission.
+
+2. Project a shared wide source into a one-model package when needed.
+
+       py -3.11 scripts/radle_v2_incremental_admission.py project-one-model --source-wide $SourceWide --model-key $ModelKey --output-package $PackageRoot --runtime-sha $RuntimeSha
+
+   If the raw source family differs from the admitted identity, add:
+
+       --source-model-key $SourceModelKey
+
+   If runtime SHA is inferred, add:
+
+       --runtime-sha-status inferred --runtime-sha-note "<short evidence note>"
+
+   Expected: the package has one model family, exactly 200 rows, source-cell equality proof, `source_manifest.json`, and `SHA256SUMS`.
+
+3. Prepare against the latest committed parent, first as dry run and then for real.
+
+       py -3.11 scripts/radle_v2_incremental_admission.py prepare --parent-wide $ParentWide --parent-final-long-master "$ParentCommittedRoot/final/radle_v2_final_long_master.csv" --parent-authority-manifest $ParentAuthorityManifest --blind-map $BlindMap --incoming-package $PackageRoot --model-key $ModelKey --roster config/radle_v2_model_roster.json --variants config/radle_v2_base_authority.json --states config/radle_v2_terminal_states.json --output-root $AdmissionOutputRoot --dry-run
+       py -3.11 scripts/radle_v2_incremental_admission.py prepare --parent-wide $ParentWide --parent-final-long-master "$ParentCommittedRoot/final/radle_v2_final_long_master.csv" --parent-authority-manifest $ParentAuthorityManifest --blind-map $BlindMap --incoming-package $PackageRoot --model-key $ModelKey --roster config/radle_v2_model_roster.json --variants config/radle_v2_base_authority.json --states config/radle_v2_terminal_states.json --output-root $AdmissionOutputRoot
+
+   Expected: the real run emits one staging/intake root. Record the intake ID, root path, row counts, terminal-state counts, and package/source hashes in this plan.
+
+4. Audit the prepared root.
+
+       py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root $StagingRoot --phase prepared --no-write
+
+   Expected: `RESULT=PASS`. A prepared root is not final and is not a parent for any later model.
+
+5. Run the dual-judge dry run, then paid judging only after explicit authorization.
+
+       py -3.11 scripts/radle_v2_dual_judge_delta.py --staging-root $StagingRoot --config config/radle_v2_judges.json --dry-run
+       py -3.11 scripts/radle_v2_dual_judge_delta.py --staging-root $StagingRoot --config config/radle_v2_judges.json --authorization $JudgeAuthorization --real
+       py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root $StagingRoot --phase judge --no-write
+
+   Expected: the dry run records call ceilings; the real run records HTTP request count, cost, judge cache/result hashes, locked rows, and radiologist queue rows; the judge audit prints `RESULT=PASS`.
+
+6. Resolve radiologist rows.
+
+   If `radiologist_queue.csv` has rows, send only the current queue rows for review and ingest one combined handback CSV/XLSX with binary `human_score`. Convert XLSX to CSV if needed, then split:
+
+       py -3.11 scripts/radle_v2_incremental_admission.py split-radiologist-scores --combined-scores $CombinedScoresCsv --staging-root $StagingRoot --output-root $RadiologistOutputRoot --reviewer-pseudonym $ReviewerPseudonym --reviewed-utc $ReviewedUtc
+
+   Expected: every expected `(Master_Case_ID, model_blinded)` is present exactly once; optional `Ground_Truth_Diagnosis`, `diagnosis`, and numeric-equivalent `likert` evidence matches the queue; each per-model `radiologist_decisions.csv` has the exact overlay schema. If the queue is empty, use the header-only `NONE` overlay generated with the staging evidence.
+
+7. Finalize and audit before commitment.
+
+       py -3.11 scripts/radle_v2_incremental_admission.py finalize-stage --intake-root $StagingRoot --radiologist-decisions $RadiologistDecisionsCsv
+       py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root $FinalStagingRoot --phase precommit --no-write
+
+   Expected: `scored_append_delta.csv` has exactly 200 rows, old parent bytes are preserved as prefix, `append_manifest.json` records every source/evidence hash, and precommit audit prints `RESULT=PASS`.
+
+8. Commit and read back.
+
+       py -3.11 scripts/radle_v2_incremental_admission.py commit --final-staging-root $FinalStagingRoot
+       py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root $CommittedRoot --phase committed-readback --no-write
+
+   Expected: `COMMITTED.json` is written last with transaction state `FINAL_MASTER_COMMITTED`; `SHA256SUMS` verifies; committed-readback prints `RESULT=PASS`. Only after this point can this root become `ParentCommittedRoot` for the next model.
+
+9. Build the downstream IDK0/Score1000/Score2000 lane from the committed root.
+
+       py -3.11 scripts/radle_v2_incremental_admission.py build-idk0-lane --committed-root $CommittedRoot --output-root $Idk0LaneRoot --human-presentation pooled12 --roster config/radle_v2_model_roster.json --states config/radle_v2_terminal_states.json
+       py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root $Idk0LaneRoot --phase idk0-lane --no-write
+
+   Expected: `score_rows.csv`, `source1000.csv`, `public_candidate_summary.csv`, `panel_order.csv`, `group_summary.csv`, `panel_bins.csv`, and `score_lane_manifest.json` are derived from the committed master and roster. Counts must come from the manifest, not historical constants.
+
+10. Update this ExecPlan before yielding.
+
+    Record the committed root, parent root, finalization ID, final master row count and SHA256, append manifest SHA256, `COMMITTED.json` state/hash, score-source counts, judge/radiologist counts, IDK0 lane root/hash, and the next action. Add or reconcile `Locked Facts`, `Do Not Revisit`, `Progress`, `Decision Log`, `Revision Notes`, and `Outcomes & Retrospective` as needed.
+
+### Batch Radiologist Handback Path
+
+When multiple models have open radiologist queues, it is acceptable to send a single blinded workbook/CSV and split it afterward. The split step must be exact against each current staging root, not against an obsolete queue from a different parent chain.
+
+- Use `human_score` as the human-facing return column and normalize it to binary `score_binary` only inside the generated `radiologist_decisions.csv` overlays.
+- Match on `(Master_Case_ID, model_blinded)` and, when provided, exact `Ground_Truth_Diagnosis` and `diagnosis`; allow only numeric-equivalent formatting differences for `likert`, such as `4` versus `4.0`.
+- If a returned workbook includes old or obsolete rows, filter to the current queue rows and record the obsolete count as audit evidence. Do not silently lift unmatched rows.
+- Previously authoritative score reuse must be produced by `prepare` as terminal state `previous_authoritative_score`. Do not simulate it by hand-filling radiologist overlays.
+- The one combined handback may cover several candidates, but `finalize-stage` remains per-model and per-staging-root.
+
+### Carry-Forward Exception Path
+
+Carry-forward is not the normal replay path. Use it only after the user explicitly authorizes carrying a completed adjudication package from one parent chain onto the current committed parent, and only when the source finalization has already passed the conventional audit for its own parent.
+
+For the existing Muse exception, the approved helper is:
+
+    py -3.11 scripts/radle_v2_carry_forward_muse_admission.py --source-final-root $SourceFinalRoot --parent-committed-root $ParentCommittedRoot --output-root $CarryForwardOutputRoot --carry-forward-note $CarryForwardNote
+    py -3.11 scripts/radle_v2_incremental_admission.py commit --final-staging-root $CarryForwardFinalRoot
+    py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root $CarryForwardCommittedRoot --phase committed-readback --no-write
+
+Expected: the source finalization is validated before use; the output appends the audited source scored delta to the current committed parent bytes; `append_manifest.json` records `evidence_carry_forward.source_finalization_id`, `source_parent_chain_id`, and `carried_forward_to_parent_chain_id`; committed-readback prints `RESULT=PASS`. Do not generalize this helper to non-Muse models without a separate reviewed script or an explicit plan revision.
+
+### Hard Stop Rules
+
+Stop immediately and update `Current State` as blocked if any of these happen:
+
+- The parent root lacks `COMMITTED.json`, has a failing readback audit, or is not the latest intended chain parent.
+- The source package is a smoke/test run, not exactly 200 cases, lacks runtime provenance, or has unresolved repair targets.
+- `runtime_sha` is a file hash or source CSV hash instead of a runtime commit SHA.
+- A staging root belongs to a different parent chain and no user-authorized carry-forward path exists.
+- Any old-row hash, old key order, or parent-prefix check fails.
+- A paid judge run lacks explicit authorization or a recorded cost/request receipt.
+- A radiologist queue has missing, duplicate, nonbinary, or unexpected rows after filtering.
+- `finalize-stage`, precommit audit, commit, or committed-readback fails.
+- `build-idk0-lane` output counts are being adjusted by hand instead of derived from the committed master and roster.
+- Public/panel artifacts are about to be published before the separate privacy approval artifact exists.
+
+### Per-Model Completion Checklist
+
+A model admission is complete only when the plan records all of the following:
+
+- `ModelKey`, blind label, replacement target if any, parent committed root, and final committed root.
+- Source path, projected package path if any, runtime SHA/status, package SHA256 inventory, and source manifest hash.
+- Prepared staging root, intake ID, prepared audit result, terminal-state counts, and judge worklist count.
+- Judge dry-run ceiling; real judge receipt if used, including HTTP requests, cost, locked rows, queue rows, cache hash, result hash, and judge audit result.
+- Radiologist handback path/hash, filtered current-row count, per-model decisions hash, and split result when the queue is nonempty.
+- Finalization ID, `scored_append_delta.csv` row count, final master row count, final master SHA256, append manifest SHA256, checksum count, and `COMMITTED.json` state/hash.
+- Score-source counts for the new 200 rows.
+- IDK0 lane root, lane manifest hash, active/excluded comparator counts, and panel-order counts if the downstream lane is generated.
+- An updated `Current State` naming the next exact action.
+
+## Colab Output To SVG Command Index
+
+This is the end-to-end script map from a Colab/Morning output CSV stored on Google Drive to regenerated SVG panel artifacts. The current production-safe route is two-stage:
+
+1. Admission worktree: consume the Colab wide CSV, adjudicate/finalize one model, and commit a new private `radle_v2_final_long_master.csv`.
+2. Panel checkout: consume the committed private final long master and regenerate Score1000/Score2000 tables, panel stats, SVGs, logo-placement variants, PNG/contact sheets, and SVG audits.
+
+### Upstream Colab Output Producers
+
+The local admission pipeline starts after the Colab run has produced a complete wide CSV. The relevant producers/evidence paths are:
+
+- `notebooks/RadLE_v1_5_Morning_Grok45_GPT56_MetaMuse_Append.ipynb`: Colab/Morning runner for Grok/GPT/Muse append-style runs.
+- `notebooks/RadLE_Meta_Muse_Spark_ColabPro.ipynb`: Meta Muse Spark ColabPro runner.
+- `src/radle_benchmark.py`: shared benchmark runtime used by Morning notebooks.
+- `src/radle_meta_model_api_runtime.py`: Meta Model API runtime helper.
+- Google Drive output shape: a full `RadLE_v2_results_final.csv` style wide CSV with 200 rows and model-family columns such as `Diagnosis_<model_key>`, `Likert_<model_key>`, token/provenance fields, provider fields, returned model, request extras, and raw response fields.
+
+The Drive file must be copied or projected into a local immutable package root. Do not run admission directly against a mutable Drive path.
+
+### Admission Worktree Python Files
+
+Use these from `C:/tmp/radle_v2_pre_m7_repair` or the clean successor admission worktree:
+
+- `scripts/radle_v2_incremental_admission.py`: main CLI for `check-config`, `check-base`, `project-one-model`, `prepare`, `split-radiologist-scores`, `finalize-stage`, `commit`, and `build-idk0-lane`.
+- `src/radle_incremental_admission.py`: core transaction, scoring, manifest, splitter, and IDK0-lane implementation behind the CLI.
+- `scripts/radle_v2_dual_judge_delta.py`: dual-judge executor for dry-run, synthetic, and real OpenRouter adjudication.
+- `src/radle_openrouter_judge.py`: OpenRouter judge client/helper used by the real judge executor.
+- `scripts/audit_radle_v2_incremental_admission.py`: prepared, judge, precommit, committed, committed-readback, and IDK0-lane audit entrypoint.
+- `scripts/radle_v2_carry_forward_muse_admission.py`: Muse-only carry-forward helper for the already accepted historical exception; not the normal path for future models.
+
+Canonical admission command chain:
+
+    py -3.11 scripts/radle_v2_incremental_admission.py check-config
+    py -3.11 scripts/radle_v2_incremental_admission.py check-base
+
+    py -3.11 scripts/radle_v2_incremental_admission.py project-one-model --source-wide $SourceWide --model-key $ModelKey --output-package $PackageRoot --runtime-sha $RuntimeSha
+
+    py -3.11 scripts/radle_v2_incremental_admission.py prepare --parent-wide $ParentWide --parent-final-long-master "$ParentCommittedRoot/final/radle_v2_final_long_master.csv" --parent-authority-manifest $ParentAuthorityManifest --blind-map $BlindMap --incoming-package $PackageRoot --model-key $ModelKey --roster config/radle_v2_model_roster.json --variants config/radle_v2_base_authority.json --states config/radle_v2_terminal_states.json --output-root $AdmissionOutputRoot --dry-run
+    py -3.11 scripts/radle_v2_incremental_admission.py prepare --parent-wide $ParentWide --parent-final-long-master "$ParentCommittedRoot/final/radle_v2_final_long_master.csv" --parent-authority-manifest $ParentAuthorityManifest --blind-map $BlindMap --incoming-package $PackageRoot --model-key $ModelKey --roster config/radle_v2_model_roster.json --variants config/radle_v2_base_authority.json --states config/radle_v2_terminal_states.json --output-root $AdmissionOutputRoot
+
+    py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root $StagingRoot --phase prepared --no-write
+
+    py -3.11 scripts/radle_v2_dual_judge_delta.py --staging-root $StagingRoot --config config/radle_v2_judges.json --dry-run
+    py -3.11 scripts/radle_v2_dual_judge_delta.py --staging-root $StagingRoot --config config/radle_v2_judges.json --authorization $JudgeAuthorization --real
+    py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root $StagingRoot --phase judge --no-write
+
+    py -3.11 scripts/radle_v2_incremental_admission.py split-radiologist-scores --combined-scores $CombinedScoresCsv --staging-root $StagingRoot --output-root $RadiologistOutputRoot --reviewer-pseudonym $ReviewerPseudonym --reviewed-utc $ReviewedUtc
+
+    py -3.11 scripts/radle_v2_incremental_admission.py finalize-stage --intake-root $StagingRoot --radiologist-decisions $RadiologistDecisionsCsv
+    py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root $FinalStagingRoot --phase precommit --no-write
+    py -3.11 scripts/radle_v2_incremental_admission.py commit --final-staging-root $FinalStagingRoot
+    py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root $CommittedRoot --phase committed-readback --no-write
+
+    py -3.11 scripts/radle_v2_incremental_admission.py build-idk0-lane --committed-root $CommittedRoot --output-root $Idk0LaneRoot --human-presentation pooled12 --roster config/radle_v2_model_roster.json --states config/radle_v2_terminal_states.json
+    py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root $Idk0LaneRoot --phase idk0-lane --no-write
+
+Carry-forward exception command, only with explicit user authorization:
+
+    py -3.11 scripts/radle_v2_carry_forward_muse_admission.py --source-final-root $SourceFinalRoot --parent-committed-root $ParentCommittedRoot --output-root $CarryForwardOutputRoot --carry-forward-note $CarryForwardNote
+    py -3.11 scripts/radle_v2_incremental_admission.py commit --final-staging-root $CarryForwardFinalRoot
+    py -3.11 scripts/audit_radle_v2_incremental_admission.py --admission-root $CarryForwardCommittedRoot --phase committed-readback --no-write
+
+### SVG / Panel Checkout Python Files
+
+Use these from the current panel checkout `C:/Users/thehb/Documents/RadLE v2` unless they have been intentionally ported into the admission worktree:
+
+- `scripts/build_radle_v2_score1000_idk0_pipeline.ps1`: current tested wrapper from final long master to corrected IDK0 Score1000/Score2000 CSVs, panel stats, SVG variants, 5.4 logo placement, and audit.
+- `scripts/build_radle_v2_clean_adjudication_master.py`: cleans the committed final long master into `radle_v2_clean_adjudication_master.csv` and cleanup receipt.
+- `scripts/make_radle_v2_likert5_score1000_csvs_IDK0.py`: builds IDK0 Score1000/Score2000 CSV outputs with `--idk-score 0`.
+- `scripts/audit_radle_v2_likert5_score1000_csvs_IDK0.py`: audits clean master, Score1000/Score2000 outputs, source hash, score rules, and status counts.
+- `scripts/radle_v2_score1000_panel_stats_IDK0.py`: derives panel stats and bins from the Score1000/Score2000 output root.
+- `scripts/make_radle_v2_score1000_panel23_svg_IDK0.py`: generates model-group/color final SVG variants and support files.
+- `scripts/make_radle_v2_score1000_panel5_logo_placement_contact_sheet_IDK0.py`: promotes/checks the Panel 5.4 logo-placement/contact-sheet variant.
+- `scripts/audit_radle_v2_score1000_panel23_IDK0.py`: structural SVG/panel audit; run before visual acceptance.
+- `scripts/build_radle_v2_score1000_pipeline.ps1`, `scripts/build_radle_v2_handwritten_panels.ps1`, and the non-`_IDK0` Python scripts are the older/non-IDK0 lane. Do not use them for the current IDK0 Score2000 panel path unless the user explicitly reopens the non-IDK0 figure set.
+
+Current wrapper command from a committed private master to SVGs:
+
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_radle_v2_score1000_idk0_pipeline.ps1 -InputMaster "$CommittedRoot/final/radle_v2_final_long_master.csv" -OutDir "outputs/radle_v2_stats/<dated_final_scoring_root>/likert5_score1000_IDK0"
+
+The wrapper expands to these Python calls:
+
+    py -3.11 scripts/build_radle_v2_clean_adjudication_master.py --input $InputMaster --out-dir $OutDir --expected-input-sha256 $InputMasterSha256
+
+    py -3.11 scripts/make_radle_v2_likert5_score1000_csvs_IDK0.py --clean-master "$OutDir/radle_v2_clean_adjudication_master.csv" --clean-receipt "$OutDir/adjudication_master_cleanup_receipt.json" --out-dir $OutDir --idk-score 0
+
+    py -3.11 scripts/audit_radle_v2_likert5_score1000_csvs_IDK0.py --out-dir $OutDir --idk-score 0 --expected-source-sha256 $InputMasterSha256
+
+    py -3.11 scripts/radle_v2_score1000_panel_stats_IDK0.py --score-root $OutDir --out-dir "$OutDir/handwritten_panels_IDK0" --expected-source-sha256 $InputMasterSha256
+
+    py -3.11 scripts/make_radle_v2_score1000_panel23_svg_IDK0.py --mode model-group-color-final --source-panel-dir "$OutDir/handwritten_panels_IDK0" --out-dir "$OutDir/handwritten_panels_model_group_color_final_IDK0" --idk-score 0 --expected-source-sha256 $InputMasterSha256
+
+    py -3.11 scripts/make_radle_v2_score1000_panel5_logo_placement_contact_sheet_IDK0.py --source-panel-dir "$OutDir/handwritten_panels_model_group_color_final_IDK0" --out-dir "$OutDir/handwritten_panels_model_group_color_final_IDK0/p5_IDK0" --idk-score 0
+
+    py -3.11 scripts/audit_radle_v2_score1000_panel23_IDK0.py --mode model-group-color-final --score-root $OutDir --out-dir "$OutDir/handwritten_panels_model_group_color_final_IDK0" --idk-score 0 --expected-source-sha256 $InputMasterSha256
+
+Expected SVG outputs live under:
+
+    $OutDir/handwritten_panels_model_group_color_final_IDK0/
+
+Expected support/render outputs include `figure_manifest.json`, `captions.md`, `data_provenance.md`, `reviewer_checklist.md`, SVG files, PNG renders, and `contact_sheet.png`. Do not hand-edit generated SVGs; edit generator Python, regenerate all panels together, run the structural audit, then inspect PNG/contact-sheet renders.
 
 ## Locked Facts
 
@@ -42,11 +294,13 @@ Current state (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol): child Milestone 6.5 
 - Each model arm is one reader over 200 cases, effective `N = 200`. The 12 human readers stay separate in backend rows.
 - IDK0 is final. Exact/approved typo IDK, invalid response, invalid Likert, provider/parse failure, and retry-exhausted failure score zero.
 - A Likert outside integral 0 through 4, including `8`, is an explicit `invalid_likert` terminal state. Preserve the raw value in private provenance; do not coerce it to 0, 4, blank, or a clinical score.
+- Integral decimal Likert strings such as `2.0`, `3.0`, and `4.0` are valid integral Likerts; non-integral or out-of-range values remain `invalid_likert`.
 - Two different historical `8` defects exist and must not be conflated. The parent master has one model Likert `8` row, case 119 / `Candidate R`, already frozen at score zero. Separately, the external radiologist overlay had three `Radiologist_final_score = 8` cells whose parent-master scores remained zero. All four historical rows remain byte-frozen; manifests describe the distinction without rewriting old provenance.
 - Roster exclusion is not stored by rewriting old final-master `access` or `domain` cells. New downstream filtering must join the versioned roster by model key; this is required when `grok_4_3` and `gpt_5_5` become excluded while their historical rows remain byte-frozen.
 - Score1000 uses signed `Likert + 1`: positive when correct, negative when wrong, and zero for IDK0/invalid terminal states. Human projection weights apply only downstream.
 - Score2000 is exactly `Score1000 + 1000` and must preserve rank and state.
 - Only canonical normalized equality to the canonical ground truth can auto-accept in the first release. All broader semantic matching is disabled.
+- Exact same-case reuse of a previously authoritative binary-scored normalized diagnosis is allowed only through terminal state `previous_authoritative_score`; conflicting prior scores for the same case and normalized diagnosis are not reusable and fall back to later routing.
 - The known conflicting pair for case 164, normalized candidate `diffuse esophageal spasm`, never auto-accepts and never locks from LLM agreement; route that pair directly to radiologist review. Other case-164 responses follow the ordinary rules.
 - The previous successful dual-judge model IDs are `google/gemini-3.1-pro-preview` and `z-ai/glm-5.2`, called through OpenRouter at temperature 0.
 - `scripts/radle_dual_judge_review.py` is evidence, not the new executor: it has hard-coded paths and a live dependency on the excluded previous-version `RadLE Stats` folder.
@@ -73,6 +327,29 @@ Current state (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol): child Milestone 6.5 
 - Checkpoint commit `7c19c8b` contains Milestone 6 dynamic IDK0 score lane builder.
 - Milestones 3-6 are synthetic-only until child Milestone 6.5 passes production-schema, authority, transaction, judge, runtime, and independent-review gates.
 - `PRE_M7_REPAIR_RESULT=PASS`; Milestone 7 may inventory and seal packages, but every real admission still requires the one-model package, parent-chain, runtime-provenance, and judge-authorization gates.
+- `project-one-model` now requires explicit runtime provenance. Do not accept a package where `runtime_sha` equals the source wide CSV SHA256.
+- The current Grok/GPT/Muse staging roots under `C:/tmp/radle_v2_scoring_m7_20260710_1640` are scoring-only prepared roots against frozen parent `BASE_V2_20260706`; do not finalize or commit GPT/Muse from these roots as a sequential final chain without rerunning prepare against the committed predecessor parent.
+- `split-radiologist-scores` accepts one combined long file with `human_score`, verifies it against the per-model `radiologist_queue.csv` files, writes exact `radiologist_decisions.csv` overlays under an output root, and tolerates Excel formatting of `likert` values such as `4.0` saved as `4`.
+- Old normal-effort Muse evidence under `muse_spark_1_1` / Candidate AG is abandoned before final admission; do not reuse its judge locks, radiologist queue rows, or scores.
+- Final admitted Muse remains `muse_spark_1_1` / Candidate AG for downstream SVG/table cleanliness. If the source CSV uses temporary `muse_spark_1_1_high` columns, project them into the normal `muse_spark_1_1` package identity and require `Actual_Request_Extra` to contain `reasoning_effort: high`.
+- Supplied workbook `C:/Users/thehb/Downloads/Radiologist Review (1).xlsx`, sheet `July10`, was exported to `C:/tmp/radle_v2_radiologist_ingest_20260710_ae_af/radiologist_review_july10_ae_af.csv` with 69 rows: 28 Candidate AE and 41 Candidate AF. Export SHA256 is `216E725B989D84FAAA3029608540C0C75E629DE0B441A06DEEC24447EE187A19`.
+- Candidate AE / `grok_4_5` is committed from final root `C:/tmp/radle_v2_scoring_m7_20260710_1640/grok_4_5/finalized/d5e05eb280504f189090fa9936ed2294c1e46303e81a457b7197945e1e360e53`; committed readback audit passed with 200 scored delta rows and 6200 output rows.
+- Candidate AF / `gpt_5_6_sol_pro` must use sequential staging root `C:/tmp/radle_v2_sequential_m7_20260710_ae_af/gpt_5_6_sol_pro/206dcf19823a8fd1cfa2c4dc00b8d5182d34d292b1d8e190e18e825371074fdb`, not the earlier frozen-base scoring-only GPT root. Its real judge run produced 109 worklist rows, 218 HTTP requests, 77 locked agreement rows, and 33 radiologist queue rows.
+- The returned workbook's Candidate AF rows are not sufficient for the sequential GPT queue: 20 rows match the current queue, 21 supplied AF rows are obsolete for this parent chain, and 13 current AF rows are missing. The supplemental missing queue is `C:/tmp/radle_v2_radiologist_ingest_20260710_ae_af/sequential_gpt_missing_13_queue.csv`, SHA256 `2E16870FA14DD8A858FBA8E10EE3D3D092E345A9D99424A8383B7D8723F4402F`; the Excel convenience copy is `C:/tmp/radle_v2_radiologist_ingest_20260710_ae_af/sequential_gpt_missing_13_queue.xlsx`, SHA256 `3BD1E0FF11DF692C29803FD774FA4B311920B7888BD2A027AE33F8CE6FA68AD8`. `Sheet1` and `July10` had zero exact case+ground-truth+diagnosis matches for those 13 rows outside Candidate AF, so no prior workbook score was safely liftable.
+- High-effort Muse source is available at `G:/.shortcut-targets-by-id/1QPf3Z_T0Y-XXw3UC7xyk8y_BE4U07q2a/RaDLE/CONFIDENTIAL/RadLE v2 Dataset/Runs/radle_v2/final/RadLE_v2_results_final.csv`, SHA256 `10A454B40B7E82DC76C367C3B113D55D77CD7CBBD1C8678CADB2F5BAE746F333`, 200 rows and 275 columns. It contains 16 `muse_spark_1_1_high` columns with 200 diagnoses, 200 Likerts, 200 `Actual_Request_Extra_muse_spark_1_1_high` values equal to `{"reasoning_effort": "high"}`, 200 nonblank reasoning-token fields, provider `Meta Model API`, and returned model `muse-spark-1.1`.
+- High-effort Muse projection package is `C:/tmp/radle_v2_projected_muse_high_20260710_212153/muse_spark_1_1`, projection ID `86696b0a176b82db5ecfa4453107a9c09bf9fa82b54e3e8ed93cb7d72dfe7140`, output `results.csv` SHA256 `E10FF641D86A7AFAF1A8A497FDFA80515D60E3AF50BBF11C1813204170DA31E7`. The source branch `codex/morning-meta-muse-spark-append` resolved by `git ls-remote` to runtime SHA `37a0f44211188f85fdd93d14660e019046aaecd8`.
+- Provisional high-effort Muse prepare against the committed Grok parent wrote staging root `C:/tmp/radle_v2_muse_high_after_grok_provisional_20260710_212153/muse_spark_1_1/7f791d70b852a0482f83d4cd9882b3478f0940b150687fdc9a6d2b1650d4214c`. It is not a final Muse root because GPT is not committed yet. Its terminal counts were `canonical_exact=16`, `previous_authoritative_score=76`, `provider_or_parse_failure=1`, `judge_required=107`; dry-run judge SHA `0634BBEF38AF8F5A46E6AA5B8A6E618C7FEB23386DC0D77852083BE28D447F5F`, 214 logical calls, 1284 worst-case HTTP requests.
+- Six provisional Muse LLM rows should become previous-score reuse after GPT commit because the same normalized diagnosis is present in pending GPT evidence for case IDs 2, 57, 58, 60, 92, and 115. Five are already GPT judge-locked; case 58 has available radiologist score `0` in `sequential_gpt_available_decisions_20.csv`. The likely post-GPT Muse LLM worklist is `C:/tmp/radle_v2_muse_high_after_grok_provisional_20260710_212153/muse_high_likely_final_llm_worklist_after_gpt_commit_101.csv`, 101 rows, SHA256 `0A057DD6BCC7477CD614D9BF06A7127E2760D5157391736F6731CA2C2E401AC5`.
+- User overrode the deferred-paid-Muse recommendation with "run LLM already, dont wait for GPT." The provisional high-effort Muse real judge run passed for intake `7f791d70b852a0482f83d4cd9882b3478f0940b150687fdc9a6d2b1650d4214c`: 107 worklist rows, 214 logical judge calls, 214 HTTP requests, actual cost `$0.445817159`, 69 locked agreement rows, 38 radiologist queue rows, judge cache SHA256 `080ADB37B724305FC38A0CE60A0E6FE153EED1FD9A5FE0A1D8DD90CD4450FFC9`, judge results SHA256 `CAC7AD272EAD2FB93DE4446D194292232FF7BE748601DD581B07304332D6436B`, radiologist queue SHA256 `8979AA0F4C933C796BB5D346F738382EA8F6F28590BBBD33393B1C58A650BAC5`. `audit_judge_evidence` passed.
+- Remaining radiologist handoff after the Muse paid run is `C:/tmp/radle_v2_remaining_radiologist_handoff_20260710_2130/remaining_AF_AG_radiologist_queue_51.xlsx`, SHA256 `4E531B79C16B2A7446B3843A1DEB307355F9EA4793AD93D162D6B96E271F53EF`, with 51 rows: 13 Candidate AF and 38 Candidate AG. CSV companion SHA256 is `B2B3FB2B86FD6C364276C7F4661B1B1E4DCF8DBEFF971745670707659FF5C91B`.
+- Returned workbook `C:/tmp/radle_v2_radiologist_ingest_20260710_ae_af/Radiologist Review (2).xlsx`, sheet `July10`, has SHA256 `DE18C8347E1CF7666875199E0BD541182A829D497012A4AC580FCD6862B4CBBB` and 120 data rows: 28 Candidate AE, 54 Candidate AF, and 38 Candidate AG. All current 71 AF/AG queue rows were matched exactly and all `human_score` values were binary.
+- Filtered current AF/AG ingestion CSV is `C:/tmp/radle_v2_radiologist_ingest_20260710_review2/radiologist_review2_current_AF_AG_71.csv`, SHA256 `5A9434337E927F041A4623AF8D23327731D04CA373C1849A633B0732DDD72538`, with 33 Candidate AF rows and 38 Candidate AG rows. Split output root `C:/tmp/radle_v2_radiologist_ingest_20260710_review2/split_decisions_71` passed `SPLIT_RESULT=PASS`; GPT decisions SHA256 is `930A1365F744FD91219AA1BE10D62A6E7BCDF8C20CA32AB388F0287E0E46889E`, Muse decisions SHA256 is `F3CFC2E794FACDC3207D060492DD2199230235C1B7B25781B2AF143C1ECD98DB`.
+- Candidate AF / `gpt_5_6_sol_pro` is committed from sequential final root `C:/tmp/radle_v2_sequential_m7_20260710_ae_af/gpt_5_6_sol_pro/finalized/658f6f2548994a62251f7e8eadcbf3e8fc51bcbbe5b37992edbde2de03626b4a`; committed readback audit passed with 200 scored delta rows, 6400 output rows, 56 checksum rows, output master SHA256 `A265F363FB249289549A23E60EC3081025AD2242089F5CA1C3012F5A38118255`, and `COMMITTED.json` transaction state `FINAL_MASTER_COMMITTED`.
+- User authorized finalizing Muse without re-preparing against the committed GPT parent and without returning to radiology. Conventional Muse evidence finalization `C:/tmp/radle_v2_muse_high_after_grok_provisional_20260710_212153/muse_spark_1_1/finalized/7403d14f317b2e6db8a8151afb63ad5bf1592c302e1b4bbd75d3ce6da6c477ee` passed precommit audit with 200 scored delta rows and source counts `ai_judges=69`, `auto_score_not_required=1`, `canonical_exact=16`, `previous_authoritative_score=76`, `radiologist=38`.
+- Candidate AG / high-effort `muse_spark_1_1` is committed as a carry-forward final root `C:/tmp/radle_v2_muse_high_carry_forward_after_gpt_20260711/muse_spark_1_1/finalized/18e1d292e1fe1f8d654be09aa2f65f65c6cc951be4b5d37d3c6649645e127df4`; committed readback audit passed with 200 scored delta rows, 6600 output rows, 56 checksum rows, output master SHA256 `D539A42AA04AA9A9A76FF4210B0FC74DE40B27DCED54E1A3887C9C911016AB9F`, append manifest SHA256 `772B4617B3675D0126FD1A592C1DB83EDABB2650E354A48AB5A4AAF574C739DE`, and `COMMITTED.json` transaction state `FINAL_MASTER_COMMITTED`. `append_manifest.json` records `evidence_carry_forward` from source parent chain `d5e05eb280504f189090fa9936ed2294c1e46303e81a457b7197945e1e360e53` to committed GPT parent chain `658f6f2548994a62251f7e8eadcbf3e8fc51bcbbe5b37992edbde2de03626b4a`.
+- Carry-forward builder script is `C:/tmp/radle_v2_pre_m7_repair/scripts/radle_v2_carry_forward_muse_admission.py`, SHA256 `E8F3E41DFA93233EA1E380403C1A30BA738B40A5C9914EE829ECEF13E8BD2F88`; it preserves the validated Muse intake snapshot and evidence hashes while appending the audited Muse scored delta to the committed GPT parent bytes.
+- The `Repeatable Admission SOP` in this plan is the front-door runbook for future model/version admissions. If CLI flags or transaction rules change, update that SOP before running another real admission.
+- The `Colab Output To SVG Command Index` in this plan lists the current local script chain from Google Drive Colab wide CSV through admission, committed master, IDK0/Score2000 tables, SVG generation, logo placement, and SVG audit.
 
 ## Do Not Revisit
 
@@ -86,6 +363,8 @@ Current state (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol): child Milestone 6.5 
 - Do not use smoke folders as full-run inputs and do not admit an unprojected shared Grok/GPT wide file containing historical families. See Decision Log 2026-07-10, package projection.
 - Do not merge stale branches wholesale or accept the `8c9de27` GoalBuddy deletions incidentally. Runtime integration is path-scoped and SHA-reviewed. See Decision Log 2026-07-10, branch posture.
 - Do not publish or upload generated candidate-public artifacts without a separate privacy approval artifact. See Decision Log 2026-07-10, privacy.
+- Do not admit, score, or regenerate radiologist handoff from the old normal-effort Muse judge root. See Decision Log 2026-07-10 20:06, high-effort Muse identity.
+- Do not repeat the provisional-root Muse paid-judge/carry-forward path as the default. The only accepted historical exception is the user-authorized high-effort Muse carry-forward committed on 2026-07-11; future carry-forward needs explicit user authorization and a reviewed manifest path. See Decision Log 2026-07-11 01:06, carry-forward exception.
 
 ## Progress
 
@@ -104,10 +383,24 @@ Current state (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol): child Milestone 6.5 
 - [x] (2026-07-10 05:28 +05:30, Codex/GPT-5) Implement radiologist overlay validation, scored-delta finalization, immutable append, and independent precommit/committed-readback audit.
 - [x] (2026-07-10 05:28 +05:30, Codex/GPT-5) Make IDK0 Score1000/Score2000 and panel-source contracts roster/manifest-derived and prove them on synthetic admissions.
 - [x] (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol) Completed blocking child Milestone 6.5 and recorded `PRE_M7_REPAIR_RESULT=PASS` from bounded read-only re-review receipt `review/pre_m7_production_repair_review.json`.
-- [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Stop at the external-results gate and record required package paths/hashes.
-- [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Admit and adjudicate Grok 4.5; commit the first new private master.
-- [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Replay the transaction for GPT-5.6 Sol Pro.
-- [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Replay the transaction for Meta Muse Spark.
+- [x] (2026-07-10 16:28 +05:30, Codex/GPT-5.6 Sol) Project and prepare Grok/GPT/Muse from sealed source with explicit inferred runtime SHA provenance, then run deterministic scoring and judge dry-run gates. Prepared audits passed for intake IDs `c1a2584464d6ee5a1dcee9368126b021daed3f729c56677ac766f0325847f797`, `be8f1a6ca7ca7672b9cf7ec3270f1d7de13553b40d3e539df35276483eda3a15`, and `2b42fe43bbac054d73c085037e187957ba479c05ef15a486269968962d8a8e80`.
+- [x] (2026-07-10 16:28 +05:30, Codex/GPT-5.6 Sol) After `OPENROUTER_API_KEY` is exposed to the Codex process, run real dual-judge adjudication for the three scoring-only staging roots, audit evidence, and hand over the remaining radiologist queues.
+- [x] (2026-07-10 18:39 +05:30, Codex/GPT-5.6 Sol) Ran real dual-judge adjudication for Grok scoring root `c1a2584464d6ee5a1dcee9368126b021daed3f729c56677ac766f0325847f797`; `--phase judge --no-write` printed `RESULT=PASS`, `judge_result_rows=196`, `locked_agreement_rows=71`, and `radiologist_queue_rows=28`.
+- [x] (2026-07-10 18:52 +05:30, Codex/GPT-5.6 Sol) Ran and audited real dual-judge adjudication for GPT and Muse. GPT root `be8f1a6ca7ca7672b9cf7ec3270f1d7de13553b40d3e539df35276483eda3a15` used 224 HTTP requests, actual cost `$0.4667126392`, locked 72 rows, and left 41 radiologist rows. Muse root `2b42fe43bbac054d73c085037e187957ba479c05ef15a486269968962d8a8e80` used 232 HTTP requests, actual cost `$0.4877105322`, locked 89 rows, and left 28 radiologist rows.
+- [x] (2026-07-10 18:52 +05:30, Codex/GPT-5.6 Sol) Created radiologist handoff `C:/tmp/radle_v2_radiologist_handoff_20260710_1845` with combined blinded queue `radiologist_queue_all_models_blinded.csv` (97 rows, SHA256 `5CC6D47615855F02F4B9EDE58B883B053883A5917351D85923CB3ED3F0441F53`) and combined decisions template `radiologist_decisions_all_models_template.csv` (97 rows, SHA256 `DAF6106FF6A48BBDA446D6E8E806E54D74DCBFDD5B3CF64FA274290065C139F7`).
+- [x] (2026-07-10 19:24 +05:30, Codex/GPT-5.6 Sol) Added combined radiologist-score ingestion: one long file keyed by `(Master_Case_ID, model_blinded)` with `human_score` now splits into per-model exact `radiologist_decisions.csv` overlays and rejects missing, duplicate, unexpected, nonbinary, or misaligned rows.
+- [x] (2026-07-10 20:06 +05:30, Codex/GPT-5.6 Sol) Reconciled the Muse rerun policy: abandoned old normal-effort Muse evidence, kept final admitted Muse as `muse_spark_1_1` / Candidate AG, added high-effort request-shape validation, and added projection support for temporary high-effort source columns via `--source-model-key`.
+- [x] (2026-07-10 20:53 +05:30, Codex/GPT-5.6 Sol) Imported `Radiologist Review (1).xlsx`, split the July10 sheet into exact AE/AF score overlays, and finalized/committed Candidate AE / `grok_4_5`; committed readback passed.
+- [x] (2026-07-10 20:53 +05:30, Codex/GPT-5.6 Sol) Re-prepared Candidate AF / `gpt_5_6_sol_pro` sequentially against the committed Grok parent and reran real dual judges; the run used 218 HTTP requests, cost `$0.4354546672`, locked 77 rows, and left 33 radiologist rows.
+- [x] (2026-07-10 21:27 +05:30, Codex/GPT-5.6 Sol) Located and validated the completed high-effort Muse source in the Drive final CSV, projected `muse_spark_1_1_high` into normal `muse_spark_1_1` identity, and ran a provisional no-paid prepare/dry-run against the Grok-only parent.
+- [x] (2026-07-10 21:27 +05:30, Codex/GPT-5.6 Sol) Estimated final Muse judge workload: provisional Grok-only parent gives 107 LLM rows, but after GPT commit six rows should become previous-score reuse, leaving likely 101 final Muse LLM rows.
+- [x] (2026-07-10 21:30 +05:30, Codex/GPT-5.6 Sol) After the user explicitly overrode the wait-for-GPT recommendation, ran real paid dual judges for the provisional high-effort Muse Grok-parent root; result PASS, 214 HTTP requests, cost `$0.445817159`, 69 locks, 38 Candidate AG radiologist rows.
+- [x] (2026-07-10 21:30 +05:30, Codex/GPT-5.6 Sol) Created remaining combined radiologist handoff with 51 rows: 13 Candidate AF plus 38 Candidate AG.
+- [x] (2026-07-10 23:53 +05:30, Codex/GPT-5.6 Sol) Imported `Radiologist Review (2).xlsx`, extracted the current 71-row AF/AG queue, split exact decision overlays for GPT and provisional Muse, and finalized/committed Candidate AF / `gpt_5_6_sol_pro`; committed readback passed.
+- [x] (2026-07-11 00:54 +05:30, Codex/GPT-5.6 Sol) Finalized Candidate AG / high-effort `muse_spark_1_1` as a user-authorized evidence-carry-forward admission onto the committed GPT parent; committed readback passed with 6600 final-master rows.
+- [x] (2026-07-11 01:06 +05:30, Codex/GPT-5.6 Sol) Promoted a concise `Repeatable Admission SOP` near the top of this plan so future model/version admissions can follow a deterministic end-to-end runbook instead of reading the historical diary first.
+- [x] (2026-07-11 01:13 +05:30, Codex/GPT-5.6 Sol) Added the `Colab Output To SVG Command Index` that enumerates the admission Python files, SVG/panel Python files, wrapper command, and wrapper-expanded commands from GDrive output to SVG audit.
+- [x] (2026-07-12 02:25 +05:30, Codex/GPT-5) Created scoped branch-consolidation checkpoint commit `410b447` from `C:/tmp/radle_v2_pre_m7_repair`, after `check-config`, Python compile, full unittest discovery, staged whitespace check, and staged token-pattern scan passed. No branch closure, push, or primary-checkout mutation was performed.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Generate sanitized public candidates, regenerate active-only panels, perform structural/visual QA, and obtain publication approval separately.
 - [ ] (YYYY-MM-DD HH:MM TZ, Agent/Model) Complete branch consolidation, evidence retention, final audit, and retrospective.
 
@@ -116,6 +409,38 @@ Current state (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol): child Milestone 6.5 
 - Observation: the unified runtime branch advanced from study SHA `49bf0d6` to `8029ad4` with `b12cc58` and `8029ad4`, which correct the Meta client factory.
   Evidence: `git -C C:/tmp/radle_morning_meta_append log --oneline -3` on 2026-07-10.
   Date/Author: 2026-07-10, Codex/GPT-5
+
+- Observation: Production result packages store committed Likerts as integral decimal strings such as `2.0`, `3.0`, and `4.0`; the previous `int(raw_likert)` classifier would have misrouted those rows as `invalid_likert`.
+  Evidence: first scoring dry-run incorrectly returned GPT terminal counts `{"invalid_likert": 200}`; after switching to `Fraction(raw_likert)` with denominator-one validation, config validation and the full 33-test suite passed, and GPT dry-run counts became canonical 17 / prior-score reuse 70 / mandatory-radiologist 1 / judge-required 112.
+  Date/Author: 2026-07-10, Codex/GPT-5.6 Sol
+
+- Observation: The user authorized using the environment key for real LLM judging, but this Codex process currently has no `OPENROUTER_API_KEY` or OpenRouter-named environment variable.
+  Evidence: `if ($env:OPENROUTER_API_KEY) ...` printed `OPENROUTER_API_KEY_PRESENT=0`; `Get-ChildItem Env:` filtered for OpenRouter/router names returned no entries; all three `--real` judge invocations failed closed with `OPENROUTER_API_KEY is required for --real`.
+  Date/Author: 2026-07-10, Codex/GPT-5.6 Sol
+
+- Observation: After Candidate AE / Grok was committed, the Candidate AF / GPT queue changed relative to the earlier all-three frozen-base handoff: the true sequential AF queue has 33 rows, only 20 of the workbook's 41 AF rows match it, 21 supplied AF rows no longer belong to the current parent chain, and 13 current AF rows still need human scoring.
+  Evidence: `C:/tmp/radle_v2_radiologist_ingest_20260710_ae_af/sequential_gpt_radiologist_reconciliation_summary.json` records `available_decisions_from_workbook=20`, `missing_decisions_requiring_radiologist=13`, and `obsolete_supplied_af_rows_not_in_current_queue=21`.
+  Date/Author: 2026-07-10, Codex/GPT-5.6 Sol
+
+- Observation: High-effort Muse can be projected now, but its final paid judge root is blocked on GPT commitment. The provisional Grok-only Muse root has 107 judge-required rows, while pending GPT evidence should make six of those rows previous-score reusable after GPT commit, leaving likely 101 final Muse LLM rows.
+  Evidence: `C:/tmp/radle_v2_muse_high_after_grok_provisional_20260710_212153/muse_gpt_overlap_reuse_estimate.json` records six overlap case IDs and `likely_final_muse_judge_rows_after_gpt_if_locked_gpt_reuse_applies=102`; after confirming case 58 already has available radiologist score `0`, `C:/tmp/radle_v2_muse_high_after_grok_provisional_20260710_212153/muse_high_llm_workload_summary.json` records `likely_final_llm_rows_after_gpt_commit=101`.
+  Date/Author: 2026-07-10 21:27 +05:30, Codex/GPT-5.6 Sol
+
+- Observation: The user explicitly accepted running paid Muse LLM judging before GPT commit despite the stale-root warning. The run completed successfully and produced a Candidate AG radiologist queue rather than a final post-GPT Muse admission root.
+  Evidence: user instruction "run LLM already, dont wait for GPT"; `judge_evidence/judge_summary.json` under provisional Muse intake `7f791d70b852a0482f83d4cd9882b3478f0940b150687fdc9a6d2b1650d4214c` records `result=PASS`, `actual_cost_usd=0.445817159`, `locked_agreement_rows=69`, and `radiologist_queue_rows=38`; `audit_judge_evidence` returned `result=PASS`.
+  Date/Author: 2026-07-10 21:30 +05:30, Codex/GPT-5.6 Sol
+
+- Observation: The old judge scripts were useful but should not replace the audited executor. `radle_dual_judge_review.py` and `radle_llm_judge.py` load `radle_api_keys.env`, request JSON mode, and do not require returned OpenRouter model aliases to equal the requested alias exactly. OpenRouter currently returns concrete version IDs such as `google/gemini-3.1-pro-preview-20260219` and `z-ai/glm-5.2-20260616`.
+  Evidence: one-off probes using the same staged case succeeded for both judges in about 3-4 seconds; a six-call threaded probe completed in 7.01 seconds; focused and full judge tests passed after patching alias/version matching and concurrency.
+  Date/Author: 2026-07-10, Codex/GPT-5.6 Sol
+
+- Observation: A combined radiologist CSV may round-trip through Excel with `likert` values rendered as `4` instead of the source queue's `4.0`. The combined-score splitter must still catch row drift without falsely rejecting numeric-equivalent Likert cells.
+  Evidence: the actual handoff queue begins with `4.0` values, while the user's screenshot displayed those cells as `4`; `test_split_combined_radiologist_scores_for_multi_model_sheet` rewrites `.0` Likerts to integral strings and still validates.
+  Date/Author: 2026-07-10, Codex/GPT-5.6 Sol
+
+- Observation: the pre-existing `project-one-model` implementation used `sha256_file(source_wide)` as `runtime_sha`, which would satisfy shape validation while misrepresenting runtime provenance.
+  Evidence: `src/radle_incremental_admission.py` set projection manifest `runtime_sha` to the source wide SHA before the 2026-07-10 16:08 repair. The CLI now requires `--runtime-sha`, rejects equality with the source wide SHA, and records `runtime_sha_status`.
+  Date/Author: 2026-07-10 16:08 +05:30, Codex/GPT-5.6 Sol
 
 - Observation: the existing dual-judge script names the locked judge models but also hard-codes `C:/Users/thehb/Documents/RadLE Stats/RadLE_RSNA_Diagnosis_Scoring_key.csv` and cannot be the production adapter.
   Evidence: `scripts/radle_dual_judge_review.py` lines 35-53.
@@ -287,6 +612,46 @@ Current state (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol): child Milestone 6.5 
   Rationale: needed runtime blobs have already been copied and reviewed; future stats/panel imports should be selected by exact file path/commit after review because adjacent branches contain unrelated histories and, in the handwritten branch, deletions of current incremental-admission files.
   Date/Author: 2026-07-10, Codex/GPT-5
 
+- Decision: deterministic reuse of previous scored answers is same-case and exact-normalized only, represented by terminal state `previous_authoritative_score`, and never overrides canonical exact, IDK/invalid/failure, or mandatory-radiologist rules.
+  Rationale: this satisfies the user's request to reuse previously validated/scored answers without opening broad semantic matching or hiding the scoring source.
+  Date/Author: 2026-07-10, Codex/GPT-5.6 Sol
+
+- Decision: while waiting for radiologist decisions, it is acceptable to build all-three scoring-only staging roots against the frozen base to produce judge worklists and eventual radiologist queues. These roots are not final-chain commit roots for GPT/Muse; final admission must still rerun prepare sequentially after each predecessor is committed, or explicitly prove evidence reuse.
+  Rationale: this gives the radiologist all needed rows in one batch while preserving the append-only parent-chain invariant for the final master.
+  Date/Author: 2026-07-10, Codex/GPT-5.6 Sol
+
+- Decision: support the radiologist return path as one combined long CSV with `human_score`, then split it into per-model `radiologist_decisions.csv` overlays. Require all expected queue keys by default, reject extra keys unless explicitly allowed, compare diagnosis/ground-truth evidence exactly when present, and compare `likert` numerically to survive spreadsheet formatting.
+  Rationale: the user expects one all-models file, but the finalizer's per-model signed overlay contract remains the safer admission boundary.
+  Date/Author: 2026-07-10 19:24 +05:30, Codex/GPT-5.6 Sol
+
+- Decision: keep the final Muse identity as `muse_spark_1_1` / Candidate AG even though the successful Colab rerun may appear in the raw CSV as a temporary high-effort source family such as `muse_spark_1_1_high`. The old normal-effort Muse attempt is abandoned before final admission and its scoring/judge/radiologist evidence is not reusable.
+  Rationale: downstream CSVs, summaries, SVGs, and labels should show one Muse Spark 1.1 arm, while private package provenance still proves high reasoning effort.
+  Date/Author: 2026-07-10 20:06 +05:30, Codex/GPT-5.6 Sol
+
+- Decision: do not force the earlier 41 Candidate AF workbook rows into the sequential GPT admission after Grok is committed. Reuse only exact matching AF decisions from the workbook, collect a supplemental 13-row AF radiologist queue, and keep the 21 obsolete supplied AF rows as audit evidence only.
+  Rationale: final admission is parent-chain sensitive; committing GPT from stale AF rows would mix evidence generated for the frozen-base queue with the post-Grok sequential queue.
+  Date/Author: 2026-07-10 20:53 +05:30, Codex/GPT-5.6 Sol
+
+- Decision: defer paid high-effort Muse LLM judging until after GPT is finalized and committed, unless the user explicitly chooses to spend on provisional/stale-root evidence.
+  Rationale: the OpenRouter judge cache key includes `judge_worklist_sha256` and manifest input hashes, so the final post-GPT Muse root will not safely reuse paid calls made against the Grok-only provisional root. Deferring also avoids likely duplicate calls for the six rows expected to become GPT-derived previous-score reuse.
+  Date/Author: 2026-07-10 21:27 +05:30, Codex/GPT-5.6 Sol
+
+- Decision: honor the user's explicit instruction to run paid Muse LLM judging before GPT commit, while preserving the warning that this evidence is bound to the provisional Grok-parent Muse root.
+  Rationale: the user prioritized immediate LLM scoring over waiting for GPT. The resulting Candidate AG queue is useful for radiologist scoring now, but final Muse admission still needs a deliberate parent-chain decision after GPT is resolved.
+  Date/Author: 2026-07-10 21:30 +05:30, Codex/GPT-5.6 Sol
+
+- Decision: accept the user-authorized high-effort Muse evidence-carry-forward admission as the committed third admission and do not require re-preparing Muse or returning to radiology solely to satisfy the normal sequential path.
+  Rationale: the completed Muse evidence was validated conventionally, all current AG radiologist rows were answered, and the carry-forward manifest records both the original Grok-parent evidence chain and the committed GPT parent chain. Repeating the normal path would add engineering churn and possible duplicate clinical review without a concrete scoring contradiction.
+  Date/Author: 2026-07-11 01:06 +05:30, Codex/GPT-5.6 Sol
+
+- Decision: promote the `Repeatable Admission SOP` near the top of this plan as the operational entry point for future model/version admissions.
+  Rationale: the plan now needs to support continual model additions. A concise front-door runbook reduces the chance that a future session follows stale milestone history, skips parent-chain gates, or misses radiologist/judge/privacy stop rules.
+  Date/Author: 2026-07-11 01:06 +05:30, Codex/GPT-5.6 Sol
+
+- Decision: document the Colab-output-to-SVG path as a two-stage command chain: admission worktree first, then panel checkout wrapper.
+  Rationale: future models will arrive as Colab/Morning wide CSVs, but current SVG generation is a tested panel-checkout wrapper that starts from the committed private final long master. Keeping both stages explicit prevents a future session from feeding raw Drive CSVs directly into SVG scripts or treating dynamic IDK0 lane outputs as already audited SVG figures.
+  Date/Author: 2026-07-11 01:13 +05:30, Codex/GPT-5.6 Sol
+
 ## Revision Notes
 
 - v1 (2026-07-10 03:19 +05:30, Codex/GPT-5): drafted the first implementation-ready plan from the requirements and research ledger; added transaction-state separation, exact judge configuration, old-byte immutability, dynamic expected counts, and small-agent stop gates.
@@ -303,6 +668,20 @@ Current state (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol): child Milestone 6.5 
 - v12 (2026-07-10 05:28 +05:30, Codex/GPT-5): recorded Milestone 5 finalization, checksum/commit semantics, validation receipts, and commit `ec76ec4`; advanced Current State to Milestone 6.
 - v13 (2026-07-10 05:28 +05:30, Codex/GPT-5): recorded Milestone 6 dynamic IDK0 score lane, implemented output schemas, scout receipt, local branch-consolidation scout, CLI receipts, validation evidence, and commit `7c19c8b`; advanced Current State to the external-results gate.
 - v14 (2026-07-10 15:51 +05:30, Codex/GPT-5.6 Sol): recorded child Milestone 6.5 PASS, the repair review receipt, 31-test rerun, production-shape acceptance rerun, and the transition to Milestone 7 package inventory/sealing.
+- v15 (2026-07-10 16:08 +05:30, Codex/GPT-5.6 Sol): recorded the projection provenance repair after discovering the CSV-hash-as-runtime-SHA defect; continued Milestone 7 with explicit inferred runtime SHA handling.
+- v16 (2026-07-10 16:28 +05:30, Codex/GPT-5.6 Sol): recorded prior-score reuse, decimal-integral Likert validation, projected/prepared/audited all-three scoring roots, exact judge dry-run ceilings, paid authorization files, and the `OPENROUTER_API_KEY` environment blocker.
+- v17 (2026-07-10 18:39 +05:30, Codex/GPT-5.6 Sol): recorded old-script-inspired OpenRouter executor repairs, bounded concurrency, successful Grok real judge run, actual cost, and Grok radiologist queue count.
+- v18 (2026-07-10 18:52 +05:30, Codex/GPT-5.6 Sol): recorded GPT/Muse real judge PASS receipts, all-three radiologist queue handoff artifacts and hashes, and the next gate requiring filled radiologist decision overlays before sequential final admission and IDK0/SVG work.
+- v19 (2026-07-10 19:24 +05:30, Codex/GPT-5.6 Sol): recorded combined radiologist-score splitter support, the Excel `likert` formatting edge case, CLI contract, focused splitter tests, full 36-test suite pass, and the updated next gate for one long returned file.
+- v20 (2026-07-10 20:06 +05:30, Codex/GPT-5.6 Sol): recorded the high-effort Muse correction: final identity stays `muse_spark_1_1` / Candidate AG, old normal-effort Muse evidence is abandoned, and `project-one-model` can rename a temporary high-effort source family into the normal downstream Muse package.
+- v21 (2026-07-10 20:53 +05:30, Codex/GPT-5.6 Sol): recorded the AE/AF workbook intake, committed Candidate AE / Grok, reran Candidate AF / GPT sequential judges against the Grok parent, and stopped GPT before finalization pending 13 supplemental AF radiologist decisions.
+- v22 (2026-07-10 21:09 +05:30, Codex/GPT-5.6 Sol): recorded post-interruption readiness validation after the high-effort Muse identity correction and subsequent Grok/GPT plan progress; full discovery test suite passed with 37 tests.
+- v23 (2026-07-10 21:27 +05:30, Codex/GPT-5.6 Sol): recorded Drive final CSV high-effort Muse validation, `_high` to normal Muse projection, provisional Grok-parent dry-run, expected post-GPT Muse LLM workload, and the decision to defer paid Muse judging until GPT commit.
+- v24 (2026-07-10 21:30 +05:30, Codex/GPT-5.6 Sol): recorded the user override to run paid Muse LLM before GPT commit, the real judge PASS receipt, the Candidate AG radiologist queue, and the combined 51-row AF/AG remaining radiologist handoff.
+- v25 (2026-07-11 00:54 +05:30, Codex/GPT-5.6 Sol): recorded `Radiologist Review (2).xlsx` ingestion, GPT commit, the user-authorized Muse evidence-carry-forward decision, the carry-forward builder script, Muse committed root `18e1d292e1fe1f8d654be09aa2f65f65c6cc951be4b5d37d3c6649645e127df4`, and the 6600-row committed-readback PASS.
+- v26 (2026-07-11 01:06 +05:30, Codex/GPT-5.6 Sol): added a front-loaded `Repeatable Admission SOP`, including normal sequential admission, batch radiologist handback, carry-forward exception, hard stop rules, and per-model completion checklist; reconciled the stale Muse provisional-root prohibition into the accepted carry-forward exception rule.
+- v27 (2026-07-11 01:13 +05:30, Codex/GPT-5.6 Sol): added a `Colab Output To SVG Command Index` that names the upstream Colab producers, admission worktree scripts, panel checkout scripts, canonical admission command chain, current Score1000/IDK0 wrapper command, and the wrapper-expanded Python calls through SVG audit.
+- v28 (2026-07-12 02:25 +05:30, Codex/GPT-5): recorded scoped branch-consolidation checkpoint commit `410b447` and clarified that the next consolidation action is comparison against `codex/radle-v2-post-admission-panels`, not branch deletion.
 
 ## Outcomes & Retrospective
 
@@ -321,6 +700,12 @@ Milestone 4 outcome (2026-07-10 05:19 +05:30, Codex/GPT-5): local judge/radiolog
 Milestone 5 outcome (2026-07-10 05:28 +05:30, Codex/GPT-5): finalized append is executable on synthetic prepared staging. `finalize-stage` creates a 200-row `scored_append_delta.csv`, copies/records the signed `radiologist_decisions.csv`, appends those rows to `final/radle_v2_final_long_master.csv` with the parent bytes as exact prefix, and writes `append_manifest.json`; `commit` writes `SHA256SUMS` then `COMMITTED.json`; committed readback validates the manifest hashes and checksum inventory. Validation receipts: `py -3.11 -m py_compile ...` passed, `py -3.11 -m unittest tests.test_radle_incremental_admission -v` ran 13 tests OK, `check-config` printed `CONFIG_RESULT=PASS`, the old RadLE Stats path scan had no matches, and `git diff --check` was clean. No reusable lesson has been promoted to a skill; ask the user before creating or editing any skill.
 
 Milestone 6 outcome (2026-07-10 05:28 +05:30, Codex/GPT-5): dynamic IDK0 Score1000/Score2000 and panel-source output generation is executable on synthetic committed admissions. `build-idk0-lane` derives `score_rows.csv`, `source1000.csv`, `public_candidate_summary.csv`, `panel_order.csv`, `group_summary.csv`, `panel_bins.csv`, and `score_lane_manifest.json` from the committed final master plus roster/terminal policy; `audit --phase idk0-lane` validates hashes, counts, public-summary privacy shape, active-only panel order, and `Score2000 = Score1000 + 1000`. CLI receipt on synthetic data printed `IDK0_RESULT=PASS` with 2800 score rows, 2 complete models, 1 active model, 1 excluded model, 12 human backend readers, 3 presentation comparators, and 2 panel comparators. Validation receipts: `py -3.11 -m py_compile ...` passed, `py -3.11 -m unittest tests.test_radle_incremental_admission -v` ran 15 tests OK, `check-config` printed `CONFIG_RESULT=PASS`, the old RadLE Stats path scan had no matches, and `git diff --check` was clean. No reusable lesson has been promoted to a skill; ask the user before creating or editing any skill.
+
+Combined radiologist-score adapter outcome (2026-07-10 19:24 +05:30, Codex/GPT-5.6 Sol): the pipeline is prepared for the user's single long all-models return file. `src/radle_incremental_admission.py` exposes `split_combined_radiologist_scores`; `scripts/radle_v2_incremental_admission.py` exposes `split-radiologist-scores`; focused tests prove successful multi-model splitting plus rejection of missing, duplicate, nonbinary, and mismatched rows. Validation receipts: `py -3.11 -B -m py_compile src\radle_incremental_admission.py scripts\radle_v2_incremental_admission.py tests\test_radle_incremental_admission.py` passed; focused splitter tests passed; `py -3.11 -B -m unittest discover -s tests -p test_*.py -v` ran 36 tests OK; `git diff --check -- src\radle_incremental_admission.py scripts\radle_v2_incremental_admission.py tests\test_radle_incremental_admission.py` was clean apart from line-ending warnings. No reusable lesson has been promoted to a skill; ask the user before creating or editing any skill.
+
+High-effort Muse correction outcome (2026-07-10 21:09 +05:30, Codex/GPT-5.6 Sol): the convenient downstream path is ready. The roster keeps Candidate AG as `muse_spark_1_1`, requires private high-effort request evidence, and does not create a visible `muse_spark_1_1_high` comparator. `project-one-model` now accepts `--source-model-key` so a temporary source family can be projected into the normal admitted model identity. Validation receipts: `check-config` printed `CONFIG_RESULT=PASS` with roster hash `E2A04EC58B14638AB647CE75FAAADB31403AFA3BD436630D2914E89E6085AB63`; `test_muse_projection_can_rename_high_effort_source_family` passed; `test_projection_requires_real_runtime_sha_provenance` passed; `project-one-model --help` shows `--source-model-key`; `py -3.11 -B -m unittest discover -s tests -p test_*.py -v` ran 37 tests OK.
+
+Branch-consolidation checkpoint outcome (2026-07-12 02:25 +05:30, Codex/GPT-5): commit `410b447` preserves the formerly dirty pre-M7/admission-continuation state without touching the primary checkout, deleting branches, pushing, or publishing. Validation before the checkpoint: `py -3.11 -B -m py_compile ...` passed for admission, judge, carry-forward, and probe scripts; `check-config` printed `CONFIG_RESULT=PASS` with roster hash `E2A04EC58B14638AB647CE75FAAADB31403AFA3BD436630D2914E89E6085AB63`; `py -3.11 -B -m unittest discover -s tests -p test_*.py -v` ran 37 tests OK; `git diff --cached --check` passed; staged token-pattern scan printed `STAGED_SECRET_SCAN=PASS`. No reusable lesson has been promoted to a skill; ask the user before creating or editing any skill.
 
 ## Suggested Skills By Phase
 
@@ -452,11 +837,12 @@ Create or modify only these implementation families unless a milestone documents
 
        project-one-model
        prepare
+       split-radiologist-scores
        finalize-stage
        commit
        build-idk0-lane
 
-   `project-one-model --dry-run` computes deterministic projection bytes/hash without writing. `prepare` writes only under a content-addressed output root; `finalize-stage` writes only under `intake_root/finalized/<finalization_id>/`; `commit` marks a passing precommit tree by writing `SHA256SUMS` and then `COMMITTED.json`; `build-idk0-lane` refuses a non-empty output root. No command writes beside the downloaded/shared source. No command accepts an overwrite, replace-existing-model, or allow-metadata-mismatch escape hatch.
+   `project-one-model --dry-run` computes deterministic projection bytes/hash without writing. Its optional `--source-model-key` reads a temporary source family, such as `muse_spark_1_1_high`, while writing the projected package under the normal `--model-key`, such as `muse_spark_1_1`. `prepare` writes only under a content-addressed output root; `split-radiologist-scores` writes copy-out per-model decision overlays and a receipt under its `--output-root`; `finalize-stage` writes only under `intake_root/finalized/<finalization_id>/`; `commit` marks a passing precommit tree by writing `SHA256SUMS` and then `COMMITTED.json`; `build-idk0-lane` refuses a non-empty output root. No command writes beside the downloaded/shared source. No command accepts an overwrite, replace-existing-model, or allow-metadata-mismatch escape hatch.
 
 6. `scripts/radle_v2_dual_judge_delta.py`
 
@@ -531,7 +917,7 @@ Model-specific expected routing:
 | --- | --- |
 | `grok_4_5` | requested `x-ai/grok-4.5`; xAI-only routing; provider `xAI`; returned model starts `x-ai/grok-4.5`; fallback false |
 | `gpt_5_6_sol_pro` | requested `openai/gpt-5.6-sol-pro`; OpenAI-only routing; provider `OpenAI`; returned model starts `openai/gpt-5.6-sol-pro`; reasoning effort high |
-| `muse_spark_1_1` | Meta OpenAI-compatible route; model `muse-spark-1.1`; provider `Meta Model API`; max output 2048; temperature omitted/suppressed |
+| `muse_spark_1_1` | Meta OpenAI-compatible route; model `muse-spark-1.1`; provider `Meta Model API`; max output 2048; temperature omitted/suppressed; final admitted package must prove `reasoning_effort: high` in request-extra evidence |
 
 ### Final-long-master output
 
@@ -547,6 +933,7 @@ New model rows use these score-source values:
 
 - `auto_score_not_required` for IDK, invalid Likert, provider/parse failure, or retry-exhausted terminal zero.
 - `canonical_exact` for normalized equality to canonical ground truth.
+- `previous_authoritative_score` for same-case exact-normalized reuse of a prior non-conflicting authoritative score.
 - `ai_judges` when both judges agree without a review flag.
 - `radiologist` only when a valid signed radiologist overlay supplies the binary verdict.
 
@@ -586,6 +973,16 @@ For invalid Likert, retain the raw invalid Likert string, set `response_valid=fa
     Master_Case_ID,model_blinded,score_binary,reviewer_pseudonym,reviewed_utc,rationale
 
 Finalization requires exactly one decision for every queued key, no extra key, score in `{0,1}`, nonblank reviewer pseudonym, parseable UTC time, and a recorded file SHA256. The rationale may be blank. If an XLSX is used for human convenience, it is a transport artifact; the sealed CSV overlay is authoritative.
+
+The preferred all-models handback can be one combined long CSV with required columns:
+
+    Master_Case_ID,model_blinded,human_score
+
+If present, these queue evidence columns are checked before splitting:
+
+    Ground_Truth_Diagnosis,diagnosis,likert
+
+`split-radiologist-scores` validates that every expected `(Master_Case_ID, model_blinded)` from the supplied staging roots is present exactly once, rejects unexpected rows by default, normalizes `human_score` to binary `score_binary`, and writes one exact-schema `radiologist_decisions.csv` under each model output folder. `Ground_Truth_Diagnosis` and `diagnosis` are exact string checks. `likert` accepts numeric-equivalent formatting such as `4` versus `4.0` because spreadsheet tools may strip decimal zeros.
 
 Always create a header-only decisions template beside the queue. If the queue has zero data rows, that header-only file is the valid `NONE` overlay and hashes as such. If the queue is nonempty, finalization blocks until every required decision row is present and valid.
 

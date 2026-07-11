@@ -1,0 +1,176 @@
+[
+  {
+    "completion_tokens": 984,
+    "content_chars": 63,
+    "elapsed_seconds": 10.042,
+    "error": "",
+    "finish_reason": "stop",
+    "http_status": 200,
+    "listed_in_openrouter_models": true,
+    "metadata_reasoning": {
+      "default_effort": "high",
+      "default_enabled": true,
+      "mandatory": true,
+      "supported_efforts": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "model": "x-ai/grok-4.5",
+    "ok": true,
+    "prompt_tokens": 249,
+    "provider": "xAI",
+    "reasoning_chars": 1319,
+    "reasoning_details_count": 2,
+    "reasoning_present": true,
+    "reasoning_tokens": 966,
+    "request_payload": {
+      "max_tokens": 512,
+      "messages": [
+        {
+          "content": "Solve this compact diagnostic-style reasoning task. A 7-year-old has a metaphyseal corner fracture pattern after minor trauma. Return only JSON: {\"answer\":\"...\",\"confidence\":0-4}.",
+          "role": "user"
+        }
+      ],
+      "model": "x-ai/grok-4.5",
+      "provider": {
+        "allow_fallbacks": false,
+        "only": [
+          "xAI"
+        ]
+      }
+    },
+    "response_id": "gen-1783677990-HR89lXFTSJ5Z4JXFYf68",
+    "returned_model": "x-ai/grok-4.5-20260708",
+    "thinking_variant": false,
+    "total_tokens": 1233,
+    "variant": "baseline"
+  },
+  {
+    "completion_tokens": 717,
+    "content_chars": 90,
+    "elapsed_seconds": 7.158,
+    "error": "",
+    "finish_reason": "stop",
+    "http_status": 200,
+    "listed_in_openrouter_models": true,
+    "metadata_reasoning": {
+      "default_effort": "high",
+      "default_enabled": true,
+      "mandatory": true,
+      "supported_efforts": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "model": "x-ai/grok-4.5",
+    "ok": true,
+    "prompt_tokens": 249,
+    "provider": "xAI",
+    "reasoning_chars": 853,
+    "reasoning_details_count": 2,
+    "reasoning_present": true,
+    "reasoning_tokens": 693,
+    "request_payload": {
+      "max_tokens": 512,
+      "messages": [
+        {
+          "content": "Solve this compact diagnostic-style reasoning task. A 7-year-old has a metaphyseal corner fracture pattern after minor trauma. Return only JSON: {\"answer\":\"...\",\"confidence\":0-4}.",
+          "role": "user"
+        }
+      ],
+      "model": "x-ai/grok-4.5",
+      "provider": {
+        "allow_fallbacks": false,
+        "only": [
+          "xAI"
+        ]
+      },
+      "reasoning": {
+        "effort": "high"
+      }
+    },
+    "response_id": "gen-1783678000-iew136uBvugAmRUR6S9K",
+    "returned_model": "x-ai/grok-4.5-20260708",
+    "thinking_variant": false,
+    "total_tokens": 966,
+    "variant": "high"
+  },
+  {
+    "completion_tokens": null,
+    "content_chars": 0,
+    "elapsed_seconds": 0.591,
+    "error": {
+      "code": 400,
+      "message": "muse-spark-1.1 is not a valid model ID"
+    },
+    "finish_reason": "",
+    "http_status": 400,
+    "listed_in_openrouter_models": false,
+    "metadata_reasoning": null,
+    "model": "muse-spark-1.1",
+    "ok": false,
+    "prompt_tokens": null,
+    "provider": "",
+    "reasoning_chars": 0,
+    "reasoning_details_count": 0,
+    "reasoning_present": false,
+    "reasoning_tokens": null,
+    "request_payload": {
+      "max_tokens": 512,
+      "messages": [
+        {
+          "content": "Solve this compact diagnostic-style reasoning task. A 7-year-old has a metaphyseal corner fracture pattern after minor trauma. Return only JSON: {\"answer\":\"...\",\"confidence\":0-4}.",
+          "role": "user"
+        }
+      ],
+      "model": "muse-spark-1.1"
+    },
+    "response_id": "",
+    "returned_model": "",
+    "thinking_variant": false,
+    "total_tokens": null,
+    "variant": "baseline"
+  },
+  {
+    "completion_tokens": null,
+    "content_chars": 0,
+    "elapsed_seconds": 0.293,
+    "error": {
+      "code": 400,
+      "message": "muse-spark-1.1 is not a valid model ID"
+    },
+    "finish_reason": "",
+    "http_status": 400,
+    "listed_in_openrouter_models": false,
+    "metadata_reasoning": null,
+    "model": "muse-spark-1.1",
+    "ok": false,
+    "prompt_tokens": null,
+    "provider": "",
+    "reasoning_chars": 0,
+    "reasoning_details_count": 0,
+    "reasoning_present": false,
+    "reasoning_tokens": null,
+    "request_payload": {
+      "max_tokens": 512,
+      "messages": [
+        {
+          "content": "Solve this compact diagnostic-style reasoning task. A 7-year-old has a metaphyseal corner fracture pattern after minor trauma. Return only JSON: {\"answer\":\"...\",\"confidence\":0-4}.",
+          "role": "user"
+        }
+      ],
+      "model": "muse-spark-1.1",
+      "reasoning": {
+        "effort": "high"
+      }
+    },
+    "response_id": "",
+    "returned_model": "",
+    "thinking_variant": false,
+    "total_tokens": null,
+    "variant": "high"
+  }
+]

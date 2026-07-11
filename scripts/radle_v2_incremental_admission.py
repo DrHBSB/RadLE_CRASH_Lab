@@ -18,6 +18,7 @@ from radle_incremental_admission import (
     finalize_incremental_admission,
     prepare_incremental_admission,
     project_one_model_package,
+    split_combined_radiologist_scores,
 )
 
 
@@ -78,6 +79,11 @@ def _cmd_project_one_model(args: argparse.Namespace) -> int:
         source_wide=Path(args.source_wide),
         model_key=args.model_key,
         output_package=Path(args.output_package),
+        runtime_sha=args.runtime_sha,
+        runtime_sha_status=args.runtime_sha_status,
+        runtime_sha_note=args.runtime_sha_note,
+        source_manifest_path=Path(args.source_manifest) if args.source_manifest else None,
+        source_model_key=args.source_model_key,
         dry_run=args.dry_run,
     )
     print(json.dumps(receipt, indent=2, sort_keys=True))
@@ -97,6 +103,22 @@ def _cmd_finalize_stage(args: argparse.Namespace) -> int:
     print(f"FINALIZATION_ID={receipt['finalization_id']}")
     print(f"FINAL_STAGING_ROOT={receipt['final_staging_root']}")
     print(f"TRANSACTION_STATE={receipt['transaction_state']}")
+    return 0
+
+
+def _cmd_split_radiologist_scores(args: argparse.Namespace) -> int:
+    receipt = split_combined_radiologist_scores(
+        combined_scores=Path(args.combined_scores),
+        staging_roots=[Path(path) for path in args.staging_root],
+        output_root=Path(args.output_root),
+        reviewer_pseudonym=args.reviewer_pseudonym,
+        reviewed_utc=args.reviewed_utc,
+        rationale_prefix=args.rationale_prefix,
+        allow_extra=args.allow_extra,
+    )
+    print(json.dumps(receipt, indent=2, sort_keys=True))
+    print(f"SPLIT_OUTPUT_ROOT={receipt['output_root']}")
+    print("SPLIT_RESULT=PASS")
     return 0
 
 
@@ -156,7 +178,12 @@ def build_parser() -> argparse.ArgumentParser:
     project = subparsers.add_parser("project-one-model", help="project a shared wide result into one model package")
     project.add_argument("--source-wide", required=True)
     project.add_argument("--model-key", required=True)
+    project.add_argument("--source-model-key")
     project.add_argument("--output-package", required=True)
+    project.add_argument("--runtime-sha", required=True)
+    project.add_argument("--runtime-sha-status", choices=["confirmed", "inferred"], default="confirmed")
+    project.add_argument("--runtime-sha-note", default="")
+    project.add_argument("--source-manifest")
     project.add_argument("--dry-run", action="store_true")
     project.set_defaults(func=_cmd_project_one_model)
 
@@ -164,6 +191,19 @@ def build_parser() -> argparse.ArgumentParser:
     finalize.add_argument("--intake-root", required=True)
     finalize.add_argument("--radiologist-decisions", required=True)
     finalize.set_defaults(func=_cmd_finalize_stage)
+
+    split = subparsers.add_parser(
+        "split-radiologist-scores",
+        help="split one combined long radiologist human_score file into per-model decision overlays",
+    )
+    split.add_argument("--combined-scores", required=True)
+    split.add_argument("--staging-root", action="append", required=True)
+    split.add_argument("--output-root", required=True)
+    split.add_argument("--reviewer-pseudonym", required=True)
+    split.add_argument("--reviewed-utc", required=True)
+    split.add_argument("--rationale-prefix", default="combined_human_score")
+    split.add_argument("--allow-extra", action="store_true")
+    split.set_defaults(func=_cmd_split_radiologist_scores)
 
     commit = subparsers.add_parser("commit", help="mark a finalized admission committed")
     commit.add_argument("--final-staging-root", required=True)

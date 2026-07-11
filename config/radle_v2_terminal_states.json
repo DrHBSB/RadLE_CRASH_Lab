@@ -85,6 +85,12 @@
       "judge_required": false
     },
     {
+      "state": "previous_authoritative_score",
+      "precedence": 65,
+      "correctness_action": "reuse_previous_binary_score",
+      "judge_required": false
+    },
+    {
       "state": "judge_required",
       "precedence": 70,
       "correctness_action": "dual_judge",

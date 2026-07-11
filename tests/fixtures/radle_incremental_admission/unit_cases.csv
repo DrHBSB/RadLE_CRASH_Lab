@@ -4,6 +4,7 @@ Master_Case_ID,diagnosis,likert,ground_truth,package_failure,expected_state,expe
 3,Pneumonia,8,Pneumonia,false,invalid_likert,zero
 4,API_ERROR,,Pneumonia,true,provider_or_parse_failure,zero
 5,pneumonia,4, Pneumonia ,false,canonical_exact,one
+5,pneumonia,4.0, Pneumonia ,false,canonical_exact,one
 164,Diffuse esophageal spasm,3,Achalasia,false,mandatory_radiologist,radiologist
 6,Pulmonary edema,3,Pneumonia,false,judge_required,dual_judge
 7,,3,Pneumonia,false,ERROR,blank diagnosis without failure provenance

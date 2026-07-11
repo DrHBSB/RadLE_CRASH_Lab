@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import threading
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -61,6 +64,8 @@ class OpenRouterJudgeTransport:
             headers={
                 "Authorization": f"Bearer {self._api_key}",
                 "Content-Type": "application/json",
+                "HTTP-Referer": "https://github.com/openai/codex",
+                "X-Title": "RadLE v2 Dual Judge",
             },
             method="POST",
         )
@@ -82,6 +87,15 @@ def _canonical_json(value: object) -> str:
 
 def _json_sha256(value: object) -> str:
     return admission.sha256_bytes(_canonical_json(value).encode("utf-8"))
+
+
+def _model_id_matches_request(requested_model_id: str, returned_model_id: object) -> bool:
+    if not isinstance(returned_model_id, str) or not returned_model_id:
+        return False
+    if returned_model_id == requested_model_id:
+        return True
+    suffix = returned_model_id.removeprefix(f"{requested_model_id}-")
+    return suffix != returned_model_id and bool(re.fullmatch(r"\d{8}", suffix))
 
 
 def _utc_now() -> datetime:
@@ -205,6 +219,7 @@ def _http_payload(*, requested_model_id: str, prompt: str, case_payload: Mapping
             {"role": "user", "content": _canonical_json(case_payload)},
         ],
         "model": requested_model_id,
+        "response_format": {"type": "json_object"},
         "temperature": temperature,
     }
 
@@ -277,7 +292,10 @@ def _usable_cache_result(
             "requested_model_id": "requested_judge_model_id",
             "returned_model_id": "returned_judge_model_id",
         }.get(field, field)
-        if result.get(result_field) != expected:
+        if field == "returned_model_id":
+            if not _model_id_matches_request(expected, result.get(result_field)):
+                return None
+        elif result.get(result_field) != expected:
             return None
     return dict(result)
 
@@ -350,7 +368,7 @@ def validate_agreement_results(
         return False, "duplicate_judge_identity"
     if set(result_keys) != configured_keys or set(requested_ids) != configured_ids:
         return False, "unconfigured_judge_identity"
-    if any(requested != returned for requested, returned in zip(requested_ids, returned_ids)):
+    if any(not _model_id_matches_request(requested, returned) for requested, returned in zip(requested_ids, returned_ids)):
         return False, "returned_judge_identity_mismatch"
     if any(result.get("parse_status") != "parsed" for result in results):
         return False, "judge_parse_or_api_failure"
@@ -727,25 +745,39 @@ def run_openrouter_dual_judge_delta(
     max_http_requests = int(authorization["max_http_requests"])
     max_cost = Decimal(str(authorization["max_cost_usd"])) if authorization.get("max_cost_usd") is not None else None
     authorization_expiry = _parse_utc(authorization["expiry_utc"], "expiry_utc")
-    actual_cost = Decimal("0")
-    http_requests = 0
-    results: list[dict[str, Any]] = []
-    for case, request, cached_result in planned:
-        if cached_result is not None:
-            cached_result["cache_status"] = "hit"
-            results.append(cached_result)
-            continue
+    state_lock = threading.Lock()
+    cache_write_lock = threading.Lock()
+    state = {"actual_cost": Decimal("0"), "http_requests": 0}
+    configured_concurrency = int(context["judges_config"].get("concurrency", 1))
+    worker_count = max(1, configured_concurrency)
+    if transport is not None:
+        worker_count = 1
 
+    def reserve_http_request() -> None:
+        with state_lock:
+            if _clock_utc(clock) >= authorization_expiry:
+                raise ValidationError("paid judge authorization expired during the real run")
+            if state["http_requests"] >= max_http_requests:
+                raise ValidationError("paid judge authorization HTTP request cap exhausted")
+            state["http_requests"] += 1
+
+    def record_cost(response_cost: Decimal | None) -> None:
+        if max_cost is not None and response_cost is None:
+            raise ValidationError("OpenRouter response omitted a usable cost under max_cost_usd authorization")
+        if response_cost is None:
+            return
+        with state_lock:
+            state["actual_cost"] += response_cost
+            if max_cost is not None and state["actual_cost"] > max_cost:
+                raise ValidationError("paid judge authorization max_cost_usd exceeded")
+
+    def execute_missing(case: Mapping[str, Any], request: Mapping[str, Any]) -> dict[str, Any]:
         started = _format_utc(_clock_utc(clock))
         response: Mapping[str, Any] | None = None
         last_error = ""
         attempt = 0
         for attempt in range(1, max_attempts + 1):
-            if _clock_utc(clock) >= authorization_expiry:
-                raise ValidationError("paid judge authorization expired during the real run")
-            if http_requests >= max_http_requests:
-                raise ValidationError("paid judge authorization HTTP request cap exhausted")
-            http_requests += 1
+            reserve_http_request()
             try:
                 response = active_transport.complete(
                     payload=request["payload"],
@@ -785,22 +817,15 @@ def run_openrouter_dual_judge_delta(
                     "cache_status": "miss",
                 }
             )
-            results.append(result)
-            continue
+            return result
 
         returned_model_id = response.get("model")
         requested_model_id = request["judge"]["requested_model_id"]
-        if returned_model_id != requested_model_id:
+        if not _model_id_matches_request(requested_model_id, returned_model_id):
             raise ValidationError(
                 f"OpenRouter returned model mismatch for {requested_model_id}: {returned_model_id!r}"
             )
-        response_cost = _response_cost(response)
-        if max_cost is not None and response_cost is None:
-            raise ValidationError("OpenRouter response omitted a usable cost under max_cost_usd authorization")
-        if response_cost is not None:
-            actual_cost += response_cost
-        if max_cost is not None and actual_cost > max_cost:
-            raise ValidationError("paid judge authorization max_cost_usd exceeded")
+        record_cost(_response_cost(response))
 
         verdict, parse_error = _parse_verdict(response)
         raw_response = dict(response)
@@ -847,8 +872,42 @@ def run_openrouter_dual_judge_delta(
             "raw_response": raw_response,
             "result": result,
         }
-        _append_cache_entry(context["cache_path"], entry)
-        results.append(result)
+        with cache_write_lock:
+            _append_cache_entry(context["cache_path"], entry)
+        return result
+
+    results_by_index: list[dict[str, Any] | None] = [None] * len(planned)
+    missing_jobs: list[tuple[int, dict[str, Any], dict[str, Any]]] = []
+    for index, (case, request, cached_result) in enumerate(planned):
+        if cached_result is not None:
+            cached_result["cache_status"] = "hit"
+            results_by_index[index] = cached_result
+        else:
+            missing_jobs.append((index, case, request))
+
+    if missing_jobs and worker_count == 1:
+        for index, case, request in missing_jobs:
+            results_by_index[index] = execute_missing(case, request)
+    elif missing_jobs:
+        executor = ThreadPoolExecutor(max_workers=worker_count)
+        future_to_index = {
+            executor.submit(execute_missing, case, request): index
+            for index, case, request in missing_jobs
+        }
+        try:
+            for future in as_completed(future_to_index):
+                results_by_index[future_to_index[future]] = future.result()
+        except Exception:
+            for future in future_to_index:
+                future.cancel()
+            executor.shutdown(wait=True, cancel_futures=True)
+            raise
+        else:
+            executor.shutdown(wait=True)
+
+    results = [result for result in results_by_index if result is not None]
+    if len(results) != len(planned):
+        raise ValidationError("internal judge result count mismatch")
 
     summary = _write_evidence(
         staging_root=staging_root,
@@ -857,8 +916,8 @@ def run_openrouter_dual_judge_delta(
         results=results,
         cache_hits=cache_hits,
         cache_misses=cache_misses,
-        http_requests=http_requests,
-        actual_cost=actual_cost,
+        http_requests=int(state["http_requests"]),
+        actual_cost=state["actual_cost"],
         authorization_path=authorization_path,
         malformed_cache_lines=malformed_cache_lines,
     )
