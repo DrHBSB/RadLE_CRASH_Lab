@@ -12,7 +12,7 @@ The admission-side factual handoff is `Documents/execplan_radle_v2_incremental_m
 
 ## Current State
 
-Current state (2026-07-12 03:49 +05:30, Codex/GPT-5): the consolidated branch remains clean at ledger checkpoint `e96dff4` after three local closure sets. Seven local branches and five worktrees have been closed, with every committed tip preserved on a named successor or retained remote ref. The two detached Claude worktrees and local Claude branches are gone, and unused local `main` now fast-forwards exactly to fetched `origin/main` at `f3c7d72`. Wave 2 agents are finishing the ignored pre-M7 artifact classification and an independent closure receipt. The next bounded action is to record those receipts and classify every remaining branch as active, dirty hold, divergent hold, or synchronized baseline.
+Current state (2026-07-12 03:53 +05:30, Codex/GPT-5): the consolidated branch remains clean at ledger checkpoint `eed1dda` after four local closure sets. Eight local branches and six worktrees have been closed, with every committed tip preserved on a named successor or retained remote ref. The pre-M7 worktree and local branch are gone after an independent audit proved its six ignored reasoning-probe CSVs were transient projections of the committed JSON receipts. The next bounded action is to merge the one fetched `origin/main` baseline commit into the consolidation branch after a synthetic conflict gate, then classify every remaining branch as active, dirty hold, divergent hold, or synchronized baseline.
 
 ## Locked Facts
 
@@ -28,6 +28,7 @@ Current state (2026-07-12 03:49 +05:30, Codex/GPT-5): the consolidated branch re
 - Local closure set 1 removed only refs already preserved by exact ancestry; `origin/codex/radle-v2-post-admission-panels` and `origin/fix/stats-combiner-scorer-from-final` remain available remotely.
 - Local closure set 2 removed only Morning smoke refs that are exact ancestors of `codex/morning-meta-muse-spark-append`; both corresponding remote refs remain available.
 - Local closure set 3 removed two clean detached Claude worktrees and their local branch pointers after proving both tips are ancestors of `origin/main`.
+- Local closure set 4 removed the pre-M7 worktree and local branch after its two local-only commits were merged and its ignored probe CSVs were proven semantically redundant with committed JSON receipts.
 
 ## Do Not Revisit
 
@@ -48,7 +49,8 @@ Current state (2026-07-12 03:49 +05:30, Codex/GPT-5): the consolidated branch re
 - [x] (2026-07-12 03:47 +05:30, Codex/GPT-5) Closed first local-only set after fresh gates: removed incremental-admission and post-admission worktrees, deleted their local branches, and deleted the local stats-combiner fix branch already contained by `origin/main`.
 - [x] (2026-07-12 03:47 +05:30, Codex/GPT-5) Closed local Morning smoke set after exact ancestry and cleanliness gates: removed the GPT smoke worktree and deleted local GPT-5.6 and Grok 4.5 smoke branches.
 - [x] (2026-07-12 03:49 +05:30, Codex/GPT-5) Closed two clean detached Claude worktrees and local branch pointers after proving their tips are in `origin/main`; fast-forwarded unused local `main` to `f3c7d72`.
-- [ ] (2026-07-12 03:04 +05:30, Codex/GPT-5) Audit the separate Morning append stack and classify its contained smoke branches.
+- [x] (2026-07-12 03:53 +05:30, Codex/GPT-5) Closed pre-M7 local branch/worktree after independent ignored-artifact audit proved six CSV probes were non-unique projections of committed JSON evidence.
+- [x] (2026-07-12 03:53 +05:30, Codex/GPT-5) Audited the separate Morning append stack and closed only the two exact-ancestor smoke branches; retained divergent Meta Muse and active Morning target.
 - [ ] (2026-07-12 03:04 +05:30, Codex/GPT-5) Produce the final remaining-branches register and explicit remote-action queue.
 
 ## Branch Register
@@ -59,7 +61,7 @@ Status values are `active target`, `integrate next`, `closure candidate`, `patch
 | --- | --- | --- | --- | --- |
 | `codex/radle-v2-branch-consolidation` | `44b6f70` | active target | itself | first local closure wave |
 | `codex/radle-v2-post-admission-panels` | `2f70441` | local branch/worktree closed; remote retained | consolidation branch | optional remote cleanup queue |
-| `codex/radle-v2-pre-m7-repair` | `e2e0c2b` | preserve until ignored probes are classified | consolidation branch | ignored-artifact decision plus clean recheck |
+| `codex/radle-v2-pre-m7-repair` | `e2e0c2b` | local branch/worktree closed; older remote retained | consolidation branch | optional remote cleanup queue after push decision |
 | `codex/radle-v2-incremental-admission` | `77dbfb0` | local branch/worktree closed | consolidation branch | none |
 | `codex/radle-v2-primary-preservation` | `88d66e0` | patch-equivalence review | post-admission panel commits | `git cherry` and tree-diff proof |
 | `codex/radle-v2-handwritten-panels` | `8c9de27` plus dirty files | preserve | unresolved | inventory only; no mutation |
@@ -104,6 +106,10 @@ Status values are `active target`, `integrate next`, `closure candidate`, `patch
   Evidence: the pre-removal status was clean except `src/__pycache__/radle_benchmark.cpython-311.pyc`; after Git removed the registration and metadata, guarded PowerShell deletion removed only the exact stale checkout directory.
   Date/Author: 2026-07-12, Codex/GPT-5
 
+- Observation: the six ignored pre-M7 reasoning-probe CSVs were not unique evidence.
+  Evidence: independent Wave 2 comparison found zero semantic mismatches against the six committed JSON receipts; CSV sizes were 336, 502, 588, 740, 905, and 1687 bytes, with hashes recorded in the agent receipt.
+  Date/Author: 2026-07-12, Rawls subagent
+
 ## Decision Log
 
 - Decision: use a dedicated worktree and branch based on `codex/radle-v2-post-admission-panels`.
@@ -138,8 +144,13 @@ Status values are `active target`, `integrate next`, `closure candidate`, `patch
   Rationale: both detached tips were exact ancestors of `origin/main`, their only ignored files were bytecode caches, and local `main` was an unused strict ancestor of the fetched remote baseline.
   Date/Author: 2026-07-12, Codex/GPT-5
 
+- Decision: close the pre-M7 local branch/worktree while retaining its older remote ref.
+  Rationale: merge `44b6f70` preserves both local-only commits, the worktree had no tracked or untracked changes, and the only potentially unique ignored probes were independently proven redundant with committed JSON receipts; remaining ignored content was caches and generated test output.
+  Date/Author: 2026-07-12, Codex/GPT-5
+
 ## Revision Notes
 
+- v6 (2026-07-12, Codex/GPT-5): recorded pre-M7 closure set 4, independent probe-equivalence evidence, and completion of the Morning smoke audit.
 - v5 (2026-07-12, Codex/GPT-5): recorded local Claude closure set 3 and synchronized local `main` with fetched `origin/main`.
 - v4 (2026-07-12, Codex/GPT-5): recorded local Morning smoke closure set 2 and the guarded removal of its read-only stale checkout shell.
 - v3 (2026-07-12, Codex/GPT-5): recorded local closure set 1, retained remote refs, and documented guarded Windows worktree metadata cleanup.
@@ -148,7 +159,7 @@ Status values are `active target`, `integrate next`, `closure candidate`, `patch
 
 ## Outcomes & Retrospective
 
-Milestones 0 through 3 are complete and Milestone 4 is in progress. The isolated ledger exists, both admission/panel histories are consolidated at `44b6f70`, combined validation passes, and three exact-ancestry local closure sets removed five worktrees and seven local branches. Local `main` is synchronized; remote refs and every dirty/divergent lane remain preserved. The preservation-plus-cleanliness closure gate is useful but already captured by the installed workflow guidance; no new skill promotion is needed.
+Milestones 0 through 3 are complete and Milestone 4 is in progress. The isolated ledger exists, both admission/panel histories are consolidated at `44b6f70`, combined validation passes, and four exact-ancestry/equivalence local closure sets removed six worktrees and eight local branches. Local `main` is synchronized; remote refs and every dirty/divergent lane remain preserved. The preservation-plus-cleanliness closure gate is useful but already captured by the installed workflow guidance; no new skill promotion is needed.
 
 ## Suggested Skills By Phase
 
@@ -279,6 +290,12 @@ Local closure set 3:
     BRANCH_CLOSED=claude/elated-germain-35c138 tip=e03b2e0
     BRANCH_CLOSED=claude/sad-meninsky-7102e8 tip=f8a529d
     LOCAL_MAIN_FAST_FORWARDED=080ec65..f3c7d72
+
+Local closure set 4:
+
+    PROBE_CSV_EQUIVALENCE=PASS count=6 semantic_mismatches=0
+    WORKTREE_CLOSED=C:/tmp/radle_v2_pre_m7_repair tip=e2e0c2b
+    BRANCH_CLOSED=codex/radle-v2-pre-m7-repair tip=e2e0c2b successor=eed1dda remote_retained=b543827
 
 ## Interfaces And Dependencies
 
