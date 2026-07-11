@@ -12,7 +12,7 @@ The admission-side factual handoff is `Documents/execplan_radle_v2_incremental_m
 
 ## Current State
 
-Current state (2026-07-12 03:15 +05:30, Codex/GPT-5): `codex/radle-v2-branch-consolidation` exists in isolated worktree `C:/tmp/radle_v2_branch_consolidation` at `2f70441`, the clean tip of `codex/radle-v2-post-admission-panels`, with this ledger as its only untracked file. Two Wave 1 agents completed containment and worktree-risk audits; the pre-M7 comparison agent lost its network stream and a scoped replacement is running. During the wave, `origin/main` advanced to `f3c7d72`, so the ledger now uses that fetched ref as the live baseline. The next bounded operation remains integrating `410b447` and `e2e0c2b` from `codex/radle-v2-pre-m7-repair`, then running admission and panel gates before considering closure. No push, remote deletion, existing worktree removal, or primary-checkout edit is authorized by this ledger.
+Current state (2026-07-12 03:38 +05:30, Codex/GPT-5): `codex/radle-v2-branch-consolidation` now contains both source tips through conflict-free merge commit `44b6f70`. The ledger checkpoint is `733fee8`; pre-M7 continuation commits `410b447` and `e2e0c2b` are preserved with panel commits `9727248` and `2f70441`. Combined validation passed: 37 unit tests, config and frozen-base gates, admission and panel Python compilation, PowerShell parsing, panel-tree preservation across 52 files, diff checks, and token-pattern scan. The next bounded action is Wave 2: recheck exact containment and worktree cleanliness, then close only the first local ancestry-contained set. No push, remote deletion, dirty-worktree removal, or primary-checkout edit is authorized by this ledger.
 
 ## Locked Facts
 
@@ -20,6 +20,7 @@ Current state (2026-07-12 03:15 +05:30, Codex/GPT-5): `codex/radle-v2-branch-con
 - The consolidation worktree is `C:/tmp/radle_v2_branch_consolidation` on `codex/radle-v2-branch-consolidation`, based at `2f70441`.
 - `codex/radle-v2-post-admission-panels` contains the repaired admission base through `b543827` plus panel commits `9727248` and `2f70441`.
 - `codex/radle-v2-pre-m7-repair` contains two additional local commits after `b543827`: `410b447` and plan-only checkpoint `e2e0c2b`.
+- Merge commit `44b6f70` preserves both `codex/radle-v2-post-admission-panels` and `codex/radle-v2-pre-m7-repair` as exact ancestors of the consolidation branch.
 - `codex/radle-v2-incremental-admission` at `77dbfb0` is an ancestor of both the post-admission and pre-M7 stacks.
 - Local `main` at `080ec65` is stale relative to the currently fetched `origin/main` at `f3c7d72`; `origin/main` is the baseline for containment decisions.
 - The Morning append stack is a separate consolidation lane rooted at `codex/morning-meta-muse-spark-append`; it must not be merged into the admission/panel stack merely to reduce branch count.
@@ -38,9 +39,9 @@ Current state (2026-07-12 03:15 +05:30, Codex/GPT-5): `codex/radle-v2-branch-con
 - [x] (2026-07-12 03:04 +05:30, Codex/GPT-5) Fetched current `origin` refs without pruning and captured branch/worktree state.
 - [x] (2026-07-12 03:04 +05:30, Codex/GPT-5) Created isolated consolidation branch/worktree from `codex/radle-v2-post-admission-panels` at `2f70441`.
 - [x] (2026-07-12 03:04 +05:30, Codex/GPT-5) Created this living consolidation ledger and linked the prior admission ExecPlan as source evidence.
-- [ ] (2026-07-12 03:15 +05:30, Codex/GPT-5) Reconcile Wave 1 agent receipts into the branch register; two audits are recorded and the failed comparison audit is being replaced.
-- [ ] (2026-07-12 03:04 +05:30, Codex/GPT-5) Integrate the two pre-M7 continuation commits using the smallest conflict-safe operation.
-- [ ] (2026-07-12 03:04 +05:30, Codex/GPT-5) Run focused admission tests, panel/config gates, and Git integrity checks on the integrated stack.
+- [x] (2026-07-12 03:38 +05:30, Codex/GPT-5) Reconciled the completed Wave 1 containment and worktree-risk receipts; replaced the disconnected comparison agent without widening scope.
+- [x] (2026-07-12 03:38 +05:30, Codex/GPT-5) Integrated the two pre-M7 continuation commits in conflict-free merge `44b6f70` after synthetic merge tree `416ab40074b20c7d931a3d1a0a7658b1a92c120c` exited 0 with no overlapping changed paths.
+- [x] (2026-07-12 03:38 +05:30, Codex/GPT-5) Validated the combined admission/panel stack with compile, config, authority, unit, PowerShell, tree-preservation, diff, and token gates.
 - [ ] (2026-07-12 03:04 +05:30, Codex/GPT-5) Close the first local-only set of ancestry-contained branches/worktrees after rechecking cleanliness.
 - [ ] (2026-07-12 03:04 +05:30, Codex/GPT-5) Audit the separate Morning append stack and classify its contained smoke branches.
 - [ ] (2026-07-12 03:04 +05:30, Codex/GPT-5) Produce the final remaining-branches register and explicit remote-action queue.
@@ -51,9 +52,9 @@ Status values are `active target`, `integrate next`, `closure candidate`, `patch
 
 | Branch / ref | Tip at inventory | Current classification | Preservation target | Next gate |
 | --- | --- | --- | --- | --- |
-| `codex/radle-v2-branch-consolidation` | `2f70441` | active target | itself | integrate pre-M7 commits |
-| `codex/radle-v2-post-admission-panels` | `2f70441` | active source | consolidation branch | successor validation |
-| `codex/radle-v2-pre-m7-repair` | `e2e0c2b` | integrate next | consolidation branch | merge/cherry-pick plus tests |
+| `codex/radle-v2-branch-consolidation` | `44b6f70` | active target | itself | first local closure wave |
+| `codex/radle-v2-post-admission-panels` | `2f70441` | closure candidate | consolidation branch | clean worktree recheck |
+| `codex/radle-v2-pre-m7-repair` | `e2e0c2b` | preserve until ignored probes are classified | consolidation branch | ignored-artifact decision plus clean recheck |
 | `codex/radle-v2-incremental-admission` | `77dbfb0` | closure candidate | post-admission and pre-M7 stacks | clean worktree and successor proof |
 | `codex/radle-v2-primary-preservation` | `88d66e0` | patch-equivalence review | post-admission panel commits | `git cherry` and tree-diff proof |
 | `codex/radle-v2-handwritten-panels` | `8c9de27` plus dirty files | preserve | unresolved | inventory only; no mutation |
@@ -86,6 +87,10 @@ Status values are `active target`, `integrate next`, `closure candidate`, `patch
   Evidence: Wave 1 worktree audit counted 56 staged entries, 21 unstaged entries, and 22 untracked entries; overlapping status categories reduce this to 91 unique paths.
   Date/Author: 2026-07-12, Hilbert subagent
 
+- Observation: the isolated consolidation worktree does not contain the ignored private authority CSVs needed by `check-base`.
+  Evidence: `check-base --authority-root C:/tmp/radle_v2_branch_consolidation` failed only because `results/radle_v2_combined/final/RadLE_v2_results_final.csv` was absent; rerunning read-only against the recorded authority root `C:/Users/thehb/Documents/RadLE v2` returned `BASE_RESULT=PASS` with the expected 200-case and 6000-row frozen base hashes.
+  Date/Author: 2026-07-12, Codex/GPT-5
+
 ## Decision Log
 
 - Decision: use a dedicated worktree and branch based on `codex/radle-v2-post-admission-panels`.
@@ -104,13 +109,18 @@ Status values are `active target`, `integrate next`, `closure candidate`, `patch
   Rationale: ancestry alone does not preserve uncommitted files, and patch-equivalence is not identical to ancestry.
   Date/Author: 2026-07-12, Codex/GPT-5
 
+- Decision: preserve the pre-M7 continuation with a non-fast-forward merge rather than cherry-picking.
+  Rationale: the source has two coherent sequential commits, both source tips remain auditable as ancestors, the synthetic merge exited 0, and the two sides changed no overlapping paths after common base `b543827`.
+  Date/Author: 2026-07-12, Codex/GPT-5
+
 ## Revision Notes
 
+- v2 (2026-07-12, Codex/GPT-5): recorded Wave 1 receipts, merge `44b6f70`, combined validation, and the first closure-wave boundary.
 - v1 (2026-07-12, Codex/GPT-5): created the ledger from refreshed Git state, linked the admission ExecPlan, recorded the initial branch register, and established sequential closure gates.
 
 ## Outcomes & Retrospective
 
-Milestone 0 is in progress. The isolated consolidation surface and initial ledger exist; no existing branch or worktree has been removed. No general lesson is ready for skill promotion yet.
+Milestones 0 through 2 are complete. The isolated ledger exists, both admission/panel histories are consolidated at `44b6f70`, and combined validation passes. No existing source branch or worktree has yet been removed. The preservation-plus-cleanliness closure gate is useful but already captured by the installed workflow guidance; no new skill promotion is needed.
 
 ## Suggested Skills By Phase
 
@@ -207,6 +217,18 @@ Initial divergence proof:
     > 410b447 Checkpoint three-model admission continuation
     < 2f70441 Integrate frontier models into IDK0 panels
     < 9727248 Preserve IDK0 panel core and assets
+
+Combined validation receipt:
+
+    PY_COMPILE=PASS
+    PANEL_PY_COMPILE=PASS
+    CONFIG_RESULT=PASS
+    BASE_RESULT=PASS
+    Ran 37 tests in 88.097s
+    OK
+    PANEL_TREE_PRESERVED=PASS files=52
+    MERGE_DIFF_CHECK=PASS
+    MERGE_SECRET_SCAN=PASS
 
 ## Interfaces And Dependencies
 
