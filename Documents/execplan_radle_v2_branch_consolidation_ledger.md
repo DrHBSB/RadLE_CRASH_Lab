@@ -12,7 +12,7 @@ The admission-side factual handoff is `Documents/execplan_radle_v2_incremental_m
 
 ## Current State
 
-Current state (2026-07-12 03:50 +05:30, Codex/GPT-5): the consolidated branch remains clean at ledger checkpoint `bbd4f5d` after the first closure set. Local branches `codex/radle-v2-incremental-admission`, `codex/radle-v2-post-admission-panels`, and `fix/stats-combiner-scorer-from-final` are closed; the first two attached worktrees are also removed. Their tips remain preserved by `codex/radle-v2-branch-consolidation` or current `origin/main`; remote refs were not changed. Wave 2 agents are checking the separate Morning smoke candidates and ignored pre-M7 probe artifacts. The next bounded action is to close only Morning branches that are exact ancestors with disposable worktree residue, then record the remaining preservation holds.
+Current state (2026-07-12 03:47 +05:30, Codex/GPT-5): the consolidated branch remains clean at ledger checkpoint `5e4f529` after two local closure sets. Admission-side local branches `codex/radle-v2-incremental-admission` and `codex/radle-v2-post-admission-panels`, stats branch `fix/stats-combiner-scorer-from-final`, and Morning smoke branches `codex/gpt56-openrouter-smoke` and `codex/grok45-morning-smoke` are closed. Three attached worktrees were removed. Their tips remain preserved by `codex/radle-v2-branch-consolidation`, `codex/morning-meta-muse-spark-append`, current `origin/main`, or retained remote refs. Wave 2 agents are finishing the exact ignored pre-M7 artifact classification and an independent closure receipt. The next bounded action is to record those receipts and classify every remaining branch as active, dirty hold, divergent hold, or stale baseline.
 
 ## Locked Facts
 
@@ -26,6 +26,7 @@ Current state (2026-07-12 03:50 +05:30, Codex/GPT-5): the consolidated branch re
 - The Morning append stack is a separate consolidation lane rooted at `codex/morning-meta-muse-spark-append`; it must not be merged into the admission/panel stack merely to reduce branch count.
 - Remote branch deletion and pushing require a separate explicit action; this ledger may prepare exact candidates and commands but does not infer that authority.
 - Local closure set 1 removed only refs already preserved by exact ancestry; `origin/codex/radle-v2-post-admission-panels` and `origin/fix/stats-combiner-scorer-from-final` remain available remotely.
+- Local closure set 2 removed only Morning smoke refs that are exact ancestors of `codex/morning-meta-muse-spark-append`; both corresponding remote refs remain available.
 
 ## Do Not Revisit
 
@@ -43,7 +44,8 @@ Current state (2026-07-12 03:50 +05:30, Codex/GPT-5): the consolidated branch re
 - [x] (2026-07-12 03:38 +05:30, Codex/GPT-5) Reconciled the completed Wave 1 containment and worktree-risk receipts; replaced the disconnected comparison agent without widening scope.
 - [x] (2026-07-12 03:38 +05:30, Codex/GPT-5) Integrated the two pre-M7 continuation commits in conflict-free merge `44b6f70` after synthetic merge tree `416ab40074b20c7d931a3d1a0a7658b1a92c120c` exited 0 with no overlapping changed paths.
 - [x] (2026-07-12 03:38 +05:30, Codex/GPT-5) Validated the combined admission/panel stack with compile, config, authority, unit, PowerShell, tree-preservation, diff, and token gates.
-- [x] (2026-07-12 03:50 +05:30, Codex/GPT-5) Closed first local-only set after fresh gates: removed incremental-admission and post-admission worktrees, deleted their local branches, and deleted the local stats-combiner fix branch already contained by `origin/main`.
+- [x] (2026-07-12 03:47 +05:30, Codex/GPT-5) Closed first local-only set after fresh gates: removed incremental-admission and post-admission worktrees, deleted their local branches, and deleted the local stats-combiner fix branch already contained by `origin/main`.
+- [x] (2026-07-12 03:47 +05:30, Codex/GPT-5) Closed local Morning smoke set after exact ancestry and cleanliness gates: removed the GPT smoke worktree and deleted local GPT-5.6 and Grok 4.5 smoke branches.
 - [ ] (2026-07-12 03:04 +05:30, Codex/GPT-5) Audit the separate Morning append stack and classify its contained smoke branches.
 - [ ] (2026-07-12 03:04 +05:30, Codex/GPT-5) Produce the final remaining-branches register and explicit remote-action queue.
 
@@ -60,8 +62,8 @@ Status values are `active target`, `integrate next`, `closure candidate`, `patch
 | `codex/radle-v2-primary-preservation` | `88d66e0` | patch-equivalence review | post-admission panel commits | `git cherry` and tree-diff proof |
 | `codex/radle-v2-handwritten-panels` | `8c9de27` plus dirty files | preserve | unresolved | inventory only; no mutation |
 | `codex/morning-meta-muse-spark-append` | `37a0f44` | separate lane | itself | Wave 2 containment audit |
-| `codex/gpt56-openrouter-smoke` | `8feeb7b` | closure candidate | Morning append stack | clean worktree; exact ancestry already passes |
-| `codex/grok45-morning-smoke` | `1faee5a` | closure candidate | Morning append stack | exact ancestry passes; confirm no attached worktree |
+| `codex/gpt56-openrouter-smoke` | `8feeb7b` | local branch/worktree closed; remote retained | Morning append stack | optional remote cleanup queue |
+| `codex/grok45-morning-smoke` | `1faee5a` | local branch closed; remote retained | Morning append stack | optional remote cleanup queue |
 | `codex/meta-muse-spark-colab` | `e4f2e84` | preserve / divergent | Morning append stack unresolved | patch-distinct and file-diff review |
 | `codex/final-scoring-csv-questions` | `071d6ec` | preserve until dirty file is captured | Morning append stack | untracked plan plus ancestry proof |
 | `fix/stats-combiner-scorer-from-final` | `2d1028c` | local branch closed; remote retained | `origin/main` | optional remote cleanup queue |
@@ -96,6 +98,10 @@ Status values are `active target`, `integrate next`, `closure candidate`, `patch
   Evidence: the checkout path no longer existed and `git worktree list --porcelain` omitted it; guarded PowerShell cleanup removed only the exact stale metadata directory. The same attribute was cleared before normal removal of the post-admission worktree.
   Date/Author: 2026-07-12, Codex/GPT-5
 
+- Observation: the GPT smoke worktree path was named `RadLE v2 - grok45 push`, and Git again deregistered it before Windows refused to delete the read-only checkout shell.
+  Evidence: the pre-removal status was clean except `src/__pycache__/radle_benchmark.cpython-311.pyc`; after Git removed the registration and metadata, guarded PowerShell deletion removed only the exact stale checkout directory.
+  Date/Author: 2026-07-12, Codex/GPT-5
+
 ## Decision Log
 
 - Decision: use a dedicated worktree and branch based on `codex/radle-v2-post-admission-panels`.
@@ -122,15 +128,20 @@ Status values are `active target`, `integrate next`, `closure candidate`, `patch
   Rationale: exact ancestry and clean tracked status made the local refs redundant; remote deletion is a separate external action and was not inferred.
   Date/Author: 2026-07-12, Codex/GPT-5
 
+- Decision: close GPT-5.6 and Grok 4.5 smoke branches locally without closing the Morning append target.
+  Rationale: both smoke tips are exact ancestors of the Morning target, but the Morning target still carries unique integration work and remains a separate active lane.
+  Date/Author: 2026-07-12, Codex/GPT-5
+
 ## Revision Notes
 
+- v4 (2026-07-12, Codex/GPT-5): recorded local Morning smoke closure set 2 and the guarded removal of its read-only stale checkout shell.
 - v3 (2026-07-12, Codex/GPT-5): recorded local closure set 1, retained remote refs, and documented guarded Windows worktree metadata cleanup.
 - v2 (2026-07-12, Codex/GPT-5): recorded Wave 1 receipts, merge `44b6f70`, combined validation, and the first closure-wave boundary.
 - v1 (2026-07-12, Codex/GPT-5): created the ledger from refreshed Git state, linked the admission ExecPlan, recorded the initial branch register, and established sequential closure gates.
 
 ## Outcomes & Retrospective
 
-Milestones 0 through 3 are complete. The isolated ledger exists, both admission/panel histories are consolidated at `44b6f70`, combined validation passes, and the first exact-ancestry local closure set removed two worktrees and three local branches. Remote refs and every dirty/divergent lane remain preserved. The preservation-plus-cleanliness closure gate is useful but already captured by the installed workflow guidance; no new skill promotion is needed.
+Milestones 0 through 3 are complete and Milestone 4 is in progress. The isolated ledger exists, both admission/panel histories are consolidated at `44b6f70`, combined validation passes, and two exact-ancestry local closure sets removed three worktrees and five local branches. Remote refs and every dirty/divergent lane remain preserved. The preservation-plus-cleanliness closure gate is useful but already captured by the installed workflow guidance; no new skill promotion is needed.
 
 ## Suggested Skills By Phase
 
@@ -247,6 +258,12 @@ Local closure set 1:
     WORKTREE_CLOSED=C:/tmp/radle_v2_post_admission_panels
     BRANCH_CLOSED=codex/radle-v2-post-admission-panels tip=2f70441
     BRANCH_CLOSED=fix/stats-combiner-scorer-from-final tip=2d1028c successor=origin/main@f3c7d72
+
+Local closure set 2:
+
+    WORKTREE_CLOSED=C:/Users/thehb/Documents/RadLE v2 - grok45 push
+    BRANCH_CLOSED=codex/gpt56-openrouter-smoke tip=8feeb7b successor=codex/morning-meta-muse-spark-append@37a0f44
+    BRANCH_CLOSED=codex/grok45-morning-smoke tip=1faee5a successor=codex/morning-meta-muse-spark-append@37a0f44
 
 ## Interfaces And Dependencies
 
