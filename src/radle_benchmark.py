@@ -34,7 +34,10 @@ PROVIDER_CONTENT_BLOCK_MARKERS = (
 
 NO_TEMPERATURE_MODELS = {
     "gpt-5.5",
-    "claude-opus-4-8",
+    "claude-fable-5",
+    "claude-opus-5",
+    "anthropic/claude-fable-5",
+    "anthropic/claude-opus-5",
 }
 
 MODELS = [
@@ -45,11 +48,11 @@ MODELS = [
         "extra": {"reasoning_effort": "high"},
     },
     {
-        "name": "claude_4_8_opus",
-        "id": "claude-opus-4-8",
+        "name": "claude_opus_5",
+        "id": "claude-opus-5",
         "provider": "anthropic",
         "extra": {
-            "thinking": {"type": "adaptive"},
+            "thinking": {"type": "adaptive", "display": "summarized"},
             "output_config": {"effort": "high"},
         },
     },
@@ -57,7 +60,10 @@ MODELS = [
         "name": "claude_fable_5",
         "id": "claude-fable-5",
         "provider": "anthropic",
-        "extra": {"output_config": {"effort": "high"}},
+        "extra": {
+            "thinking": {"type": "adaptive", "display": "summarized"},
+            "output_config": {"effort": "high"},
+        },
     },
     {
         "name": "gemini_3_1_pro",
@@ -372,6 +378,39 @@ def strip_local_vlm_thought_text(raw_text):
     return text.strip()
 
 
+def extract_complete_embedded_reasoning(raw_text):
+    """Return complete, explicitly delimited visible reasoning spans.
+
+    Provider-native reasoning fields remain authoritative. This helper is the
+    fallback for OpenAI-compatible local VLMs that serialize their visible
+    reasoning inside message content. An opened but unclosed marker is ignored:
+    a truncated prefix is not a recoverable reasoning trace.
+    """
+    if raw_text is None:
+        return ""
+
+    text = str(raw_text)
+    patterns = (
+        re.compile(
+            r"<think\b[^>]*>(.*?)</think\s*>",
+            flags=re.IGNORECASE | re.DOTALL,
+        ),
+        re.compile(
+            r"<unused94>\s*thought\b(.*?)(?:<unused95>|<unused96>)",
+            flags=re.IGNORECASE | re.DOTALL,
+        ),
+    )
+    spans = []
+    for pattern in patterns:
+        spans.extend(
+            (match.start(), match.group(1).strip())
+            for match in pattern.finditer(text)
+            if match.group(1).strip()
+        )
+    spans.sort(key=lambda item: item[0])
+    return "\n\n".join(span for _, span in spans)
+
+
 def _csv_sibling_path(path, suffix):
     """Return a sibling CSV path by appending suffix to the CSV stem."""
     path_obj = pathlib.Path(path)
@@ -505,6 +544,38 @@ def make_json_safe(obj):
     if isinstance(obj, (str, int, float, bool)):
         return obj
     return str(obj)
+
+
+def extract_readable_reasoning_details(reasoning_details):
+    """Extract readable summary/text nodes without exposing encrypted payloads."""
+    safe_details = make_json_safe(reasoning_details)
+    selected = []
+
+    def walk(value):
+        if isinstance(value, dict):
+            detail_type = safe_str(value.get("type", "")).casefold()
+            if "encrypted" in detail_type or "redacted" in detail_type:
+                return
+            for key, child in value.items():
+                key_name = safe_str(key).casefold()
+                if key_name in {"text", "summary", "thinking"} and isinstance(child, str):
+                    text = child.strip()
+                    if text:
+                        selected.append(text)
+                elif key_name not in {"data", "signature"}:
+                    walk(child)
+        elif isinstance(value, list):
+            for child in value:
+                walk(child)
+
+    walk(safe_details)
+    deduplicated = []
+    seen = set()
+    for text in selected:
+        if text not in seen:
+            seen.add(text)
+            deduplicated.append(text)
+    return "\n\n".join(deduplicated)
 
 
 def model_names_from_models(models=None):
@@ -1356,8 +1427,13 @@ def build_api_params(model, content_array, max_output_tokens, universal_temperat
     if model["id"] not in NO_TEMPERATURE_MODELS:
         api_params["temperature"] = universal_temperature
 
+    extra_body = {}
     if model.get("extra"):
-        api_params["extra_body"] = model.get("extra")
+        extra_body.update(model.get("extra"))
+    if model.get("provider_routing"):
+        extra_body["provider"] = model.get("provider_routing")
+    if extra_body:
+        api_params["extra_body"] = extra_body
 
     return api_params
 
@@ -1507,12 +1583,22 @@ def extract_result(response, latency, api_params, grok_fallback_used, model):
             if block.type == "text":
                 raw_answer = block.text.strip()
             elif block.type == "thinking":
-                raw_reasoning_text = (raw_reasoning_text + block.thinking).strip()
+                thinking_text = (getattr(block, "thinking", "") or "").strip()
+                if thinking_text:
+                    raw_reasoning_text = "\n\n".join(
+                        value for value in (raw_reasoning_text, thinking_text) if value
+                    )
         thoughts = raw_reasoning_text
         reasoning_details_text = ""
         reasoning_tokens = 0
         completion_tokens = getattr(response.usage, "output_tokens", 0) if response.usage else 0
         prompt_tokens = getattr(response.usage, "input_tokens", 0) if response.usage else 0
+        if response.usage:
+            output_details = getattr(response.usage, "output_tokens_details", None)
+            if isinstance(output_details, dict):
+                reasoning_tokens = output_details.get("thinking_tokens", 0) or 0
+            elif output_details is not None:
+                reasoning_tokens = getattr(output_details, "thinking_tokens", 0) or 0
         provider_used = "Anthropic"
     elif uses_native_google(model):
         raw_answer = (response.text or "").strip()
@@ -1550,17 +1636,13 @@ def extract_result(response, latency, api_params, grok_fallback_used, model):
 
         reasoning_details_text = ""
         if reasoning_details_obj:
+            readable_details = extract_readable_reasoning_details(reasoning_details_obj)
+            if not raw_reasoning_text and readable_details:
+                raw_reasoning_text = readable_details
             reasoning_details_text = json.dumps(
                 make_json_safe(reasoning_details_obj),
                 ensure_ascii=False,
             )
-
-        if raw_reasoning_text and reasoning_details_text:
-            thoughts = raw_reasoning_text + "\n\n[reasoning_details]\n" + reasoning_details_text
-        elif reasoning_details_text:
-            thoughts = reasoning_details_text
-        else:
-            thoughts = raw_reasoning_text
 
         reasoning_tokens = 0
         completion_tokens = 0
@@ -1586,6 +1668,15 @@ def extract_result(response, latency, api_params, grok_fallback_used, model):
             and response.model_extra
         ):
             provider_used = response.model_extra.get("provider", "UNKNOWN")
+
+    if not raw_reasoning_text:
+        raw_reasoning_text = extract_complete_embedded_reasoning(raw_answer)
+    if raw_reasoning_text and reasoning_details_text:
+        thoughts = raw_reasoning_text + "\n\n[reasoning_details]\n" + reasoning_details_text
+    elif reasoning_details_text:
+        thoughts = reasoning_details_text
+    else:
+        thoughts = raw_reasoning_text
 
     parse_answer = raw_answer
     if not uses_native_anthropic(model) and not uses_native_google(model):
