@@ -805,7 +805,8 @@ def build_no_paid_cleanup_plan(df, models=None, max_output_tokens=MAX_OUTPUT_TOK
     if "Master_Case_ID" not in df.columns:
         raise ValueError("Benchmark dataframe must contain Master_Case_ID.")
 
-    model_names = model_names_from_models(models)
+    model_by_name = {m["name"]: m for m in (models or MODELS)}
+    model_names = list(model_by_name)
     rows = []
     for _, row in df.iterrows():
         case_id = normalize_case_id(row["Master_Case_ID"])
@@ -815,6 +816,7 @@ def build_no_paid_cleanup_plan(df, models=None, max_output_tokens=MAX_OUTPUT_TOK
                 model_name,
                 attempts=0,
                 max_output_tokens=max_output_tokens,
+                require_token_usage=requires_positive_token_usage(model_by_name[model_name]),
             )
             if info.get("bucket") != "no_paid_cleanup":
                 continue
@@ -842,7 +844,8 @@ def build_no_paid_cleanup_plan(df, models=None, max_output_tokens=MAX_OUTPUT_TOK
 
 def apply_no_paid_cleanups(df, models=None, verbose=False, max_output_tokens=MAX_OUTPUT_TOKENS):
     """Apply all no-paid cleanup candidates in-place and return the number changed."""
-    model_names = model_names_from_models(models)
+    model_by_name = {m["name"]: m for m in (models or MODELS)}
+    model_names = list(model_by_name)
     cleanup_count = 0
 
     for df_idx in df.index:
@@ -854,6 +857,7 @@ def apply_no_paid_cleanups(df, models=None, verbose=False, max_output_tokens=MAX
                 model_name,
                 attempts=0,
                 max_output_tokens=max_output_tokens,
+                require_token_usage=requires_positive_token_usage(model_by_name[model_name]),
             )
             if apply_no_paid_cleanup_to_cell(df, df_idx, model_name, info):
                 cleanup_count += 1
@@ -932,7 +936,13 @@ def _repair_status(status, bucket, reason, needs_api_repair, max_attempts, **ext
     return result
 
 
-def classify_cell_for_audit(row, model_name, attempts=0, max_output_tokens=MAX_OUTPUT_TOKENS):
+def classify_cell_for_audit(
+    row,
+    model_name,
+    attempts=0,
+    max_output_tokens=MAX_OUTPUT_TOKENS,
+    require_token_usage=False,
+):
     """Classify one case-model cell for audit and targeted repair planning."""
     diag_col = f"Diagnosis_{model_name}"
     likert_col = f"Likert_{model_name}"
@@ -942,6 +952,7 @@ def classify_cell_for_audit(row, model_name, attempts=0, max_output_tokens=MAX_O
     likert = row.get(likert_col, "") if likert_col in row.index else ""
     raw = safe_str(row.get(raw_col, "")) if raw_col in row.index else ""
     completion_tokens = get_token_value(row, model_name, "Total_Tokens_Out")
+    prompt_tokens = get_token_value(row, model_name, "Prompt_Tokens")
     hit_max_tokens = completion_tokens >= max_output_tokens
 
     if diag_col not in row.index:
@@ -959,6 +970,16 @@ def classify_cell_for_audit(row, model_name, attempts=0, max_output_tokens=MAX_O
             "paid_repair",
             "missing_or_empty_diagnosis",
             attempts < MAX_REPAIR_ATTEMPTS_MALFORMED,
+            MAX_REPAIR_ATTEMPTS_MALFORMED,
+        )
+
+    if require_token_usage and (completion_tokens <= 0 or prompt_tokens <= 0):
+        needs = attempts < MAX_REPAIR_ATTEMPTS_MALFORMED
+        return _repair_status(
+            "repair_target_zero_token_usage" if needs else "repair_exhausted_zero_token_usage",
+            "paid_repair" if needs else "terminal",
+            "zero_or_missing_token_usage" if needs else "repair_exhausted_zero_token_usage",
+            needs,
             MAX_REPAIR_ATTEMPTS_MALFORMED,
         )
 
@@ -1090,6 +1111,15 @@ def classify_cell_for_audit(row, model_name, attempts=0, max_output_tokens=MAX_O
     )
 
 
+def requires_positive_token_usage(model):
+    """Return True for OpenRouter-routed models where 0/0 usage is not acceptable."""
+    return not (
+        uses_native_openai(model)
+        or uses_native_anthropic(model)
+        or uses_native_google(model)
+    )
+
+
 def _dataset_integrity_table(df, expected_case_ids, model_names):
     case_ids = df["Master_Case_ID"].astype(str) if "Master_Case_ID" in df.columns else pd.Series([], dtype=str)
     counts = case_ids.value_counts()
@@ -1199,7 +1229,8 @@ def audit_benchmark_output(
         raise ValueError("Benchmark CSV must contain Master_Case_ID.")
 
     df["Master_Case_ID"] = df["Master_Case_ID"].apply(normalize_case_id)
-    model_names = model_names_from_models(models)
+    model_by_name = {m["name"]: m for m in (models or MODELS)}
+    model_names = list(model_by_name)
     call_log_df = _load_call_log(call_log_csv)
 
     records = []
@@ -1215,6 +1246,7 @@ def audit_benchmark_output(
                 model_name,
                 attempts=attempts,
                 max_output_tokens=max_output_tokens,
+                require_token_usage=requires_positive_token_usage(model_by_name[model_name]),
             )
 
             raw = safe_str(row.get(f"Raw_Response_{model_name}", ""))
@@ -1800,6 +1832,7 @@ def build_repair_plan(
                 model_name,
                 attempts=attempts,
                 max_output_tokens=max_output_tokens,
+                require_token_usage=requires_positive_token_usage(model),
             )
             if not info.get("needs_api_repair"):
                 continue
@@ -1998,6 +2031,7 @@ def run_targeted_repair(
                 model_name,
                 attempts=attempts,
                 max_output_tokens=max_output_tokens,
+                require_token_usage=requires_positive_token_usage(model),
             )
             if not info.get("needs_api_repair"):
                 print(f"SKIP already acceptable/exhausted: case {case_id} | {model_name} | {info.get('reason')}")
@@ -2129,6 +2163,7 @@ def run_targeted_repair(
                 model_name,
                 attempts=attempts_after,
                 max_output_tokens=max_output_tokens,
+                require_token_usage=requires_positive_token_usage(model),
             )
             if apply_no_paid_cleanup_to_cell(df_repair, df_idx, model_name, post_info):
                 no_paid_cleanups_applied += 1
@@ -2137,6 +2172,7 @@ def run_targeted_repair(
                     model_name,
                     attempts=attempts_after,
                     max_output_tokens=max_output_tokens,
+                    require_token_usage=requires_positive_token_usage(model),
                 )
             post_repair_status = post_info.get("reason", "")
 
@@ -2306,6 +2342,7 @@ def run_benchmark(
                 model_name,
                 attempts=0,
                 max_output_tokens=max_output_tokens,
+                require_token_usage=requires_positive_token_usage(model),
             )
 
             if info.get("bucket") == "no_paid_cleanup":
@@ -2354,6 +2391,7 @@ def run_benchmark(
                         model_name,
                         attempts=semantic_attempt,
                         max_output_tokens=max_output_tokens,
+                        require_token_usage=requires_positive_token_usage(model),
                     )
                     if post_info.get("needs_api_repair"):
                         print(
@@ -2388,6 +2426,7 @@ def run_benchmark(
                         model_name,
                         attempts=semantic_attempt,
                         max_output_tokens=max_output_tokens,
+                        require_token_usage=requires_positive_token_usage(model),
                     )
                     if post_info.get("needs_api_repair"):
                         print(f" Failed! API Response: {str(exc)} | retrying")
@@ -2541,7 +2580,8 @@ def build_public_case_model_table(
     if "Master_Case_ID" not in df.columns:
         raise ValueError("Results CSV must contain Master_Case_ID.")
 
-    model_names = model_names_from_models(models)
+    model_by_name = {m["name"]: m for m in (models or MODELS)}
+    model_names = list(model_by_name)
     uid_map = case_uid_map or _case_uid_map(df["Master_Case_ID"], prefix=case_prefix)
     uid_map = {normalize_case_id(k): v for k, v in uid_map.items()}
     records = []
@@ -2554,6 +2594,7 @@ def build_public_case_model_table(
                 model_name,
                 attempts=0,
                 max_output_tokens=max_output_tokens,
+                require_token_usage=requires_positive_token_usage(model_by_name[model_name]),
             )
             reason = info.get("reason", "")
             diagnosis = safe_str(row.get(f"Diagnosis_{model_name}", ""))
