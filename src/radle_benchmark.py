@@ -77,6 +77,12 @@ MODELS = [
         "extra": None,
     },
     {
+        "name": "ox_alpha",
+        "id": "stealth/ox-alpha",
+        "extra": {"reasoning": {"effort": "high", "exclude": False}},
+        "provider_routing": {"allow_fallbacks": False},
+    },
+    {
         "name": "qwen_3_7_plus",
         "id": "qwen/qwen3.7-plus",
         "extra": None,
