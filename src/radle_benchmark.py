@@ -2799,3 +2799,485 @@ def create_scorer_view(raw_csv, scorer_csv=None):
 
     display_df = df_scorer.set_index("Master_Case_ID").T
     return df_scorer, display_df, scorer_csv
+
+
+def model_required_result_columns(model_name):
+    """Return columns required before a model result CSV can be resumed or promoted."""
+    return [
+        f"Diagnosis_{model_name}",
+        f"Likert_{model_name}",
+        f"Prompt_Tokens_{model_name}",
+        f"Total_Tokens_Out_{model_name}",
+        f"Provider_{model_name}",
+        f"Timestamp_UTC_{model_name}",
+        f"Reasoning_Raw_{model_name}",
+        f"Actual_Request_Extra_{model_name}",
+        f"OpenRouter_Response_Model_{model_name}",
+        f"Raw_Response_{model_name}",
+    ]
+
+
+def choose_repair_input_csv(raw_csv, repair_csv, models=None, verbose=True):
+    """Use a repair CSV only if it has the schema needed to continue safely."""
+    raw_csv = str(raw_csv)
+    repair_csv = str(repair_csv)
+    if not os.path.exists(repair_csv):
+        return raw_csv
+
+    try:
+        columns = set(pd.read_csv(repair_csv, nrows=0).columns)
+    except Exception as exc:
+        if verbose:
+            print(f"Ignoring unreadable existing repair CSV; reseeding repair from raw results. ({exc})")
+        return raw_csv
+
+    missing = []
+    for model_name in model_names_from_models(models):
+        missing.extend(
+            column
+            for column in model_required_result_columns(model_name)
+            if column not in columns
+        )
+    if missing:
+        if verbose:
+            preview = ", ".join(missing[:5])
+            suffix = "..." if len(missing) > 5 else ""
+            print(
+                "Ignoring invalid existing repair CSV; reseeding repair from raw results. "
+                f"Missing columns: {preview}{suffix}"
+            )
+        return raw_csv
+    return repair_csv
+
+
+def audit_repair_target_count(audit_result):
+    repair_targets = audit_result.get("repair_targets")
+    return int(len(repair_targets)) if repair_targets is not None else 0
+
+
+def audit_accepted_count(audit_result):
+    bucket_summary = audit_result.get("bucket_summary")
+    if bucket_summary is None or not len(bucket_summary):
+        return 0
+    matches = bucket_summary[bucket_summary["bucket"].astype(str) == "accepted"]
+    return int(matches.iloc[0]["cells"]) if len(matches) else 0
+
+
+def assert_clean_benchmark_audit(audit_result, expected_cases, label):
+    """Fail unless all audited case-model cells are accepted and no side buckets remain."""
+    accepted = audit_accepted_count(audit_result)
+    remaining = audit_repair_target_count(audit_result)
+    if accepted != expected_cases or remaining != 0:
+        raise RuntimeError(
+            f"{label} audit not clean: accepted={accepted}/{expected_cases}, "
+            f"remaining_repair_targets={remaining}."
+        )
+
+    for key, description in (
+        ("no_paid_cleanup", "no-API cleanup targets"),
+        ("analysis_flags", "analysis flags"),
+        ("provider_content_blocks", "provider content blocks"),
+    ):
+        table = audit_result.get(key)
+        if table is not None and len(table):
+            raise RuntimeError(f"{label} audit still has {len(table)} {description}.")
+
+
+def _expected_request_extra(model):
+    expected = dict(model.get("extra") or {})
+    provider_routing = model.get("provider_routing")
+    if provider_routing is not None:
+        expected["provider"] = provider_routing
+    return expected
+
+
+def _expected_reasoning_min(model_name, expected_cases, expected_reasoning_rows):
+    if expected_reasoning_rows is None:
+        return 1
+    value = (
+        expected_reasoning_rows.get(model_name, 1)
+        if isinstance(expected_reasoning_rows, dict)
+        else expected_reasoning_rows
+    )
+    if isinstance(value, str):
+        value_lower = value.strip().lower()
+        if value_lower == "all":
+            return expected_cases
+        if value_lower in {"any", "one"}:
+            return 1
+    return int(value)
+
+
+def assert_openrouter_run_gate(
+    df,
+    models,
+    expected_cases,
+    expected_returned_model_ids,
+    expected_providers,
+    expected_reasoning_rows=None,
+    label="run",
+):
+    """Validate provider/model/request/token/reasoning invariants before finalization."""
+    if len(df) != expected_cases:
+        raise RuntimeError(f"{label}: expected {expected_cases} rows, found {len(df)}.")
+
+    receipts = []
+    for model in models:
+        name = model["name"]
+        missing = [column for column in model_required_result_columns(name) if column not in df.columns]
+        if missing:
+            raise RuntimeError(f"{label}: missing {name} result columns: {missing}")
+
+        provider_col = f"Provider_{name}"
+        returned_col = f"OpenRouter_Response_Model_{name}"
+        extra_col = f"Actual_Request_Extra_{name}"
+        diagnosis_col = f"Diagnosis_{name}"
+        likert_col = f"Likert_{name}"
+        reasoning_col = f"Reasoning_Raw_{name}"
+        prompt_col = f"Prompt_Tokens_{name}"
+        completion_col = f"Total_Tokens_Out_{name}"
+
+        providers = df[provider_col].astype("string").fillna("").str.strip()
+        expected_provider = expected_providers.get(name)
+        if expected_provider and not providers.eq(expected_provider).all():
+            raise RuntimeError(
+                f"{label}: wrong OpenRouter provider for {name}: expected "
+                f"{expected_provider}, found {sorted(providers.unique())}."
+            )
+
+        returned = df[returned_col].astype("string").fillna("").str.strip()
+        allowed_returned = set(expected_returned_model_ids.get(name, set()))
+        if allowed_returned and (returned.eq("").any() or not set(returned).issubset(allowed_returned)):
+            raise RuntimeError(f"{label}: wrong returned model for {name}: {sorted(returned.unique())}")
+
+        expected_extra = _expected_request_extra(model)
+        for row_number, value in enumerate(df[extra_col], start=1):
+            try:
+                actual_extra = json.loads(str(value))
+            except Exception as exc:
+                raise RuntimeError(f"{label}: bad request-extra JSON for {name} row {row_number}: {exc}")
+            if actual_extra != expected_extra:
+                raise RuntimeError(f"{label}: wrong request extras for {name} row {row_number}: {actual_extra}")
+
+        diagnoses = df[diagnosis_col].astype("string").fillna("").str.strip()
+        likerts = df[likert_col].astype("string").fillna("").str.strip()
+        bad_diagnosis = diagnoses.isin(["", "API_ERROR", "ERROR", "NULL_ERROR", "PARSE_FAILED", "JSON_MISSING_KEY"])
+        bad_likert = likerts.isin(["ERROR", "PARSE_FAILED", "JSON_MISSING_KEY"])
+        if bad_diagnosis.any() or bad_likert.any():
+            raise RuntimeError(
+                f"{label}: {name} has {int((bad_diagnosis | bad_likert).sum())} "
+                "technical/unparsed rows."
+            )
+
+        prompt_tokens = pd.to_numeric(df[prompt_col], errors="coerce").fillna(0)
+        completion_tokens = pd.to_numeric(df[completion_col], errors="coerce").fillna(0)
+        if requires_positive_token_usage(model):
+            zero_usage = prompt_tokens.le(0) | completion_tokens.le(0)
+            if zero_usage.any():
+                bad_case_ids = df.loc[zero_usage, "Master_Case_ID"].astype(str).tolist()
+                raise RuntimeError(f"{label}: {name} has zero-token rows: {bad_case_ids}")
+
+        reasoning = df[reasoning_col].astype("string").fillna("").str.strip()
+        reasoning_rows = int(reasoning.ne("").sum())
+        min_reasoning_rows = _expected_reasoning_min(name, expected_cases, expected_reasoning_rows)
+        if reasoning_rows < min_reasoning_rows:
+            raise RuntimeError(
+                f"{label}: {name} has {reasoning_rows} readable reasoning rows; "
+                f"expected at least {min_reasoning_rows}."
+            )
+
+        receipts.append({
+            "label": label,
+            "model": name,
+            "returned_models": ", ".join(sorted(set(returned))),
+            "provider": expected_provider or ", ".join(sorted(set(providers))),
+            "cases": expected_cases,
+            "reasoning_rows": reasoning_rows,
+            "reasoning_characters": int(reasoning[reasoning.ne("")].str.len().sum()),
+            "prompt_tokens_min": int(prompt_tokens.min()),
+            "completion_tokens_min": int(completion_tokens.min()),
+        })
+
+    return pd.DataFrame(receipts)
+
+
+def run_repair_cascade_until_clean(
+    client,
+    image_folder,
+    raw_csv,
+    repair_csv,
+    repair_call_log_csv,
+    repair_plan_csv,
+    models,
+    backup_dir=None,
+    openai_client=None,
+    anthropic_client=None,
+    gemini_client=None,
+    max_passes=2,
+    expected_case_ids=None,
+    max_output_tokens=MAX_OUTPUT_TOKENS,
+    universal_temperature=UNIVERSAL_TEMPERATURE,
+):
+    """Audit and repair a result CSV until no repair targets remain."""
+    current_csv = choose_repair_input_csv(raw_csv, repair_csv, models=models, verbose=True)
+    repair_results = None
+
+    for repair_pass in range(1, max_passes + 1):
+        audit_result = audit_benchmark_output(
+            raw_csv=current_csv,
+            models=models,
+            call_log_csv=repair_call_log_csv,
+            expected_case_ids=expected_case_ids,
+            max_output_tokens=max_output_tokens,
+        )
+        remaining = audit_repair_target_count(audit_result)
+        if remaining == 0:
+            return {
+                "source_csv": current_csv,
+                "source_label": "repaired" if os.path.abspath(current_csv) == os.path.abspath(str(repair_csv)) else "raw",
+                "audit": audit_result,
+                "repair_results": repair_results,
+                "repair_passes": repair_pass - 1,
+            }
+
+        print(f"{remaining} repair targets remain before repair pass {repair_pass}.")
+        repair_results = run_targeted_repair(
+            client=client,
+            openai_client=openai_client,
+            anthropic_client=anthropic_client,
+            gemini_client=gemini_client,
+            image_folder=image_folder,
+            input_csv=current_csv,
+            output_csv=repair_csv,
+            repair_call_log_csv=repair_call_log_csv,
+            repair_plan_csv=repair_plan_csv,
+            confirmation="YES_REPAIR_ALL",
+            models=models,
+            backup_dir=backup_dir,
+            max_output_tokens=max_output_tokens,
+            universal_temperature=universal_temperature,
+        )
+        current_csv = str(repair_csv)
+        if len(repair_results["remaining_repair_plan"]) == 0:
+            audit_result = audit_benchmark_output(
+                raw_csv=current_csv,
+                models=models,
+                call_log_csv=repair_call_log_csv,
+                expected_case_ids=expected_case_ids,
+                max_output_tokens=max_output_tokens,
+            )
+            return {
+                "source_csv": current_csv,
+                "source_label": "repaired",
+                "audit": audit_result,
+                "repair_results": repair_results,
+                "repair_passes": repair_pass,
+            }
+
+    final_audit = audit_benchmark_output(
+        raw_csv=current_csv,
+        models=models,
+        call_log_csv=repair_call_log_csv,
+        expected_case_ids=expected_case_ids,
+        max_output_tokens=max_output_tokens,
+    )
+    raise RuntimeError(
+        f"Repair cascade stopped after {max_passes} passes with "
+        f"{audit_repair_target_count(final_audit)} targets remaining."
+    )
+
+
+def run_autonomous_openrouter_workflow(
+    client,
+    dataset_root,
+    run_paths,
+    models,
+    expected_cases,
+    expected_returned_model_ids,
+    expected_providers,
+    run_label,
+    openai_client=None,
+    anthropic_client=None,
+    gemini_client=None,
+    smoke_first=True,
+    smoke_limit=5,
+    smoke_run_label=None,
+    promote_private=False,
+    export_public=False,
+    promote_confirmation="NO",
+    export_confirmation="NO",
+    expected_reasoning_rows=None,
+    max_repair_passes=2,
+    max_output_tokens=MAX_OUTPUT_TOKENS,
+    universal_temperature=UNIVERSAL_TEMPERATURE,
+):
+    """Run smoke, full benchmark, audit, repair, and hard gates with minimal notebook state."""
+    if promote_private and promote_confirmation != "YES_AUTO_PROMOTE_PRIVATE_FINAL":
+        raise RuntimeError("Set promote_confirmation='YES_AUTO_PROMOTE_PRIVATE_FINAL' to promote.")
+    if export_public and export_confirmation != "YES_AUTO_EXPORT_PUBLIC_RELEASE":
+        raise RuntimeError("Set export_confirmation='YES_AUTO_EXPORT_PUBLIC_RELEASE' to export public files.")
+    if export_public and not promote_private:
+        raise RuntimeError("Public export requires promote_private=True so it uses the gated final CSV.")
+
+    dataset_root = pathlib.Path(dataset_root)
+    model_names = model_names_from_models(models)
+    if len(model_names) != 1:
+        raise RuntimeError("Autonomous workflow currently expects exactly one active model.")
+
+    receipts = []
+    smoke_result = None
+    if smoke_first:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        smoke_run_label = smoke_run_label or f"{run_label}_{model_names[0]}_smoke_{smoke_limit}_{stamp}"
+        smoke_paths = build_run_paths(dataset_root, run_label=smoke_run_label)
+        print("")
+        print("=== AUTO SMOKE RUN ===")
+        print("Smoke run folder:", smoke_paths["run_root"])
+        smoke_df = run_benchmark(
+            client=client,
+            openai_client=openai_client,
+            anthropic_client=anthropic_client,
+            gemini_client=gemini_client,
+            image_folder=smoke_paths["master_images_folder"],
+            output_csv=smoke_paths["raw_results_csv"],
+            test_limit=smoke_limit,
+            models=models,
+            backup_dir=smoke_paths["raw_backup_dir"],
+            max_output_tokens=max_output_tokens,
+            universal_temperature=universal_temperature,
+        )
+        smoke_cascade = run_repair_cascade_until_clean(
+            client=client,
+            openai_client=openai_client,
+            anthropic_client=anthropic_client,
+            gemini_client=gemini_client,
+            image_folder=smoke_paths["master_images_folder"],
+            raw_csv=smoke_paths["raw_results_csv"],
+            repair_csv=smoke_paths["repair_results_csv"],
+            repair_call_log_csv=smoke_paths["repair_call_log_csv"],
+            repair_plan_csv=smoke_paths["repair_plan_csv"],
+            models=models,
+            backup_dir=smoke_paths["repair_backup_dir"],
+            expected_case_ids=range(1, smoke_limit + 1),
+            max_passes=max_repair_passes,
+            max_output_tokens=max_output_tokens,
+            universal_temperature=universal_temperature,
+        )
+        assert_clean_benchmark_audit(smoke_cascade["audit"], smoke_limit, "smoke")
+        smoke_gate_df = pd.read_csv(smoke_cascade["source_csv"], dtype={"Master_Case_ID": str})
+        smoke_receipt = assert_openrouter_run_gate(
+            smoke_gate_df,
+            models=models,
+            expected_cases=smoke_limit,
+            expected_returned_model_ids=expected_returned_model_ids,
+            expected_providers=expected_providers,
+            expected_reasoning_rows=expected_reasoning_rows,
+            label="smoke",
+        )
+        receipts.append(smoke_receipt)
+        smoke_result = {
+            "paths": smoke_paths,
+            "raw_df": smoke_df,
+            "final_source_csv": smoke_cascade["source_csv"],
+            "audit": smoke_cascade["audit"],
+            "gate_receipt": smoke_receipt,
+        }
+        print("Smoke gate passed.")
+
+    print("")
+    print("=== AUTO FULL RUN ===")
+    full_df = run_benchmark(
+        client=client,
+        openai_client=openai_client,
+        anthropic_client=anthropic_client,
+        gemini_client=gemini_client,
+        image_folder=run_paths["master_images_folder"],
+        output_csv=run_paths["raw_results_csv"],
+        test_limit=None,
+        models=models,
+        backup_dir=run_paths["raw_backup_dir"],
+        max_output_tokens=max_output_tokens,
+        universal_temperature=universal_temperature,
+    )
+    full_cascade = run_repair_cascade_until_clean(
+        client=client,
+        openai_client=openai_client,
+        anthropic_client=anthropic_client,
+        gemini_client=gemini_client,
+        image_folder=run_paths["master_images_folder"],
+        raw_csv=run_paths["raw_results_csv"],
+        repair_csv=run_paths["repair_results_csv"],
+        repair_call_log_csv=run_paths["repair_call_log_csv"],
+        repair_plan_csv=run_paths["repair_plan_csv"],
+        models=models,
+        backup_dir=run_paths["repair_backup_dir"],
+        expected_case_ids=range(1, expected_cases + 1),
+        max_passes=max_repair_passes,
+        max_output_tokens=max_output_tokens,
+        universal_temperature=universal_temperature,
+    )
+    assert_clean_benchmark_audit(full_cascade["audit"], expected_cases, "full")
+    final_source_csv = full_cascade["source_csv"]
+    final_source_label = full_cascade["source_label"]
+    final_source_df = pd.read_csv(final_source_csv, dtype={"Master_Case_ID": str})
+    full_receipt = assert_openrouter_run_gate(
+        final_source_df,
+        models=models,
+        expected_cases=expected_cases,
+        expected_returned_model_ids=expected_returned_model_ids,
+        expected_providers=expected_providers,
+        expected_reasoning_rows=expected_reasoning_rows,
+        label="full",
+    )
+    receipts.append(full_receipt)
+    print("Full run gate passed.")
+
+    final_manifest = None
+    scorer_result = None
+    public_release_files = None
+    if promote_private:
+        final_manifest = promote_final_results(
+            source_csv=final_source_csv,
+            final_csv=run_paths["final_results_csv"],
+            manifest_json=run_paths["final_manifest_json"],
+            run_id=run_paths["run_id"],
+            source_label=final_source_label,
+            metadata={
+                "run_label": run_label,
+                "test_limit": "full",
+                "automated_workflow": True,
+                "smoke_first": bool(smoke_first),
+                "full_repair_passes": full_cascade["repair_passes"],
+            },
+        )
+        scorer_result = create_scorer_view(
+            run_paths["final_results_csv"],
+            scorer_csv=run_paths["scorer_view_csv"],
+        )
+        print("Private final promoted:", run_paths["final_results_csv"])
+        print("Private final SHA256:", final_manifest["sha256"])
+        print("Scorer view rebuilt:", run_paths["scorer_view_csv"])
+
+    if export_public:
+        public_release_files = export_public_release_tables(
+            results_csv=run_paths["final_results_csv"],
+            output_dir=run_paths["public_release_dir"],
+            models=models,
+            call_log_csv=run_paths["repair_call_log_csv"] if os.path.exists(run_paths["repair_call_log_csv"]) else None,
+            run_id=run_paths["run_id"],
+        )
+        print("Public release exported:", public_release_files["manifest_json"])
+
+    receipt_df = pd.concat(receipts, ignore_index=True) if receipts else pd.DataFrame()
+    return {
+        "smoke": smoke_result,
+        "raw_df": full_df,
+        "final_source_csv": final_source_csv,
+        "final_source_label": final_source_label,
+        "final_df": final_source_df,
+        "final_audit": full_cascade["audit"],
+        "gate_receipt": receipt_df,
+        "final_manifest": final_manifest,
+        "scorer_result": scorer_result,
+        "public_release_files": public_release_files,
+    }
