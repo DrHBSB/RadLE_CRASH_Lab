@@ -2317,49 +2317,86 @@ def run_benchmark(
                 print(f"  -> {model_name}... SKIP ({info.get('reason')})")
                 continue
 
-            print(f"  -> {model_name}...", end="")
-            api_params_for_error = None
-            grok_fallback_used_for_error = False
-            try:
-                if content_array is None:
-                    content_array = build_content_array(case_id, image_index, prompt=prompt)
+            max_semantic_attempts = max(
+                MAX_REPAIR_ATTEMPTS_API_ERROR,
+                MAX_REPAIR_ATTEMPTS_MALFORMED,
+            )
+            for semantic_attempt in range(max_semantic_attempts + 1):
+                print(f"  -> {model_name}...", end="")
+                api_params_for_error = None
+                grok_fallback_used_for_error = False
+                try:
+                    if content_array is None:
+                        content_array = build_content_array(case_id, image_index, prompt=prompt)
 
-                response, latency, api_params, grok_fallback_used = call_model(
-                    model,
-                    content_array,
-                    client=client,
-                    openai_client=openai_client,
-                    anthropic_client=anthropic_client,
-                    gemini_client=gemini_client,
-                    max_output_tokens=max_output_tokens,
-                    universal_temperature=universal_temperature,
-                )
-                api_params_for_error = api_params
-                grok_fallback_used_for_error = grok_fallback_used
-                result = extract_result(response, latency, api_params, grok_fallback_used, model)
+                    response, latency, api_params, grok_fallback_used = call_model(
+                        model,
+                        content_array,
+                        client=client,
+                        openai_client=openai_client,
+                        anthropic_client=anthropic_client,
+                        gemini_client=gemini_client,
+                        max_output_tokens=max_output_tokens,
+                        universal_temperature=universal_temperature,
+                    )
+                    api_params_for_error = api_params
+                    grok_fallback_used_for_error = grok_fallback_used
+                    result = extract_result(response, latency, api_params, grok_fallback_used, model)
 
-                df = _assign_row_values(df, df_idx, result)
+                    df = _assign_row_values(df, df_idx, result)
 
-                completion_tokens = result.get(f"Total_Tokens_Out_{model_name}", 0)
-                prompt_tokens = result.get(f"Prompt_Tokens_{model_name}", 0)
-                latency = result.get(f"Latency_{model_name}", 0)
-                tps = round(completion_tokens / latency, 1) if latency > 0 else 0
-                print(
-                    f" OK ({latency}s | {completion_tokens} out / "
-                    f"{prompt_tokens} in | {tps} tok/sec)"
-                )
+                    completion_tokens = result.get(f"Total_Tokens_Out_{model_name}", 0)
+                    prompt_tokens = result.get(f"Prompt_Tokens_{model_name}", 0)
+                    latency = result.get(f"Latency_{model_name}", 0)
+                    tps = round(completion_tokens / latency, 1) if latency > 0 else 0
+                    post_info = classify_cell_for_audit(
+                        df.loc[df_idx],
+                        model_name,
+                        attempts=semantic_attempt,
+                        max_output_tokens=max_output_tokens,
+                    )
+                    if post_info.get("needs_api_repair"):
+                        print(
+                            f" RETRY ({latency}s | {completion_tokens} out / "
+                            f"{prompt_tokens} in | {tps} tok/sec | {post_info.get('reason')})"
+                        )
+                        continue
 
-            except Exception as exc:
-                result = failed_result(
-                    error=exc,
-                    model=model,
-                    api_params=api_params_for_error,
-                    grok_fallback_used=grok_fallback_used_for_error,
-                )
-                df = _assign_row_values(df, df_idx, result)
-                print(f" Failed! API Response: {str(exc)}")
+                    if post_info.get("bucket") != "accepted":
+                        print(
+                            f" TERMINAL ({latency}s | {completion_tokens} out / "
+                            f"{prompt_tokens} in | {tps} tok/sec | {post_info.get('reason')})"
+                        )
+                        break
 
-            api_calls_this_run += 1
+                    print(
+                        f" OK ({latency}s | {completion_tokens} out / "
+                        f"{prompt_tokens} in | {tps} tok/sec)"
+                    )
+                    break
+
+                except Exception as exc:
+                    result = failed_result(
+                        error=exc,
+                        model=model,
+                        api_params=api_params_for_error,
+                        grok_fallback_used=grok_fallback_used_for_error,
+                    )
+                    df = _assign_row_values(df, df_idx, result)
+                    post_info = classify_cell_for_audit(
+                        df.loc[df_idx],
+                        model_name,
+                        attempts=semantic_attempt,
+                        max_output_tokens=max_output_tokens,
+                    )
+                    if post_info.get("needs_api_repair"):
+                        print(f" Failed! API Response: {str(exc)} | retrying")
+                        continue
+                    print(f" Failed! API Response: {str(exc)}")
+                    break
+
+                finally:
+                    api_calls_this_run += 1
 
         df = _sort_benchmark_df(df)
 
