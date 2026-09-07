@@ -997,13 +997,22 @@ def classify_cell_for_audit(
         )
 
     if require_readable_reasoning and not reasoning.strip():
-        needs = attempts < MAX_REPAIR_ATTEMPTS_MALFORMED
+        # A missing explanation alone is never a reason for another paid call.
+        # Retain the usual classification when the answer has another problem.
+        answer_status = classify_cell_for_audit(
+            row, model_name, attempts=attempts,
+            max_output_tokens=max_output_tokens,
+            require_token_usage=require_token_usage,
+            require_readable_reasoning=False,
+        )
+        if answer_status["bucket"] != "accepted":
+            return answer_status
         return _repair_status(
-            "repair_target_missing_readable_reasoning" if needs else "repair_exhausted_missing_readable_reasoning",
-            "paid_repair" if needs else "terminal",
-            "missing_readable_reasoning" if needs else "repair_exhausted_missing_readable_reasoning",
-            needs,
-            MAX_REPAIR_ATTEMPTS_MALFORMED,
+            "analysis_flag_missing_readable_reasoning",
+            "analysis_flag",
+            "missing_readable_reasoning",
+            False,
+            0,
         )
 
     if is_exact_valid_i_dont_know(diagnosis):
@@ -2635,8 +2644,9 @@ def run_benchmark(
                         continue
 
                     if post_info.get("bucket") != "accepted":
+                        outcome = "FLAGGED" if post_info.get("reason") == "missing_readable_reasoning" else "TERMINAL"
                         print(
-                            f" TERMINAL ({latency}s | {completion_tokens} out / "
+                            f" {outcome} ({latency}s | {completion_tokens} out / "
                             f"{prompt_tokens} in | {tps} tok/sec | {post_info.get('reason')})"
                         )
                         break
