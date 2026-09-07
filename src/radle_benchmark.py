@@ -3158,11 +3158,15 @@ def audit_accepted_count(audit_result):
     return int(matches.iloc[0]["cells"]) if len(matches) else 0
 
 
-def assert_clean_benchmark_audit(audit_result, expected_cases, label):
+def assert_clean_benchmark_audit(audit_result, expected_cases, label, allow_missing_reasoning=False):
     """Fail unless all audited case-model cells are accepted and no side buckets remain."""
     accepted = audit_accepted_count(audit_result)
     remaining = audit_repair_target_count(audit_result)
-    if accepted != expected_cases or remaining != 0:
+    flags = audit_result.get("analysis_flags")
+    allowed_flags = 0
+    if allow_missing_reasoning and flags is not None and len(flags):
+        allowed_flags = int(flags["reason"].eq("missing_readable_reasoning").sum())
+    if accepted + allowed_flags != expected_cases or remaining != 0:
         raise RuntimeError(
             f"{label} audit not clean: accepted={accepted}/{expected_cases}, "
             f"remaining_repair_targets={remaining}."
@@ -3174,6 +3178,8 @@ def assert_clean_benchmark_audit(audit_result, expected_cases, label):
         ("provider_content_blocks", "provider content blocks"),
     ):
         table = audit_result.get(key)
+        if key == "analysis_flags" and allow_missing_reasoning and table is not None:
+            table = table[table["reason"] != "missing_readable_reasoning"]
         if table is not None and len(table):
             raise RuntimeError(f"{label} audit still has {len(table)} {description}.")
 
@@ -3288,6 +3294,7 @@ def assert_openrouter_run_gate(
             "provider": expected_provider or ", ".join(sorted(set(providers))),
             "cases": expected_cases,
             "reasoning_rows": reasoning_rows,
+            "missing_reasoning_rows": expected_cases - reasoning_rows,
             "reasoning_characters": int(reasoning[reasoning.ne("")].str.len().sum()),
             "prompt_tokens_min": int(prompt_tokens.min()),
             "completion_tokens_min": int(completion_tokens.min()),
@@ -3383,6 +3390,33 @@ def run_repair_cascade_until_clean(
     )
 
 
+def seed_completed_smoke_results(existing, smoke, models, expected_cases):
+    """Reuse completed pilot model cells without replacing existing model results."""
+    key = "Master_Case_ID"
+    ids = existing[key].map(normalize_case_id)
+    source_ids = smoke[key].map(normalize_case_id)
+    if not ids.is_unique or not source_ids.is_unique:
+        raise RuntimeError("Duplicate case IDs prevent smoke reuse.")
+    if set(ids) != {str(i) for i in range(1, expected_cases + 1)} or not set(source_ids).issubset(set(ids)):
+        raise RuntimeError("Unexpected case IDs prevent smoke reuse.")
+    result = existing.copy().astype("object")
+    for source_idx, case_id in source_ids.items():
+        target_idx = ids[ids == case_id].index[0]
+        for model in models:
+            name = model["name"]
+            if safe_str(result.loc[target_idx].get(f"Diagnosis_{name}", "")).strip():
+                continue
+            source = smoke.loc[source_idx]
+            info = classify_cell_for_audit(source, name,
+                require_token_usage=requires_positive_token_usage(model),
+                require_readable_reasoning=model.get("require_readable_reasoning", False))
+            if info["bucket"] != "accepted" and info["reason"] != "missing_readable_reasoning":
+                continue
+            values = {col: source[col] for col in smoke.columns if col.endswith("_" + name)}
+            result = _assign_row_values(result, target_idx, values)
+    return result
+
+
 def run_autonomous_openrouter_workflow(
     client,
     dataset_root,
@@ -3407,8 +3441,12 @@ def run_autonomous_openrouter_workflow(
     max_repair_passes=2,
     max_output_tokens=MAX_OUTPUT_TOKENS,
     universal_temperature=UNIVERSAL_TEMPERATURE,
+    allow_missing_reasoning=False,
+    reuse_smoke_results=False,
 ):
     """Run smoke, full benchmark, audit, repair, and hard gates with minimal notebook state."""
+    if allow_missing_reasoning and (promote_private or export_public):
+        raise RuntimeError("Flag-tolerant execution cannot promote or export publication results.")
     if promote_private and promote_confirmation != "YES_AUTO_PROMOTE_PRIVATE_FINAL":
         raise RuntimeError("Set promote_confirmation='YES_AUTO_PROMOTE_PRIVATE_FINAL' to promote.")
     if export_public and export_confirmation != "YES_AUTO_EXPORT_PUBLIC_RELEASE":
@@ -3461,7 +3499,7 @@ def run_autonomous_openrouter_workflow(
             max_output_tokens=max_output_tokens,
             universal_temperature=universal_temperature,
         )
-        assert_clean_benchmark_audit(smoke_cascade["audit"], smoke_limit * len(model_names), "smoke")
+        assert_clean_benchmark_audit(smoke_cascade["audit"], smoke_limit * len(model_names), "smoke", allow_missing_reasoning=allow_missing_reasoning)
         smoke_gate_df = pd.read_csv(smoke_cascade["source_csv"], dtype={"Master_Case_ID": str})
         smoke_receipt = assert_openrouter_run_gate(
             smoke_gate_df,
@@ -3469,7 +3507,7 @@ def run_autonomous_openrouter_workflow(
             expected_cases=smoke_limit,
             expected_returned_model_ids=expected_returned_model_ids,
             expected_providers=expected_providers,
-            expected_reasoning_rows=expected_reasoning_rows,
+            expected_reasoning_rows=0 if allow_missing_reasoning else expected_reasoning_rows,
             label="smoke",
         )
         receipts.append(smoke_receipt)
@@ -3500,6 +3538,13 @@ def run_autonomous_openrouter_workflow(
 
     print("")
     print("=== AUTO FULL RUN ===")
+    if reuse_smoke_results and smoke_result:
+        target = run_paths["raw_results_csv"]
+        existing = pd.read_csv(target, dtype={"Master_Case_ID": str}).astype("object")
+        seeded = seed_completed_smoke_results(existing, smoke_gate_df, models, expected_cases)
+        save_benchmark_progress(existing, target, numbered=True, backup_dir=run_paths["raw_backup_dir"])
+        save_benchmark_progress(seeded, target, numbered=True, backup_dir=run_paths["raw_backup_dir"])
+        print("Completed pilot cells reused in canonical model columns.")
     full_df = run_benchmark(
         client=client,
         openai_client=openai_client,
@@ -3530,7 +3575,7 @@ def run_autonomous_openrouter_workflow(
         max_output_tokens=max_output_tokens,
         universal_temperature=universal_temperature,
     )
-    assert_clean_benchmark_audit(full_cascade["audit"], expected_cases * len(model_names), "full")
+    assert_clean_benchmark_audit(full_cascade["audit"], expected_cases * len(model_names), "full", allow_missing_reasoning=allow_missing_reasoning)
     final_source_csv = full_cascade["source_csv"]
     final_source_label = full_cascade["source_label"]
     final_source_df = pd.read_csv(final_source_csv, dtype={"Master_Case_ID": str})
@@ -3540,7 +3585,7 @@ def run_autonomous_openrouter_workflow(
         expected_cases=expected_cases,
         expected_returned_model_ids=expected_returned_model_ids,
         expected_providers=expected_providers,
-        expected_reasoning_rows=expected_reasoning_rows,
+        expected_reasoning_rows=0 if allow_missing_reasoning else expected_reasoning_rows,
         label="full",
     )
     receipts.append(full_receipt)
