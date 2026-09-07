@@ -6,8 +6,12 @@ import pathlib
 import re
 import shutil
 import time
+import uuid
+import urllib.parse
+import urllib.request
 from collections import defaultdict
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import anthropic
 from google import genai as google_genai
@@ -38,6 +42,11 @@ NO_TEMPERATURE_MODELS = {
     "claude-opus-5",
     "anthropic/claude-fable-5",
     "anthropic/claude-opus-5",
+    "openai/gpt-6-astra",
+    "google/gemini-3.8-flash",
+    "x-ai/grok-4.6",
+    "anthropic/claude-fable-5.1",
+    "deepseek/deepseek-v4-flash-vision-exp",
 }
 
 MODELS = [
@@ -549,6 +558,8 @@ def make_json_safe(obj):
         return [make_json_safe(v) for v in obj]
     if isinstance(obj, (str, int, float, bool)):
         return obj
+    if hasattr(obj, "__dict__"):
+        return make_json_safe(vars(obj))
     return str(obj)
 
 
@@ -942,6 +953,7 @@ def classify_cell_for_audit(
     attempts=0,
     max_output_tokens=MAX_OUTPUT_TOKENS,
     require_token_usage=False,
+    require_readable_reasoning=False,
 ):
     """Classify one case-model cell for audit and targeted repair planning."""
     diag_col = f"Diagnosis_{model_name}"
@@ -953,6 +965,7 @@ def classify_cell_for_audit(
     raw = safe_str(row.get(raw_col, "")) if raw_col in row.index else ""
     completion_tokens = get_token_value(row, model_name, "Total_Tokens_Out")
     prompt_tokens = get_token_value(row, model_name, "Prompt_Tokens")
+    reasoning = safe_str(row.get(f"Reasoning_Raw_{model_name}", ""))
     hit_max_tokens = completion_tokens >= max_output_tokens
 
     if diag_col not in row.index:
@@ -979,6 +992,16 @@ def classify_cell_for_audit(
             "repair_target_zero_token_usage" if needs else "repair_exhausted_zero_token_usage",
             "paid_repair" if needs else "terminal",
             "zero_or_missing_token_usage" if needs else "repair_exhausted_zero_token_usage",
+            needs,
+            MAX_REPAIR_ATTEMPTS_MALFORMED,
+        )
+
+    if require_readable_reasoning and not reasoning.strip():
+        needs = attempts < MAX_REPAIR_ATTEMPTS_MALFORMED
+        return _repair_status(
+            "repair_target_missing_readable_reasoning" if needs else "repair_exhausted_missing_readable_reasoning",
+            "paid_repair" if needs else "terminal",
+            "missing_readable_reasoning" if needs else "repair_exhausted_missing_readable_reasoning",
             needs,
             MAX_REPAIR_ATTEMPTS_MALFORMED,
         )
@@ -1247,6 +1270,7 @@ def audit_benchmark_output(
                 attempts=attempts,
                 max_output_tokens=max_output_tokens,
                 require_token_usage=requires_positive_token_usage(model_by_name[model_name]),
+                require_readable_reasoning=model_by_name[model_name].get("require_readable_reasoning", False),
             )
 
             raw = safe_str(row.get(f"Raw_Response_{model_name}", ""))
@@ -1408,6 +1432,7 @@ def _convert_content_for_gemini(content_array):
 
 def build_api_params(model, content_array, max_output_tokens, universal_temperature):
     """Build provider-specific request params for one model request."""
+    max_output_tokens = model.get("max_output_tokens", max_output_tokens)
     if uses_native_anthropic(model):
         extra = model.get("extra") or {}
         params = {
@@ -1456,13 +1481,36 @@ def build_api_params(model, content_array, max_output_tokens, universal_temperat
 
         return api_params
 
+    if model.get("api_surface") == "responses":
+        response_content = []
+        for item in content_array:
+            if item.get("type") == "text":
+                response_content.append({"type": "input_text", "text": item.get("text", "")})
+            elif item.get("type") == "image_url":
+                image_url = item.get("image_url", {}).get("url")
+                response_content.append({"type": "input_image", "image_url": image_url})
+        extra = model.get("extra") or {}
+        api_params = {
+            "model": model["id"],
+            "input": [{"role": "user", "content": response_content}],
+            "reasoning": extra.get("reasoning", {"effort": "high", "summary": "detailed"}),
+            "text": extra.get("text", {"format": {"type": "json_object"}}),
+            "max_output_tokens": max_output_tokens,
+            "store": False,
+        }
+        if model.get("stream"):
+            api_params["stream"] = True
+        if model.get("provider_routing"):
+            api_params["extra_body"] = {"provider": model.get("provider_routing")}
+        return api_params
+
     api_params = {
         "model": model["id"],
         "messages": [{"role": "user", "content": content_array}],
         "max_tokens": max_output_tokens,
     }
 
-    if model["id"] not in NO_TEMPERATURE_MODELS:
+    if model["id"] not in NO_TEMPERATURE_MODELS and not model.get("omit_sampling", False):
         api_params["temperature"] = universal_temperature
 
     extra_body = {}
@@ -1470,6 +1518,10 @@ def build_api_params(model, content_array, max_output_tokens, universal_temperat
         extra_body.update(model.get("extra"))
     if model.get("provider_routing"):
         extra_body["provider"] = model.get("provider_routing")
+    if model.get("omit_sampling", False):
+        for sampling_key in ("temperature", "top_p", "top_k"):
+            api_params.pop(sampling_key, None)
+            extra_body.pop(sampling_key, None)
     if extra_body:
         api_params["extra_body"] = extra_body
 
@@ -1542,6 +1594,169 @@ def build_content_array(case_id, image_index, prompt=PROMPT):
     return content_array
 
 
+def _configured_provider_display(model):
+    routes = (model.get("provider_routing") or {}).get("only") or []
+    route = str(routes[0]).strip().lower() if len(routes) == 1 else ""
+    return {
+        "openai": "OpenAI",
+        "xai/zdr": "xAI",
+        "anthropic": "Anthropic",
+        "azure": "Azure",
+        "fireworks": "Fireworks",
+        "google-ai-studio": "Google AI Studio",
+    }.get(route, "UNKNOWN")
+
+
+def normalize_openrouter_responses_response(response, model):
+    """Normalize an OpenRouter Responses result into the existing extraction contract."""
+    data = response.model_dump(mode="json") if hasattr(response, "model_dump") else make_json_safe(response)
+    final_text_parts = []
+    readable_parts = []
+    reasoning_details = []
+    for item in data.get("output") or []:
+        if item.get("type") == "reasoning":
+            for summary in item.get("summary") or []:
+                text = summary.get("text") if isinstance(summary, dict) else None
+                if isinstance(summary, dict) and summary.get("type") == "summary_text" and isinstance(text, str) and text.strip():
+                    readable_parts.append(text.strip())
+                    reasoning_details.append({"type": "reasoning.summary", "summary": text.strip()})
+            for part in item.get("content") or []:
+                text = part.get("text") if isinstance(part, dict) else None
+                if isinstance(part, dict) and part.get("type") == "reasoning_text" and isinstance(text, str) and text.strip():
+                    readable_parts.append(text.strip())
+                    reasoning_details.append({"type": "reasoning.text", "text": text.strip()})
+            if item.get("encrypted_content"):
+                reasoning_details.append({"type": "reasoning.encrypted", "data": "[ENCRYPTED]"})
+        elif item.get("type") == "message":
+            for part in item.get("content") or []:
+                text = part.get("text") if isinstance(part, dict) else None
+                if isinstance(part, dict) and part.get("type") == "output_text" and isinstance(text, str):
+                    final_text_parts.append(text)
+
+    readable = "\n\n".join(readable_parts)
+    usage_data = data.get("usage") or {}
+    output_details = usage_data.get("output_tokens_details") or {}
+    message = SimpleNamespace(
+        content="".join(final_text_parts),
+        reasoning=readable,
+        reasoning_details=reasoning_details,
+        model_extra={"reasoning": readable, "reasoning_details": reasoning_details},
+    )
+    usage = SimpleNamespace(
+        prompt_tokens=usage_data.get("input_tokens", usage_data.get("prompt_tokens", 0)) or 0,
+        completion_tokens=usage_data.get("output_tokens", usage_data.get("completion_tokens", 0)) or 0,
+        completion_tokens_details=SimpleNamespace(
+            reasoning_tokens=output_details.get("reasoning_tokens", 0) or 0
+        ),
+        model_extra=usage_data,
+    )
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=message)],
+        usage=usage,
+        model=data.get("model") or "",
+        model_extra={"provider": data.get("provider") or "UNKNOWN"},
+    )
+
+
+def collect_openrouter_response_stream(stream, archive=None):
+    """Accept completed Responses events only; cross-check typed reasoning text."""
+    terminal = None
+    fragments = {}
+    for raw_event in stream:
+        event = raw_event.model_dump(mode="json") if hasattr(raw_event, "model_dump") else make_json_safe(raw_event)
+        if archive is not None:
+            archive.write(json.dumps(event, ensure_ascii=False) + "\n")
+            archive.flush()
+        kind = event.get("type", "")
+        if kind in {"error", "response.failed", "response.incomplete"}:
+            raise RuntimeError("Responses stream failed or was incomplete; retain its event archive.")
+        if kind == "response.completed":
+            if terminal is not None:
+                raise RuntimeError("Multiple terminal Responses events.")
+            terminal = event.get("response")
+        prefix, _, suffix = kind.rpartition(".")
+        if prefix not in {"response.reasoning_summary_text", "response.reasoning_text"} or suffix not in {"delta", "done"}:
+            continue
+        field = "summary_index" if prefix.endswith("summary_text") else "content_index"
+        position, output_index = event.get(field), event.get("output_index")
+        text = event.get("delta" if suffix == "delta" else "text")
+        if type(position) is not int or type(output_index) is not int or min(position, output_index) < 0 or not isinstance(text, str):
+            raise RuntimeError("Malformed typed reasoning stream event.")
+        key = (output_index, "summary" if field == "summary_index" else "content", position)
+        part = fragments.setdefault(key, {"delta": "", "done": None, "id": event.get("item_id")})
+        if part["done"] is not None or part["id"] != event.get("item_id"):
+            raise RuntimeError("Duplicate or out-of-order reasoning stream event.")
+        if suffix == "delta":
+            part["delta"] += text
+        else:
+            part["done"] = text
+    if not isinstance(terminal, dict) or terminal.get("status") != "completed":
+        raise RuntimeError("Responses stream ended without a completed response.")
+    actual = {}
+    for key, part in fragments.items():
+        if part["done"] is None or (part["delta"] and part["delta"] != part["done"]):
+            raise RuntimeError("Reasoning stream delta/done mismatch.")
+        if part["done"].strip():
+            actual[key] = part["done"]
+    expected = {}
+    for index, item in enumerate(terminal.get("output") or []):
+        if item.get("type") != "reasoning":
+            continue
+        for field, expected_type in (("summary", "summary_text"), ("content", "reasoning_text")):
+            for position, part in enumerate(item.get(field) or []):
+                if part.get("type") == expected_type and isinstance(part.get("text"), str) and part["text"].strip():
+                    expected[(index, field, position)] = part["text"]
+    if actual != expected:
+        raise RuntimeError("Streamed reasoning differs from the final typed reasoning fields.")
+    return terminal
+
+
+def call_openrouter_responses(api_client, api_params, model):
+    """Preserve Responses evidence and use reported identity, never requested identity."""
+    archive_path = None
+    if model.get("response_archive_dir"):
+        folder = pathlib.Path(model["response_archive_dir"])
+        folder.mkdir(parents=True, exist_ok=True)
+        archive_path = folder / (uuid.uuid4().hex + ".jsonl")
+    response = api_client.responses.create(**api_params)
+    if api_params.get("stream"):
+        try:
+            if archive_path:
+                with archive_path.open("x", encoding="utf-8") as archive:
+                    data = collect_openrouter_response_stream(response, archive)
+            else:
+                data = collect_openrouter_response_stream(response)
+        finally:
+            if hasattr(response, "close"):
+                response.close()
+    else:
+        data = response.model_dump(mode="json") if hasattr(response, "model_dump") else make_json_safe(response)
+    # The Responses body may omit provider identity. Generation metadata is
+    # read-only and must correspond to this exact returned response ID.
+    if not data.get("provider") and data.get("id"):
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                return None
+        if str(api_client.base_url).rstrip("/") != "https://openrouter.ai/api/v1":
+            raise RuntimeError("Expected the OpenRouter API base URL.")
+        query = urllib.parse.urlencode({"id": data["id"]})
+        request = urllib.request.Request("https://openrouter.ai/api/v1/generation?" + query,
+            headers={"Authorization": "Bearer " + api_client.api_key})
+        try:
+            with urllib.request.build_opener(NoRedirect()).open(request, timeout=30) as result:
+                metadata = json.load(result).get("data") or {}
+            if metadata.get("id") != data["id"]:
+                raise ValueError("Generation identity mismatch")
+            data["generation_metadata"] = metadata
+            data["provider"] = metadata.get("provider_name")
+        except Exception as exc:
+            data["generation_metadata_error"] = type(exc).__name__
+    if archive_path:
+        with archive_path.with_suffix(".response.json").open("x", encoding="utf-8") as saved:
+            json.dump(data, saved, ensure_ascii=False)
+    return normalize_openrouter_responses_response(data, model)
+
+
 def call_model(
     model,
     content_array,
@@ -1570,7 +1785,9 @@ def call_model(
     for attempt in range(max_retries):
         try:
             t0 = time.time()
-            if uses_native_anthropic(model):
+            if model.get("api_surface") == "responses":
+                response = call_openrouter_responses(api_client, api_params, model)
+            elif uses_native_anthropic(model):
                 response = api_client.messages.create(**api_params)
             elif uses_native_google(model):
                 response = api_client.models.generate_content(**api_params)
@@ -1609,6 +1826,17 @@ def _logged_request_extra(model, api_params):
         return {k: api_params[k] for k in ("thinking", "output_config") if k in api_params}
     if uses_native_google(model):
         return model.get("extra")
+    if model.get("api_surface") == "responses":
+        logged = {
+            "reasoning": api_params.get("reasoning"),
+            "text": api_params.get("text"),
+            "stream": api_params.get("stream", False),
+            "max_output_tokens": api_params.get("max_output_tokens"),
+        }
+        provider = (api_params.get("extra_body") or {}).get("provider")
+        if provider is not None:
+            logged["provider"] = provider
+        return logged
     return api_params.get("extra_body", None) if api_params else None
 
 
@@ -1833,6 +2061,7 @@ def build_repair_plan(
                 attempts=attempts,
                 max_output_tokens=max_output_tokens,
                 require_token_usage=requires_positive_token_usage(model),
+                require_readable_reasoning=model.get("require_readable_reasoning", False),
             )
             if not info.get("needs_api_repair"):
                 continue
@@ -2032,6 +2261,7 @@ def run_targeted_repair(
                 attempts=attempts,
                 max_output_tokens=max_output_tokens,
                 require_token_usage=requires_positive_token_usage(model),
+                require_readable_reasoning=model.get("require_readable_reasoning", False),
             )
             if not info.get("needs_api_repair"):
                 print(f"SKIP already acceptable/exhausted: case {case_id} | {model_name} | {info.get('reason')}")
@@ -2164,6 +2394,7 @@ def run_targeted_repair(
                 attempts=attempts_after,
                 max_output_tokens=max_output_tokens,
                 require_token_usage=requires_positive_token_usage(model),
+                require_readable_reasoning=model.get("require_readable_reasoning", False),
             )
             if apply_no_paid_cleanup_to_cell(df_repair, df_idx, model_name, post_info):
                 no_paid_cleanups_applied += 1
@@ -2173,6 +2404,7 @@ def run_targeted_repair(
                     attempts=attempts_after,
                     max_output_tokens=max_output_tokens,
                     require_token_usage=requires_positive_token_usage(model),
+                    require_readable_reasoning=model.get("require_readable_reasoning", False),
                 )
             post_repair_status = post_info.get("reason", "")
 
@@ -2343,6 +2575,7 @@ def run_benchmark(
                 attempts=0,
                 max_output_tokens=max_output_tokens,
                 require_token_usage=requires_positive_token_usage(model),
+                require_readable_reasoning=model.get("require_readable_reasoning", False),
             )
 
             if info.get("bucket") == "no_paid_cleanup":
@@ -2392,6 +2625,7 @@ def run_benchmark(
                         attempts=semantic_attempt,
                         max_output_tokens=max_output_tokens,
                         require_token_usage=requires_positive_token_usage(model),
+                        require_readable_reasoning=model.get("require_readable_reasoning", False),
                     )
                     if post_info.get("needs_api_repair"):
                         print(
@@ -2427,6 +2661,7 @@ def run_benchmark(
                         attempts=semantic_attempt,
                         max_output_tokens=max_output_tokens,
                         require_token_usage=requires_positive_token_usage(model),
+                        require_readable_reasoning=model.get("require_readable_reasoning", False),
                     )
                     if post_info.get("needs_api_repair"):
                         print(f" Failed! API Response: {str(exc)} | retrying")
@@ -2818,10 +3053,29 @@ def model_required_result_columns(model_name):
 
 
 def choose_repair_input_csv(raw_csv, repair_csv, models=None, verbose=True):
-    """Use a repair CSV only if it has the schema needed to continue safely."""
+    """Use a repair CSV only when its schema and raw-source lineage are current."""
     raw_csv = str(raw_csv)
     repair_csv = str(repair_csv)
     if not os.path.exists(repair_csv):
+        return raw_csv
+
+    lineage_path = repair_csv + ".lineage.json"
+    try:
+        with open(lineage_path, "r", encoding="utf-8") as handle:
+            lineage = json.load(handle)
+        expected_models = model_names_from_models(models)
+        raw_digest = file_sha256(raw_csv)
+        if (
+            lineage.get("raw_csv_sha256") != raw_digest
+            or lineage.get("models") != expected_models
+        ):
+            raise ValueError("raw source or active model set changed")
+    except Exception as exc:
+        if verbose:
+            print(
+                "Ignoring unproven or stale existing repair CSV; "
+                f"reseeding repair from raw results. ({exc})"
+            )
         return raw_csv
 
     try:
@@ -2847,7 +3101,38 @@ def choose_repair_input_csv(raw_csv, repair_csv, models=None, verbose=True):
                 f"Missing columns: {preview}{suffix}"
             )
         return raw_csv
+
+    try:
+        raw_ids = pd.read_csv(raw_csv, usecols=["Master_Case_ID"], dtype=str)["Master_Case_ID"].map(normalize_case_id).tolist()
+        repair_ids = pd.read_csv(repair_csv, usecols=["Master_Case_ID"], dtype=str)["Master_Case_ID"].map(normalize_case_id).tolist()
+        if raw_ids != repair_ids:
+            raise ValueError("case IDs or row order do not match the current raw results")
+    except Exception as exc:
+        if verbose:
+            print(
+                "Ignoring mismatched existing repair CSV; "
+                f"reseeding repair from raw results. ({exc})"
+            )
+        return raw_csv
     return repair_csv
+
+
+def write_repair_lineage(raw_csv, repair_csv, models=None):
+    """Record which immutable raw results and model set a repair file belongs to."""
+    lineage_path = str(repair_csv) + ".lineage.json"
+    payload = {
+        "raw_csv": os.path.abspath(str(raw_csv)),
+        "raw_csv_sha256": file_sha256(raw_csv),
+        "models": model_names_from_models(models),
+        "written_at_utc": datetime.now(timezone.utc).isoformat(),
+    }
+    pathlib.Path(lineage_path).parent.mkdir(parents=True, exist_ok=True)
+    temp_path = lineage_path + ".tmp"
+    with open(temp_path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
+        handle.write("\n")
+    os.replace(temp_path, lineage_path)
+    return lineage_path
 
 
 def audit_repair_target_count(audit_result):
@@ -3041,6 +3326,7 @@ def run_repair_cascade_until_clean(
             }
 
         print(f"{remaining} repair targets remain before repair pass {repair_pass}.")
+        write_repair_lineage(raw_csv, repair_csv, models=models)
         repair_results = run_targeted_repair(
             client=client,
             openai_client=openai_client,
@@ -3102,6 +3388,7 @@ def run_autonomous_openrouter_workflow(
     smoke_first=True,
     smoke_limit=5,
     smoke_run_label=None,
+    full_run=True,
     promote_private=False,
     export_public=False,
     promote_confirmation="NO",
@@ -3121,14 +3408,15 @@ def run_autonomous_openrouter_workflow(
 
     dataset_root = pathlib.Path(dataset_root)
     model_names = model_names_from_models(models)
-    if len(model_names) != 1:
-        raise RuntimeError("Autonomous workflow currently expects exactly one active model.")
+    if not model_names:
+        raise RuntimeError("Autonomous workflow requires at least one active model.")
 
     receipts = []
     smoke_result = None
     if smoke_first:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        smoke_run_label = smoke_run_label or f"{run_label}_{model_names[0]}_smoke_{smoke_limit}_{stamp}"
+        smoke_model_label = model_names[0] if len(model_names) == 1 else "multi_model"
+        smoke_run_label = smoke_run_label or f"{run_label}_{smoke_model_label}_smoke_{smoke_limit}_{stamp}"
         smoke_paths = build_run_paths(dataset_root, run_label=smoke_run_label)
         print("")
         print("=== AUTO SMOKE RUN ===")
@@ -3163,7 +3451,7 @@ def run_autonomous_openrouter_workflow(
             max_output_tokens=max_output_tokens,
             universal_temperature=universal_temperature,
         )
-        assert_clean_benchmark_audit(smoke_cascade["audit"], smoke_limit, "smoke")
+        assert_clean_benchmark_audit(smoke_cascade["audit"], smoke_limit * len(model_names), "smoke")
         smoke_gate_df = pd.read_csv(smoke_cascade["source_csv"], dtype={"Master_Case_ID": str})
         smoke_receipt = assert_openrouter_run_gate(
             smoke_gate_df,
@@ -3183,6 +3471,22 @@ def run_autonomous_openrouter_workflow(
             "gate_receipt": smoke_receipt,
         }
         print("Smoke gate passed.")
+
+    if not full_run:
+        if not smoke_result:
+            raise RuntimeError("full_run=False requires smoke_first=True.")
+        return {
+            "smoke": smoke_result,
+            "full": None,
+            "final_df": smoke_gate_df,
+            "final_source_csv": smoke_cascade["source_csv"],
+            "final_source_label": "smoke",
+            "final_audit": smoke_cascade["audit"],
+            "gate_receipt": pd.concat(receipts, ignore_index=True),
+            "final_manifest": None,
+            "scorer_result": None,
+            "public_release_files": None,
+        }
 
     print("")
     print("=== AUTO FULL RUN ===")
@@ -3216,7 +3520,7 @@ def run_autonomous_openrouter_workflow(
         max_output_tokens=max_output_tokens,
         universal_temperature=universal_temperature,
     )
-    assert_clean_benchmark_audit(full_cascade["audit"], expected_cases, "full")
+    assert_clean_benchmark_audit(full_cascade["audit"], expected_cases * len(model_names), "full")
     final_source_csv = full_cascade["source_csv"]
     final_source_label = full_cascade["source_label"]
     final_source_df = pd.read_csv(final_source_csv, dtype={"Master_Case_ID": str})
