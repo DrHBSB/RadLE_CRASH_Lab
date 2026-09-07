@@ -7,6 +7,7 @@ import re
 import shutil
 import time
 import uuid
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
@@ -1720,6 +1721,49 @@ def collect_openrouter_response_stream(stream, archive=None):
     return terminal
 
 
+def enrich_openrouter_provider(data, api_client):
+    """Resolve reported provider with bounded metadata-only retries; never repeat inference."""
+    if data.get("provider") or not data.get("id"):
+        return data
+    if str(api_client.base_url).rstrip("/") != "https://openrouter.ai/api/v1":
+        raise RuntimeError("Expected the OpenRouter API base URL.")
+
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    query = urllib.parse.urlencode({"id": data["id"]})
+    request = urllib.request.Request("https://openrouter.ai/api/v1/generation?" + query,
+        headers={"Authorization": "Bearer " + api_client.api_key, "Accept": "application/json"})
+    for attempt, delay in enumerate((0, 1, 2, 4), start=1):
+        if delay:
+            time.sleep(delay)
+        try:
+            with urllib.request.build_opener(NoRedirect()).open(request, timeout=30) as result:
+                metadata = json.load(result).get("data") or {}
+            if metadata.get("id") != data["id"]:
+                raise ValueError("Generation identity mismatch")
+            if not isinstance(metadata.get("provider_name"), str) or not metadata["provider_name"].strip():
+                raise LookupError("Generation provider not available yet")
+            data["generation_metadata"] = metadata
+            data["provider"] = metadata["provider_name"].strip()
+            data.pop("generation_metadata_error", None)
+            break
+        except Exception as exc:
+            status = getattr(exc, "code", None)
+            data["generation_metadata_error"] = type(exc).__name__
+            data.setdefault("generation_metadata_lookup_errors", []).append(
+                {"attempt": attempt, "error": type(exc).__name__, "http_status": status})
+            retryable = (status in {404, 408, 429, 500, 502, 503, 504}
+                or isinstance(exc, (urllib.error.URLError, TimeoutError, LookupError)))
+            # HTTPError inherits URLError; do not retry authentication or other hard failures.
+            if isinstance(exc, urllib.error.HTTPError):
+                retryable = status in {404, 408, 429, 500, 502, 503, 504}
+            if not retryable:
+                break
+    return data
+
+
 def call_openrouter_responses(api_client, api_params, model):
     """Preserve Responses evidence and use reported identity, never requested identity."""
     archive_path = None
@@ -1742,24 +1786,7 @@ def call_openrouter_responses(api_client, api_params, model):
         data = response.model_dump(mode="json") if hasattr(response, "model_dump") else make_json_safe(response)
     # The Responses body may omit provider identity. Generation metadata is
     # read-only and must correspond to this exact returned response ID.
-    if not data.get("provider") and data.get("id"):
-        class NoRedirect(urllib.request.HTTPRedirectHandler):
-            def redirect_request(self, req, fp, code, msg, headers, newurl):
-                return None
-        if str(api_client.base_url).rstrip("/") != "https://openrouter.ai/api/v1":
-            raise RuntimeError("Expected the OpenRouter API base URL.")
-        query = urllib.parse.urlencode({"id": data["id"]})
-        request = urllib.request.Request("https://openrouter.ai/api/v1/generation?" + query,
-            headers={"Authorization": "Bearer " + api_client.api_key})
-        try:
-            with urllib.request.build_opener(NoRedirect()).open(request, timeout=30) as result:
-                metadata = json.load(result).get("data") or {}
-            if metadata.get("id") != data["id"]:
-                raise ValueError("Generation identity mismatch")
-            data["generation_metadata"] = metadata
-            data["provider"] = metadata.get("provider_name")
-        except Exception as exc:
-            data["generation_metadata_error"] = type(exc).__name__
+    enrich_openrouter_provider(data, api_client)
     if archive_path:
         with archive_path.with_suffix(".response.json").open("x", encoding="utf-8") as saved:
             json.dump(data, saved, ensure_ascii=False)
@@ -3186,6 +3213,9 @@ def assert_clean_benchmark_audit(audit_result, expected_cases, label, allow_miss
 
 def _expected_request_extra(model):
     expected = dict(model.get("extra") or {})
+    if model.get("api_surface") == "responses":
+        expected["stream"] = bool(model.get("stream", False))
+        expected["max_output_tokens"] = model.get("max_output_tokens", MAX_OUTPUT_TOKENS)
     provider_routing = model.get("provider_routing")
     if provider_routing is not None:
         expected["provider"] = provider_routing
