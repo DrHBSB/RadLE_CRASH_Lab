@@ -163,6 +163,37 @@ class SchedulerTests(unittest.TestCase):
                 self.assertTrue(result['paused'])
                 self.assertEqual(result['states'][work[1].key]['status'], 'pending')
 
+    def test_ambiguous_request_recheck_holds_only_that_pair(self):
+        work = jobs(3)
+        s.run(work, lambda *_: s.Outcome('blocked'), self.folder, concurrency=1)
+        result = s.run(work, lambda job, _: s.Outcome('uncertain' if job.case == '0' else 'success'),
+                       self.folder, concurrency=2, resume_blocked=True)
+        self.assertEqual(result['calls'], 3)
+        self.assertFalse(result['paused'])
+        self.assertEqual(result['states'][work[0].key]['attempts'], 2)
+        self.assertEqual(result['states'][work[2].key]['status'], 'success')
+
+    def test_review_hold_preserves_history_and_never_resends_held_pair(self):
+        work = jobs(3)
+        s.run(work, lambda *_: s.Outcome('blocked'), self.folder, concurrency=1)
+        journal = self.folder/'events.jsonl'
+        before = journal.read_bytes()
+        s.append(journal, {'type':'review_hold', 'key':work[0].key, 'attempt':1,
+                           'reason':'Reviewed request rejection; hold this pair without resending'})
+        seen = []
+        def call(job, attempt):
+            seen.append(job.key)
+            return s.Outcome('success')
+        result = s.run(work, call, self.folder, resume_blocked=True)
+        self.assertEqual(set(seen), {j.key for j in work[1:]})
+        self.assertFalse(result['paused'])
+        self.assertFalse(result['complete'])
+        self.assertEqual(result['states'][work[0].key]['attempts'], 1)
+        self.assertTrue(journal.read_bytes().startswith(before))
+        s.append(journal, {'type':'review_hold', 'key':work[1].key, 'attempt':1, 'reason':'invalid'})
+        with self.assertRaisesRegex(ValueError, 'review hold'):
+            s.run(work, lambda *_: self.fail(), self.folder)
+
     def test_selection_ignores_excluded_block_without_changing_history(self):
         work = jobs(4)
         first = s.run(work, lambda *_: s.Outcome('blocked'), self.folder, concurrency=1)
@@ -184,6 +215,29 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(again['calls'], 0)
         with self.assertRaisesRegex(ValueError, 'Selected jobs'):
             s.run(work, call, self.folder, selected_keys={'not-in-manifest'})
+
+    def test_case_rejection_continues_others_and_is_not_retried_on_resume(self):
+        work=jobs(3)
+        seen=[]
+        def call(job,attempt):
+            seen.append(job.case)
+            return s.Outcome('rejected' if job.case=='0' else 'success')
+        result=s.run(work,call,self.folder,concurrency=1)
+        self.assertEqual(seen,['0','1','2'])
+        self.assertFalse(result['paused'])
+        self.assertFalse(result['complete'])
+        again=s.run(work,lambda *_:self.fail('rejected case resent'),self.folder,resume_blocked=True)
+        self.assertEqual(again['calls'],0)
+        self.assertEqual(again['states'],result['states'])
+
+    def test_recheck_can_identify_case_rejection_and_release_other_work(self):
+        work=jobs(3)
+        s.run(work,lambda *_:s.Outcome('blocked'),self.folder,concurrency=1)
+        result=s.run(work,lambda job,_:s.Outcome('rejected' if job.case=='0' else 'success'),
+                     self.folder,resume_blocked=True)
+        self.assertEqual(result['calls'],3)
+        self.assertFalse(result['paused'])
+        self.assertEqual(result['states'][work[0].key]['status'],'rejected')
 
     def test_stop_drains_and_resume_only_unstarted(self):
         stop = threading.Event()

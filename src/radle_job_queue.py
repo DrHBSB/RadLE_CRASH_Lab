@@ -31,12 +31,12 @@ class Job:
 
 @dataclass
 class Outcome:
-    status: str  # success, flagged, retry, terminal, quota, blocked, uncertain
+    status: str  # success, flagged, retry, terminal, quota, blocked, uncertain, rejected
     value: dict = field(default_factory=dict)
     retry_after: float = 0
 
 
-STATUSES = {"success", "flagged", "retry", "terminal", "quota", "blocked", "uncertain"}
+STATUSES = {"success", "flagged", "retry", "terminal", "quota", "blocked", "uncertain", "rejected"}
 
 
 @contextmanager
@@ -111,6 +111,16 @@ def replay(path, manifest):
             if event["attempt"] != state["attempts"] + 1:
                 raise ValueError("Invalid attempt sequence")
             state.update(status="uncertain", attempts=event["attempt"])
+        elif event["type"] == "review_hold":
+            # An explicit evidence review can isolate a previously global block.
+            # Preserve every original event and attempt; this does not send a request.
+            if state['status'] != 'blocked' or event.get('attempt') != state['attempts']:
+                raise ValueError('Invalid review hold transition')
+            if not isinstance(event.get('reason'), str) or not event['reason'].strip():
+                raise ValueError('Review hold requires a reason')
+            value = dict(state['value'])
+            value['review_hold_reason'] = event['reason']
+            state.update(status='uncertain', value=value)
         elif event["type"] == "result":
             if state["status"] != "uncertain" or state["attempts"] != event["attempt"]:
                 raise ValueError("Result without its request start")
@@ -161,6 +171,7 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
             append(journal, {"type": "code_version", "at": time.time(), "hashes": code})
         # A deliberate resume rechecks known rejections before spending on other jobs.
         recovery = [k for k, s in states.items() if k in selected and s["status"] in {"quota", "blocked"}]
+        recovery_prior = {k: states[k]['status'] for k in recovery}
         paused = bool(recovery) and (not resume_blocked or
                     any(states[k]["attempts"] >= max_attempts for k in recovery))
         if not resume_blocked:
@@ -233,7 +244,7 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                         del active[future]
                         if key in recovery:
                             recovery.remove(key)
-                            if outcome.status not in {"success", "flagged"}:
+                            if recovery_prior[key] == "quota" and outcome.status not in {"success", "flagged", "rejected"}:
                                 paused = True
                         if outcome.status in {"quota", "blocked"}:
                             paused = True

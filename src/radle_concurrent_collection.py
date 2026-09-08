@@ -73,7 +73,7 @@ def progress_summary(states, active, jobs_by_case, total_jobs, total_cases):
     collected = total_jobs - len(states) + counts['success'] + counts['flagged']
     cases_done = sum(not keys or all(states[k]['status'] in {'success', 'flagged'} for k in keys)
                      for keys in jobs_by_case.values())
-    review = sum(counts[k] for k in ('uncertain', 'blocked', 'quota', 'terminal'))
+    review = sum(counts[k] for k in ('uncertain', 'blocked', 'quota', 'terminal', 'rejected'))
     return (f"{collected}/{total_jobs} answers collected | {cases_done}/{total_cases} cases complete | "
             f"{len(active)} running | {counts['retry']} retry waiting | {review} need review | {counts['pending']} queued")
 
@@ -150,7 +150,8 @@ class LiveProgress:
                               'uncertain': 'held for review; other jobs continue',
                               'quota': 'credit issue; dispatch paused',
                               'blocked': 'access/request issue; dispatch paused',
-                              'terminal': 'attempt limit reached; review needed'}[status]
+                              'terminal': 'attempt limit reached; review needed',
+                              'rejected': 'case held for review; other jobs continue'}[status]
                     detail = f'{status.upper()} · Case {case} · {model.replace("_", " ")} · {reason} → {action}'
                 self.record(detail)
             self.phase = ('PAUSING · saving active requests'
@@ -208,13 +209,13 @@ class LiveProgress:
                 activity = 'Paused this run'
             mc = Counter(states[k]['status'] for k in keys if k not in active)
             attention = [f'{mc[k]} {label}' for k, label in [('retry', 'retry'), ('uncertain', 'held'),
-                         ('quota', 'credit'), ('blocked', 'blocked'), ('terminal', 'exhausted'), ('flagged', 'flagged')] if mc[k]]
+                         ('quota', 'credit'), ('blocked', 'blocked'), ('terminal', 'exhausted'), ('rejected', 'rejected'), ('flagged', 'flagged')] if mc[k]]
             rows.append([str(model.get('display_name') or name.replace('_', ' ')), f'{complete} / {len(self.cases)}',
                          activity, ', '.join(attention) or '—'])
         table = [['MODEL', 'SAVED', 'ACTIVITY', 'ATTENTION']] + rows
         widths = [max(len(row[i]) for row in table) for i in range(3)]
         lines.extend('  '.join(row[i].ljust(widths[i]) for i in range(3)) + '  ' + row[3] for row in table)
-        held = sum(counts[k] for k in ('uncertain', 'quota', 'blocked', 'terminal'))
+        held = sum(counts[k] for k in ('uncertain', 'quota', 'blocked', 'terminal', 'rejected'))
         last = f'{max(0, time.monotonic() - self.last_save):.0f}s ago' if self.last_save is not None else 'No new answer this session'
         lines += ['', f'Waiting: {counts["pending"]} queued · {counts["retry"]} retry · {held} need review',
                   f'Last answer saved: {last}', f'Last backup: {self.backup}',
@@ -366,7 +367,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 case, name = json.loads(key)
                 value = state['value']
                 labels = {'success': 'OK', 'flagged': 'OK + FLAG', 'retry': 'RETRY WAIT',
-                          'uncertain': 'REVIEW', 'quota': 'PAUSE', 'blocked': 'PAUSE', 'terminal': 'EXHAUSTED'}
+                          'uncertain': 'REVIEW', 'quota': 'PAUSE', 'blocked': 'PAUSE', 'terminal': 'EXHAUSTED', 'rejected': 'CASE REJECTED'}
                 detail = (value.get('diagnostic') or {}).get('summary') or value.get('reason') or value.get('error_type', '')
                 if detail:
                     detail = detail.replace('_', ' ')
@@ -416,7 +417,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                     df = rb._assign_row_values(df, row_by_case[case], fields)
                 applied[key] = state['attempts']
             finished_cases = {case for case, keys in jobs_by_case.items() if keys and
-                all(states[k]['status'] in {'success', 'flagged', 'terminal'} for k in keys)}
+                all(states[k]['status'] in {'success', 'flagged', 'terminal', 'rejected'} for k in keys)}
             if len(finished_cases - exported_cases) >= rb.CHECKPOINT_CASE_INTERVAL:
                 export()
                 exported_cases.update(finished_cases)
@@ -434,11 +435,22 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             except Exception as exc:
                 status = getattr(exc, 'status_code', None)
                 message = str(exc).lower()
-                if (getattr(exc, 'radle_diagnostic', {}) or {}).get('category') == 'output_limit':
+                case_failure = rb.case_rejection_diagnostic(getattr(exc, 'body', None))
+                if case_failure and status not in {401, 402}:
+                    exc.radle_diagnostic = case_failure
+                if (getattr(exc, 'radle_diagnostic', {}) or {}).get('category') == 'case_rejected':
+                    kind = 'rejected'
+                elif (getattr(exc, 'radle_diagnostic', {}) or {}).get('category') == 'output_limit':
                     kind = 'retry'
-                elif status == 402 or (status == 403 and any(x in message for x in ('limit exceeded', 'quota', 'balance'))):
+                elif status == 402 or (status == 403 and any(x in message for x in ('limit exceeded', 'quota', 'balance', 'budget'))):
                     kind = 'quota'
-                elif status in {400, 401, 403, 404, 422}:
+                elif status == 403:
+                    # An unexplained request refusal is not proof the whole account is broken.
+                    # Hold this pair without resending; unrelated work can continue.
+                    account_issue = any(x in message for x in (
+                        'authentication', 'api key', 'api_key', 'allowlist', 'ip address', 'access'))
+                    kind = 'blocked' if account_issue else 'uncertain'
+                elif status in {400, 401, 404, 422}:
                     kind = 'blocked'
                 elif status in {429, 500, 502, 503, 504}:
                     kind = 'retry'
@@ -492,7 +504,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
         if not result['complete'] or any(v['status'] == 'terminal' for v in result['states'].values()):
             log('REVIEW REQUIRED. Completed answers are saved; unresolved requests were not blindly resent.')
             for key, state in result['states'].items():
-                if state['status'] in {'uncertain', 'quota', 'blocked', 'terminal'}:
+                if state['status'] in {'uncertain', 'quota', 'blocked', 'terminal', 'rejected'}:
                     case, name = json.loads(key)
                     detail = (state['value'].get('diagnostic') or {}).get('summary') or state['value'].get('reason') or 'Older log has no detailed error; inspect the saved stream.'
                     log(f"  case {case} | {name.replace('_', ' ')}: {detail}")

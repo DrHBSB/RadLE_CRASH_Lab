@@ -1668,6 +1668,24 @@ def normalize_openrouter_responses_response(response, model):
     )
 
 
+def case_rejection_diagnostic(body):
+    """Use typed provider evidence, never a generic 403, to isolate one bad case."""
+    if not isinstance(body, dict):
+        return None
+    error = body.get("error") if isinstance(body.get("error"), dict) else body
+    metadata = error.get("metadata") if isinstance(error.get("metadata"), dict) else {}
+    code = next((v for v in (body.get("error_type"), error.get("error_type"),
+                            metadata.get("error_type"), error.get("code")) if isinstance(v, str) and v), None)
+    case_codes = {"content_policy_violation", "image_content_policy_violation", "refusal",
+                  "invalid_image", "image_too_large", "image_too_small", "unsupported_image_format",
+                  "image_not_found", "image_download_failed"}
+    if code in case_codes or (code is None and isinstance(metadata.get("reasons"), list)
+                             and metadata["reasons"] and "flagged_input" in metadata):
+        return {"category": "case_rejected", "provider_error_code": code or "moderation_flagged",
+                "summary": "Provider rejected this case's content or image; held for review, other jobs continue."}
+    return None
+
+
 def collect_openrouter_response_stream(stream, archive=None):
     """Accept completed Responses events only; cross-check typed reasoning text."""
     terminal = None
@@ -1678,7 +1696,7 @@ def collect_openrouter_response_stream(stream, archive=None):
             archive.write(json.dumps(event, ensure_ascii=False) + "\n")
             archive.flush()
         kind = event.get("type", "")
-        if kind in {"error", "response.failed", "response.incomplete"}:
+        if kind in {"error", "response.error", "response.failed", "response.incomplete"}:
             failure = RuntimeError("Responses stream failed or was incomplete; retain its event archive.")
             response_data = event.get("response") or {}
             reason = (response_data.get("incomplete_details") or {}).get("reason")
@@ -1687,6 +1705,9 @@ def collect_openrouter_response_stream(stream, archive=None):
                 "category": "output_limit" if reason == "max_output_tokens" else "stream_incomplete",
                 "summary": "Response stopped at its output-token limit." if reason == "max_output_tokens" else "Provider stream did not complete.",
             }
+            case_failure = case_rejection_diagnostic(response_data or event)
+            if case_failure:
+                failure.radle_diagnostic = case_failure
             for key, value in (("output_tokens", usage.get("output_tokens")),
                                ("max_output_tokens", response_data.get("max_output_tokens"))):
                 if type(value) is int:
@@ -1783,7 +1804,40 @@ def call_openrouter_responses(api_client, api_params, model):
         folder = pathlib.Path(model["response_archive_dir"])
         folder.mkdir(parents=True, exist_ok=True)
         archive_path = folder / (uuid.uuid4().hex + ".jsonl")
-    response = api_client.responses.create(**api_params)
+    try:
+        response = api_client.responses.create(**api_params)
+    except Exception as exc:
+        case_failure = case_rejection_diagnostic(getattr(exc, "body", None))
+        if case_failure and getattr(exc, "status_code", None) not in {401, 402}:
+            exc.radle_diagnostic = case_failure
+        # HTTP rejection happens before a stream exists; preserve its evidence too.
+        if archive_path:
+            def redact(value):
+                if isinstance(value, dict):
+                    return {k: redact(v) for k, v in value.items()
+                            if str(k).lower() not in {"authorization", "api_key", "api-key", "headers", "request"}}
+                if isinstance(value, list):
+                    return [redact(v) for v in value]
+                if isinstance(value, str):
+                    key = getattr(api_client, "api_key", None)
+                    if isinstance(key, str) and key:
+                        value = value.replace(key, "[REDACTED_KEY]")
+                    return re.sub(r"data:image/[^;\s]+;base64,[A-Za-z0-9+/=]+", "[REDACTED_IMAGE]", value)
+                return value
+            error_path = archive_path.with_suffix(".error.json")
+            try:
+                evidence = {"error_type": type(exc).__name__,
+                            "http_status": getattr(exc, "status_code", None),
+                            "body": redact(make_json_safe(getattr(exc, "body", None)))}
+                with error_path.open("x", encoding="utf-8") as saved:
+                    json.dump(evidence, saved, ensure_ascii=False)
+                    saved.flush()
+                    os.fsync(saved.fileno())
+                exc.radle_archive = str(error_path)
+            except Exception as archive_error:
+                # A failed diagnostic write must not replace the original HTTP status.
+                exc.radle_archive_error = type(archive_error).__name__
+        raise
     if api_params.get("stream"):
         try:
             if archive_path:

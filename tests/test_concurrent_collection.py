@@ -274,6 +274,55 @@ class IntegrationTests(unittest.TestCase):
             self.run_collection()
         self.assertEqual(self.client.chat.completions.create.call_count, 7)
 
+    def test_content_rejection_holds_one_case_and_saves_other_answers(self):
+        import httpx
+        import openai
+        refusal=openai.PermissionDeniedError('Provider refused this image',
+            response=httpx.Response(403,request=httpx.Request('POST','https://fixture.invalid')),
+            body={'error':{'code':403,'metadata':{'error_type':'content_policy_violation'}}})
+        self.client.chat.completions.create.side_effect=[refusal,self.response(),self.response()]
+        with self.assertRaisesRegex(RuntimeError,'unresolved outcomes'), contextlib.redirect_stdout(io.StringIO()) as output:
+            self.run_collection(concurrency=1)
+        self.assertEqual(self.client.chat.completions.create.call_count,3)
+        state=json.loads(Path(str(self.output)+'.concurrent/status.json').read_text())
+        self.assertFalse(state['paused'])
+        self.assertEqual(state['counts'],{'rejected':1,'flagged':2})
+        self.assertIn('CASE REJECTED',output.getvalue())
+        frame=pd.read_csv(self.output,keep_default_na=False)
+        self.assertEqual(frame['Diagnosis_any_model'].tolist(),['','synthetic finding','synthetic finding'])
+        with self.assertRaisesRegex(RuntimeError,'unresolved outcomes'):
+            self.run_collection(resume_blocked=True)
+        self.assertEqual(self.client.chat.completions.create.call_count,3)
+
+    def check_untyped_refusal_is_held(self, responses=False):
+        import httpx
+        import openai
+        refusal = openai.PermissionDeniedError('Provider guardrail rejected request',
+            response=httpx.Response(403, request=httpx.Request('POST', 'https://fixture.invalid')),
+            body={'error': {'code': 403, 'message': 'Provider guardrail rejected request'}})
+        target = self.client.chat.completions.create
+        if responses:
+            self.models[0]['api_surface'] = 'responses'
+            patcher = patch.object(rb, 'call_openrouter_responses')
+            target = patcher.start()
+            self.addCleanup(patcher.stop)
+        target.side_effect = [refusal, self.response(), self.response()]
+        with self.assertRaisesRegex(RuntimeError, 'unresolved outcomes'):
+            self.run_collection(concurrency=1)
+        self.assertEqual(target.call_count, 3)
+        state = json.loads(Path(str(self.output)+'.concurrent/status.json').read_text())
+        self.assertFalse(state['paused'])
+        self.assertEqual(state['counts'], {'uncertain': 1, 'flagged': 2})
+        with self.assertRaisesRegex(RuntimeError, 'unresolved outcomes'):
+            self.run_collection(resume_blocked=True)
+        self.assertEqual(target.call_count, 3)
+
+    def test_fable_style_untyped_refusal_does_not_halt_other_pairs(self):
+        self.check_untyped_refusal_is_held()
+
+    def test_astra_style_untyped_refusal_does_not_halt_other_pairs(self):
+        self.check_untyped_refusal_is_held(responses=True)
+
     def test_output_limit_retries_without_pausing_collection(self):
         attempts = []
         def call(**kwargs):
