@@ -1580,7 +1580,7 @@ def rebuild_base_row(case_id, paths):
         "Master_Case_ID": str(case_id),
         "Associated_Images": ", ".join(os.path.basename(p) for p in paths),
         "Image_SHA256": ", ".join(
-            hashlib.sha256(open(p, "rb").read()).hexdigest()[:16] for p in paths
+            hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()[:16] for p in paths
         ),
     }
 
@@ -2576,8 +2576,21 @@ def run_benchmark(
     gemini_client=None,
     resume=True,
     backup_dir=None,
+    concurrency=None,
+    max_job_attempts=3,
+    migration=None,
 ):
     """Run the RadLE benchmark, resuming existing clean cells when possible."""
+    if concurrency is not None:
+        if not resume:
+            raise ValueError("Concurrent collection requires resume=True")
+        import sys
+        from radle_concurrent_collection import collect
+        return collect(sys.modules[__name__], client=client, image_folder=image_folder,
+            output_csv=output_csv, models=models or MODELS, test_limit=test_limit,
+            prompt=prompt, max_output_tokens=max_output_tokens,
+            universal_temperature=universal_temperature, backup_dir=backup_dir,
+            concurrency=concurrency, max_attempts=max_job_attempts, migration=migration)
     models = models or MODELS
     image_index = build_image_index(image_folder)
     items = sorted(image_index.items(), key=lambda x: numeric_case_sort_key(x[0]))
@@ -3473,6 +3486,9 @@ def run_autonomous_openrouter_workflow(
     universal_temperature=UNIVERSAL_TEMPERATURE,
     allow_missing_reasoning=False,
     reuse_smoke_results=False,
+    concurrency=2,
+    max_job_attempts=3,
+    migration=None,
 ):
     """Run smoke, full benchmark, audit, repair, and hard gates with minimal notebook state."""
     if allow_missing_reasoning and (promote_private or export_public):
@@ -3587,6 +3603,9 @@ def run_autonomous_openrouter_workflow(
         backup_dir=run_paths["raw_backup_dir"],
         max_output_tokens=max_output_tokens,
         universal_temperature=universal_temperature,
+        concurrency=concurrency,
+        max_job_attempts=max_job_attempts,
+        migration=migration,
     )
     full_cascade = run_repair_cascade_until_clean(
         client=client,
@@ -3604,7 +3623,12 @@ def run_autonomous_openrouter_workflow(
         max_passes=max_repair_passes,
         max_output_tokens=max_output_tokens,
         universal_temperature=universal_temperature,
-    )
+    ) if concurrency is None else {
+        "source_csv": run_paths["raw_results_csv"], "source_label": "raw",
+        "repair_passes": 0,
+        "audit": audit_benchmark_output(run_paths["raw_results_csv"], models=models,
+            expected_case_ids=range(1, expected_cases + 1), max_output_tokens=max_output_tokens),
+    }
     assert_clean_benchmark_audit(full_cascade["audit"], expected_cases * len(model_names), "full", allow_missing_reasoning=allow_missing_reasoning)
     final_source_csv = full_cascade["source_csv"]
     final_source_label = full_cascade["source_label"]

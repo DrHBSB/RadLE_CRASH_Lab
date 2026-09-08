@@ -1,0 +1,13 @@
+# Morning concurrent collection
+
+The existing autonomous workflow defaults to two simultaneous API requests. The notebook exposes this as `concurrency=2`; prompts, model settings and response parsing are unchanged. Existing accepted answers and missing-reasoning flags are reused.
+
+To update an existing serial run, wait for its numbered checkpoint, stop that execution, then rerun the existing Git setup and import cells before continuing the workflow. Do not refresh the code while a benchmark cell is running. No runtime restart or separate loader is required.
+
+One coordinator saves request starts and responses in `raw/results.csv.concurrent/queue/events.jsonl`. An immutable baseline retains the pre-switch CSV. The ordinary CSV and numbered backups are rebuilt from that baseline and journal; a numbered backup is written after each ten newly completed cases and at completion or graceful stop. Keep the journal folder with the run.
+
+Each job has at most three attempts recorded in this journal, including retries after temporary HTTP errors or malformed answers. The counter survives restarts. Prior serial attempts remain in their original logs and are not invented or included in the new counter. Concurrent collection does not subsequently reset the counter through the legacy paid repair cascade. Final audits and provider/model gates still run.
+
+Quota/authentication failures stop new dispatches and save in-flight completions. Interrupted streams or uncertain requests require review before another paid call. A stale writer lock is retained after a hard crash: verify the old process is dead before recovery. A completed job budget does not authorize scientific admission or turn missing/quota-denied results into zero scores.
+
+The concurrent adapter supports the OpenAI-compatible Chat Completions and Responses interfaces used by this notebook. Native Anthropic and Google SDK lanes remain on the legacy runner until separately tested. `run_benchmark` retains serial behaviour unless concurrency is explicitly supplied; `run_autonomous_openrouter_workflow` defaults to two.

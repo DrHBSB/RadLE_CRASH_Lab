@@ -1,0 +1,223 @@
+"""Durable concurrent collection for the existing Morning benchmark contracts."""
+from collections import Counter
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import threading
+import time
+
+import pandas as pd
+
+import radle_job_queue as queue
+
+
+def digest(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def atomic_json(path, value):
+    temp = path.with_suffix(path.suffix + '.tmp')
+    with temp.open('w', encoding='utf-8') as handle:
+        handle.write(queue.encode(value) + '\n')
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temp, path)
+
+
+def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
+            prompt=None, max_output_tokens=16384, universal_temperature=.01,
+            backup_dir=None, concurrency=2, max_attempts=3, migration=None,
+            stop=None, resume_blocked=False):
+    """One request per attempt. CSV is derived from baseline + journal.
+
+    Attempts are counted durably from journal creation. Pre-journal failures are
+    retained in the baseline; their historical attempt count is not guessed.
+    Unknown request outcomes stop before inference. Native SDKs remain on the legacy lane
+    until their concurrency contracts have separately been tested.
+    """
+    output_csv = Path(output_csv)
+    folder = Path(str(output_csv) + '.concurrent')
+    folder.mkdir(parents=True, exist_ok=True)
+    if not models or len({m['name'] for m in models}) != len(models):
+        raise ValueError('Empty or duplicate model names')
+    if any(rb.uses_native_openai(m) or rb.uses_native_anthropic(m) or rb.uses_native_google(m) for m in models):
+        raise ValueError('Concurrent mode currently requires OpenAI-compatible provider clients')
+    stop = stop or threading.Event()
+    prompt = rb.PROMPT if prompt is None else prompt
+    image_index = rb.build_image_index(image_folder)
+    cases = sorted(image_index, key=rb.numeric_case_sort_key)
+    if test_limit:
+        cases = cases[:test_limit]
+    if not cases:
+        raise ValueError('No benchmark images')
+    base_rows = {case: rb.rebuild_base_row(case, image_index[case]) for case in cases}
+    full_image_hashes = {case: [digest(p) for p in image_index[case]] for case in cases}
+    # SDK retries would otherwise multiply the persisted scheduler budget.
+    single_client = client.with_options(max_retries=0, timeout=600)
+    with queue.writer_lock(folder):
+        baseline = folder / 'baseline.csv'
+        receipt_path = folder / 'baseline.json'
+        if not receipt_path.exists():
+            if (folder / 'queue' / 'events.jsonl').exists():
+                raise RuntimeError('Missing baseline receipt for existing journal')
+            if baseline.exists():
+                raise RuntimeError('Incomplete baseline initialization; inspect before recovery')
+            if output_csv.exists():
+                if migration and digest(output_csv) != migration['baseline_sha256']:
+                    raise RuntimeError('Migration source hash differs from witnessed checkpoint')
+                shutil.copyfile(output_csv, baseline)
+            else:
+                rb.atomic_to_csv(pd.DataFrame(list(base_rows.values())), str(baseline))
+            with baseline.open('r+b') as handle:
+                os.fsync(handle.fileno())
+            atomic_json(receipt_path, {'sha256': digest(baseline), 'migration': migration or {},
+                                      'created_utc': datetime.now(timezone.utc).isoformat()})
+        receipt = json.loads(receipt_path.read_text(encoding='utf-8'))
+        if digest(baseline) != receipt['sha256']:
+            raise RuntimeError('Frozen baseline changed')
+        if migration is not None and migration != receipt['migration']:
+            raise RuntimeError('Migration receipt changed')
+        migration = receipt['migration']
+        df = pd.read_csv(baseline, dtype=str, keep_default_na=False).astype('object')
+        if 'Master_Case_ID' not in df or df['Master_Case_ID'].duplicated().any():
+            raise ValueError('Invalid or duplicate baseline case IDs')
+        jobs, initial_attempts, legacy_failures = [], {}, []
+        model_by_name = {m['name']: m for m in models}
+        for case in cases:
+            df, row_index = rb._get_or_create_case_row(df, case)
+            for column, value in base_rows[case].items():
+                old = rb.safe_str(df.at[row_index, column]) if column in df else ''
+                if old and old != value:
+                    raise ValueError(f'Case/image identity changed: {case}/{column}')
+                df.at[row_index, column] = value
+            for model in models:
+                name = model['name']
+                row = df.loc[row_index]
+                info = rb.classify_cell_for_audit(row, name, attempts=0,
+                    max_output_tokens=max_output_tokens,
+                    require_token_usage=rb.requires_positive_token_usage(model),
+                    require_readable_reasoning=model.get('require_readable_reasoning', False))
+                if info['bucket'] == 'no_paid_cleanup':
+                    if not rb.apply_no_paid_cleanup_to_cell(df, row_index, name, info):
+                        raise RuntimeError(f'Unresolved offline cleanup: {case}/{name}')
+                    continue
+                if not info.get('needs_api_repair'):
+                    continue
+                job = queue.Job(case, name, {'model': model, 'images': full_image_hashes[case],
+                                            'prompt_sha256': hashlib.sha256(prompt.encode()).hexdigest()})
+                diagnosis = rb.safe_str(row.get(f'Diagnosis_{name}', '')).strip()
+                previous = migration.get('initial_attempts', {}).get(job.key)
+                if diagnosis and previous is None:
+                    legacy_failures.append(job.key)
+                if job.key in migration.get('uncertain_jobs', []):
+                    raise RuntimeError(f'Uncertain pre-migration request: {case}/{name}')
+                if previous is not None:
+                    initial_attempts[job.key] = previous
+                jobs.append(job)
+        row_by_case = {str(row['Master_Case_ID']): i for i, row in df.iterrows()}
+        contract = {'baseline_sha256': receipt['sha256'], 'cases': cases, 'models': models,
+                    'images': full_image_hashes, 'prompt_sha256': hashlib.sha256(prompt.encode()).hexdigest(),
+                    'max_output_tokens': max_output_tokens, 'temperature': universal_temperature,
+                    'source_sha256': digest(rb.__file__), 'adapter_sha256': digest(__file__),
+                    'scheduler_sha256': digest(queue.__file__)}
+        applied = {}
+        exported_cases = set()
+        jobs_by_case = {case: [j.key for j in jobs if j.case == case] for case in cases}
+        latest_states = {}
+
+        def export():
+            # Keep original baseline column order, then deterministic added columns.
+            old_columns = list(pd.read_csv(baseline, nrows=0).columns)
+            columns = old_columns + sorted(c for c in df if c not in old_columns)
+            final = rb._sort_benchmark_df(df.reindex(columns=columns))
+            path = rb.save_benchmark_progress(final, str(output_csv), numbered=True, backup_dir=backup_dir)
+            atomic_json(folder / 'checkpoint.json', {'csv_sha256': digest(output_csv),
+                'numbered_backup': str(path), 'saved_utc': datetime.now(timezone.utc).isoformat(),
+                'states': {k: {'status': v['status'], 'attempts': v['attempts']} for k, v in latest_states.items()}})
+            print('Concurrent checkpoint saved:', path, flush=True)
+
+        def checkpoint(states):
+            nonlocal latest_states, df
+            latest_states = states
+            for key, state in states.items():
+                if not state['value'] or applied.get(key) == state['attempts']:
+                    continue
+                case, name = json.loads(key)
+                fields = state['value'].get('fields', {})
+                if fields:
+                    df = rb._assign_row_values(df, row_by_case[case], fields)
+                applied[key] = state['attempts']
+                print(f"SAVED case={case} model={name} attempt={state['attempts']} status={state['status']}", flush=True)
+            finished_cases = {case for case, keys in jobs_by_case.items() if keys and
+                all(states[k]['status'] in {'success', 'flagged', 'terminal'} for k in keys)}
+            if len(finished_cases - exported_cases) >= rb.CHECKPOINT_CASE_INTERVAL:
+                export()
+                exported_cases.update(finished_cases)
+
+        def call(job, attempt):
+            model = model_by_name[job.model]
+            print(f'START case={job.case} model={job.model} attempt={attempt}', flush=True)
+            content = rb.build_content_array(job.case, image_index, prompt=prompt)
+            params = rb.build_api_params(model, content, max_output_tokens, universal_temperature)
+            t0 = time.time()
+            try:
+                if model.get('api_surface') == 'responses':
+                    response = rb.call_openrouter_responses(single_client, params, model)
+                else:
+                    response = single_client.chat.completions.create(**params)
+            except Exception as exc:
+                status = getattr(exc, 'status_code', None)
+                message = str(exc).lower()
+                if status == 402 or (status == 403 and any(x in message for x in ('limit exceeded', 'quota', 'balance'))):
+                    kind = 'quota'
+                elif status in {400, 401, 403, 404, 422}:
+                    kind = 'blocked'
+                elif status in {429, 500, 502, 503, 504}:
+                    kind = 'retry'
+                else:
+                    # A dropped connection/stream may already have incurred inference.
+                    kind = 'uncertain'
+                delay = min(60, 2 ** min(attempt, 6))
+                if status == 429:
+                    try:
+                        delay = max(delay, float(exc.response.headers.get('retry-after', delay)))
+                    except (ValueError, AttributeError):
+                        pass
+                return queue.Outcome(kind, {'http_status': status, 'error_type': type(exc).__name__},
+                                     retry_after=delay if kind == 'retry' else 0)
+            fields = rb.extract_result(response, round(time.time() - t0, 1), params, False, model)
+            info = rb.classify_cell_for_audit(pd.Series(fields), job.model, attempts=0,
+                max_output_tokens=max_output_tokens,
+                require_token_usage=rb.requires_positive_token_usage(model),
+                require_readable_reasoning=model.get('require_readable_reasoning', False))
+            if info['bucket'] == 'accepted':
+                kind = 'success'
+            elif not info.get('needs_api_repair'):
+                kind = 'flagged'
+            elif info['bucket'] == 'no_paid_cleanup':
+                kind = 'blocked'
+            else:
+                kind = 'retry'
+            return queue.Outcome(kind, {'fields': rb.make_json_safe(fields), 'reason': info['reason']},
+                                 retry_after=2 if kind == 'retry' else 0)
+
+        print(f'Concurrent collection: {len(jobs)} pending jobs, {concurrency} slots; max {max_attempts} attempts/job in this journal.', flush=True)
+        if legacy_failures:
+            print(f'Preserved {len(legacy_failures)} pre-journal failures; historical attempts remain in the original logs.', flush=True)
+        result = queue.run(jobs, call, folder / 'queue', concurrency=concurrency,
+                           max_attempts=max_attempts, initial_attempts=initial_attempts,
+                           contract=contract, stop=stop, resume_blocked=resume_blocked,
+                           checkpoint=checkpoint)
+        checkpoint(result['states'])
+        export()
+        counts = dict(Counter(v['status'] for v in result['states'].values()))
+        atomic_json(folder / 'status.json', {'complete': result['complete'], 'paused': result['paused'],
+                    'new_calls': result['calls'], 'counts': counts, 'concurrency': concurrency,
+                    'legacy_failures': legacy_failures, 'attempt_budget_scope': 'journal',
+                    'updated_utc': datetime.now(timezone.utc).isoformat()})
+        if not result['complete'] or any(v['status'] == 'terminal' for v in result['states'].values()):
+            raise RuntimeError(f'Concurrent collection saved; unresolved outcomes require review: {counts}. No legacy retry cascade will run.')
+        return rb._sort_benchmark_df(df)
