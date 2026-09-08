@@ -123,7 +123,7 @@ def replay(path, manifest):
 
 
 def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
-        stop=None, resume_blocked=False, checkpoint=None, initial_attempts=None, on_event=None, heartbeat_seconds=30):
+        stop=None, resume_blocked=False, checkpoint=None, initial_attempts=None, on_event=None, heartbeat_seconds=30, selected_keys=None):
     """call(job, attempt) makes ONE bounded-time request, with SDK retries disabled.
 
     checkpoint is an optional coordinator callback after each durable result.
@@ -139,6 +139,9 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
     by_key = {job.key: job for job in jobs}
     if len(by_key) != len(jobs):
         raise ValueError("Duplicate case/model job")
+    selected = set(by_key) if selected_keys is None else set(selected_keys)
+    if not selected <= set(by_key):
+        raise ValueError("Selected jobs must belong to the original journal")
     initial_attempts = initial_attempts or {}
     if any(k not in by_key or type(v) is not int or v < 0 for k, v in initial_attempts.items()):
         raise ValueError("Invalid inherited attempt counts")
@@ -156,11 +159,15 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                 {"source_sha256", "adapter_sha256", "scheduler_sha256"}} if isinstance(contract, dict) else {}
         if code:
             append(journal, {"type": "code_version", "at": time.time(), "hashes": code})
-        paused = any(s["status"] in {"quota", "blocked"} and not resume_blocked
-                     for s in states.values())
+        # A deliberate resume rechecks known rejections before spending on other jobs.
+        recovery = [k for k, s in states.items() if k in selected and s["status"] in {"quota", "blocked"}]
+        paused = bool(recovery) and (not resume_blocked or
+                    any(states[k]["attempts"] >= max_attempts for k in recovery))
+        if not resume_blocked:
+            recovery = []
         allowed = {"pending", "retry"} | ({"quota", "blocked"} if resume_blocked else set())
         pending = [key for key, state in states.items()
-                   if state["status"] in allowed and state["attempts"] < max_attempts]
+                   if key in selected and state["status"] in allowed and state["attempts"] < max_attempts]
         active = {}
         calls = 0
         last_heartbeat = time.monotonic()
@@ -181,7 +188,8 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                     # Do not refill until all observed completions have been saved.
                     while pending and len(active) < concurrency and not paused and not stop.is_set():
                         now = time.time()
-                        key = next((k for k in pending if states[k]["ready_at"] <= now), None)
+                        eligible = recovery[:1] if recovery else pending
+                        key = next((k for k in eligible if k in pending and states[k]["ready_at"] <= now), None)
                         if key is None:
                             break
                         pending.remove(key)
@@ -223,6 +231,10 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                                          "value": outcome.value, "ready_at": ready_at})
                         state.update(status=outcome.status, value=outcome.value, ready_at=ready_at)
                         del active[future]
+                        if key in recovery:
+                            recovery.remove(key)
+                            if outcome.status not in {"success", "flagged"}:
+                                paused = True
                         if outcome.status in {"quota", "blocked"}:
                             paused = True
                         elif outcome.status == "retry":

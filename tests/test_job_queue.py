@@ -120,6 +120,71 @@ class SchedulerTests(unittest.TestCase):
         self.assertFalse(again["complete"])
         self.assertEqual(again["calls"], 0)
 
+    def test_recovery_rechecks_rejection_before_pending_and_preserves_saved(self):
+        work = jobs(5)
+        def seed(job, attempt):
+            return s.Outcome({'0': 'uncertain', '1': 'success', '2': 'blocked'}[job.case])
+        first = s.run(work, seed, self.folder, concurrency=1)
+        seen = []
+        def recover(job, attempt):
+            seen.append((job.case, attempt))
+            return s.Outcome('success')
+        result = s.run(work, recover, self.folder, concurrency=2, resume_blocked=True)
+        self.assertEqual(seen[0], ('2', 2))
+        self.assertEqual(set(seen[1:]), {('3', 1), ('4', 1)})
+        self.assertEqual(result['states'][work[0].key], first['states'][work[0].key])
+        self.assertEqual(result['states'][work[1].key], first['states'][work[1].key])
+
+    def test_repeated_rejection_on_resume_makes_only_one_call(self):
+        work = jobs(5)
+        s.run(work, lambda *_: s.Outcome('blocked'), self.folder, concurrency=1)
+        seen = []
+        def refused(job, attempt):
+            seen.append((job.case, attempt))
+            return s.Outcome('blocked')
+        result = s.run(work, refused, self.folder, concurrency=3, resume_blocked=True)
+        self.assertEqual(seen, [('0', 2)])
+        self.assertTrue(result['paused'])
+        self.assertEqual(result['states'][work[1].key]['status'], 'pending')
+        s.run(work, refused, self.folder, concurrency=3, resume_blocked=True)
+        exhausted = s.run(work, lambda *_: self.fail('budget reset'), self.folder,
+                          concurrency=3, resume_blocked=True)
+        self.assertEqual(exhausted['calls'], 0)
+        self.assertTrue(exhausted['paused'])
+
+    def test_inconclusive_recheck_does_not_release_pending(self):
+        for outcome in ['retry', 'uncertain', 'terminal']:
+            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as folder:
+                work = jobs(3)
+                s.run(work, lambda *_: s.Outcome('quota'), folder, concurrency=1)
+                result = s.run(work, lambda *_: s.Outcome(outcome), folder,
+                               concurrency=2, resume_blocked=True)
+                self.assertEqual(result['calls'], 1)
+                self.assertTrue(result['paused'])
+                self.assertEqual(result['states'][work[1].key]['status'], 'pending')
+
+    def test_selection_ignores_excluded_block_without_changing_history(self):
+        work = jobs(4)
+        first = s.run(work, lambda *_: s.Outcome('blocked'), self.folder, concurrency=1)
+        journal = self.folder / 'events.jsonl'
+        before = journal.read_bytes()
+        seen = []
+        def call(job, attempt):
+            seen.append(job.key)
+            return s.Outcome('success')
+        result = s.run(work, call, self.folder, resume_blocked=True,
+                       selected_keys={j.key for j in work[1:]})
+        self.assertEqual(set(seen), {j.key for j in work[1:]})
+        self.assertEqual(result['states'][work[0].key], first['states'][work[0].key])
+        self.assertTrue(journal.read_bytes().startswith(before))
+        self.assertFalse(result['complete'])
+        self.assertFalse(result['paused'])
+        again = s.run(work, lambda *_: self.fail('duplicate'), self.folder,
+                      selected_keys={j.key for j in work[1:]})
+        self.assertEqual(again['calls'], 0)
+        with self.assertRaisesRegex(ValueError, 'Selected jobs'):
+            s.run(work, call, self.folder, selected_keys={'not-in-manifest'})
+
     def test_stop_drains_and_resume_only_unstarted(self):
         stop = threading.Event()
         both = threading.Barrier(2)

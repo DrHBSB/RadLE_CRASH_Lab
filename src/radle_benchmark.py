@@ -2595,6 +2595,7 @@ def run_benchmark(
     concurrency=None,
     max_job_attempts=3,
     migration=None,
+    resume_blocked=False,
 ):
     """Run the RadLE benchmark, resuming existing clean cells when possible."""
     if concurrency is not None:
@@ -2606,7 +2607,7 @@ def run_benchmark(
             output_csv=output_csv, models=models or MODELS, test_limit=test_limit,
             prompt=prompt, max_output_tokens=max_output_tokens,
             universal_temperature=universal_temperature, backup_dir=backup_dir,
-            concurrency=concurrency, max_attempts=max_job_attempts, migration=migration)
+            concurrency=concurrency, max_attempts=max_job_attempts, migration=migration, resume_blocked=resume_blocked)
     models = models or MODELS
     image_index = build_image_index(image_folder)
     items = sorted(image_index.items(), key=lambda x: numeric_case_sort_key(x[0]))
@@ -3505,6 +3506,7 @@ def run_autonomous_openrouter_workflow(
     concurrency=2,
     max_job_attempts=3,
     migration=None,
+    resume_blocked=True,
 ):
     """Run smoke, full benchmark, audit, repair, and hard gates with minimal notebook state."""
     if allow_missing_reasoning and (promote_private or export_public):
@@ -3622,6 +3624,7 @@ def run_autonomous_openrouter_workflow(
         concurrency=concurrency,
         max_job_attempts=max_job_attempts,
         migration=migration,
+        resume_blocked=resume_blocked,
     )
     full_cascade = run_repair_cascade_until_clean(
         client=client,

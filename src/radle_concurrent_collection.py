@@ -42,7 +42,18 @@ def diagnostic(exc):
         if status == 429:
             summary = "Provider rate limit; retry will wait."
         elif status in {401, 403}:
-            summary = "Provider rejected this request; check access or key allowance."
+            # Classify locally; do not print arbitrary provider text or echoed inputs.
+            message = str(exc).lower()
+            if any(term in message for term in ('limit exceeded', 'quota', 'balance', 'budget')):
+                summary = "Provider reports a spending or quota limit."
+            elif any(term in message for term in ('moderation', 'content policy', 'content filter', 'guardrail')):
+                summary = "Provider rejected the request under its content or guardrail policy."
+            elif 'allowlist' in message or 'ip address' in message:
+                summary = "Provider reports an IP or access allowlist restriction."
+            elif status == 401:
+                summary = "Provider rejected authentication."
+            else:
+                summary = "Provider refused access (HTTP 403); exact cause is not established."
         elif status == 402:
             summary = "Insufficient provider credit."
         elif status in {500, 502, 503, 504}:
@@ -86,6 +97,7 @@ class LiveProgress:
 
     def __init__(self, models, cases, jobs, jobs_by_case, concurrency, max_attempts, checkpoint_path):
         self.models, self.cases = models, cases
+        self.active_models = {m["name"] for m in models}
         self.jobs_by_case = jobs_by_case
         self.by_model = {m['name']: [j.key for j in jobs if j.model == m['name']] for m in models}
         self.slots, self.max_attempts = concurrency, max_attempts
@@ -142,7 +154,8 @@ class LiveProgress:
                     detail = f'{status.upper()} · Case {case} · {model.replace("_", " ")} · {reason} → {action}'
                 self.record(detail)
             self.phase = ('PAUSING · saving active requests'
-                          if any(v['status'] in {'quota', 'blocked'} for v in states.values()) else 'RUNNING')
+                          if any(v['status'] in {'quota', 'blocked'} and json.loads(k)[1] in self.active_models
+                                 for k, v in states.items()) else 'RUNNING')
             if event == 'stopped':
                 self.phase = ('COLLECTED · final backup pending' if all(v['status'] in {'success', 'flagged'} for v in states.values())
                               else 'STOPPED · saved progress retained; see outstanding work below')
@@ -191,6 +204,8 @@ class LiveProgress:
                 waiting = any(states[k]['status'] in {'pending', 'retry'} for k in keys)
                 activity = 'Complete' if complete == len(self.cases) else (
                     'Waiting for slot' if waiting and self.phase == 'RUNNING' else 'Awaiting review' if not waiting else 'Idle')
+            if name not in self.active_models:
+                activity = 'Paused this run'
             mc = Counter(states[k]['status'] for k in keys if k not in active)
             attention = [f'{mc[k]} {label}' for k, label in [('retry', 'retry'), ('uncertain', 'held'),
                          ('quota', 'credit'), ('blocked', 'blocked'), ('terminal', 'exhausted'), ('flagged', 'flagged')] if mc[k]]
@@ -246,7 +261,18 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
     full_image_hashes = {case: [digest(p) for p in image_index[case]] for case in cases}
     # SDK retries would otherwise multiply the persisted scheduler budget.
     single_client = client.with_options(max_retries=0, timeout=600)
+    active_model_names = {m['name'] for m in models}
     with queue.writer_lock(folder):
+        journal = folder / 'queue' / 'events.jsonl'
+        if journal.exists():
+            with journal.open(encoding='utf-8') as saved:
+                original_models = json.loads(saved.readline())['contract']['models']
+            original_by_name = {m['name']: m for m in original_models}
+            if active_model_names < set(original_by_name):
+                if any(queue.encode(m) != queue.encode(original_by_name[m['name']]) for m in models):
+                    raise ValueError('Run identity changed; selected model settings differ from original journal')
+                # Selection changes dispatch only; replay/export still use the full frozen roster.
+                models = original_models
         baseline = folder / 'baseline.csv'
         receipt_path = folder / 'baseline.json'
         if not receipt_path.exists():
@@ -318,6 +344,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
         latest_states = {}
         starts = {}
         live = LiveProgress(models, cases, jobs, jobs_by_case, concurrency, max_attempts, folder / 'checkpoint.json')
+        live.active_models = active_model_names
         def log(message):
             print(f'[{LiveProgress.stamp()} IST] ' + message, flush=True)
 
@@ -445,10 +472,16 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
         print(f'Concurrent collection: {len(jobs)} journal jobs, {concurrency} slots; max {max_attempts} attempts/job in this journal.', flush=True)
         if legacy_failures:
             print(f'Preserved {len(legacy_failures)} pre-journal failures; historical attempts remain in the original logs.', flush=True)
+        paused_models = sorted(set(model_by_name) - active_model_names)
+        if paused_models:
+            log('Paused models this run (saved history retained): ' + ', '.join(paused_models))
+        if resume_blocked:
+            log('RESUME: recheck saved access/credit failures first within the original attempt budget.')
         result = queue.run(jobs, call, folder / 'queue', concurrency=concurrency,
                            max_attempts=max_attempts, initial_attempts=initial_attempts,
                            contract=contract, stop=stop, resume_blocked=resume_blocked,
-                           checkpoint=checkpoint, on_event=progress, heartbeat_seconds=5)
+                           checkpoint=checkpoint, on_event=progress, heartbeat_seconds=5,
+                           selected_keys={j.key for j in jobs if j.model in active_model_names})
         checkpoint(result['states'])
         final_df = export()
         counts = dict(Counter(v['status'] for v in result['states'].values()))

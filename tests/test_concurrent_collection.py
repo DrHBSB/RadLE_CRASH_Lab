@@ -198,6 +198,82 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(self.client.chat.completions.create.call_count, 3)
         self.assertIsNone(result['final_manifest'])
 
+    def test_autonomous_rerun_rechecks_saved_403_with_original_budget(self):
+        import httpx
+        import openai
+        error = openai.PermissionDeniedError('Provider refused access',
+            response=httpx.Response(403, request=httpx.Request('POST', 'https://fixture.invalid')),
+            body={'error': {'message': 'Provider refused access'}})
+        self.client.chat.completions.create.side_effect = error
+        with self.assertRaisesRegex(RuntimeError, 'unresolved outcomes'):
+            self.run_collection(concurrency=1)
+        self.client.chat.completions.create.side_effect = lambda **_: self.response()
+        paths = rb.build_run_paths(self.root, run_label='fixture')
+        paths['master_images_folder'] = str(self.images)
+        paths['raw_results_csv'] = str(self.output)
+        result = rb.run_autonomous_openrouter_workflow(
+            client=self.client, dataset_root=self.root, run_paths=paths, models=self.models,
+            expected_cases=3, expected_returned_model_ids={'any_model': {'vendor/any-model'}},
+            expected_providers={'any_model': 'Fixture Provider'}, run_label='fixture',
+            smoke_first=False, allow_missing_reasoning=True)
+        self.assertEqual(len(result['final_df']), 3)
+        self.assertEqual(self.client.chat.completions.create.call_count, 4)
+        events = [json.loads(x) for x in Path(str(self.output)+'.concurrent/queue/events.jsonl').read_text().splitlines()]
+        starts = [(e['key'], e['attempt']) for e in events if e.get('type') == 'start']
+        self.assertEqual(starts[:2], [(q.encode(['1', 'any_model']), 1), (q.encode(['1', 'any_model']), 2)])
+
+    def test_rejection_diagnostics_classify_without_echoing_provider_text(self):
+        class Denied(Exception):
+            status_code = 403
+        for message, expected in [('Budget exceeded', 'spending'), ('Moderation rejected', 'content'),
+                                  ('IP address not in allowlist', 'allowlist'), ('Unspecified refusal', 'not established')]:
+            info = cc.diagnostic(Denied(message + ' secret-fixture-token private-clinical-text'))
+            self.assertIn(expected, info['summary'])
+            self.assertNotIn('secret-fixture-token', str(info))
+            self.assertNotIn('private-clinical-text', str(info))
+
+    def test_subset_resume_preserves_full_journal_and_paused_model_answers(self):
+        paused = dict(self.models[0], name='paused_model', id='vendor/paused')
+        self.models.append(paused)
+        attempts = []
+        class Denied(Exception):
+            status_code = 403
+        def seed(**kwargs):
+            attempts.append(kwargs['model'])
+            if len(attempts) == 4:
+                raise Denied('Provider refused access')
+            return self.response()
+        self.client.chat.completions.create.side_effect = seed
+        with self.assertRaisesRegex(RuntimeError, 'unresolved outcomes'):
+            self.run_collection(concurrency=1)
+        journal = Path(str(self.output)+'.concurrent/queue/events.jsonl')
+        before = journal.read_bytes()
+        manifest = json.loads(before.splitlines()[0])
+        before_states = q.replay(journal, manifest)
+        saved = pd.read_csv(self.output, keep_default_na=False)['Diagnosis_paused_model'].tolist()
+        self.models = self.models[:1]
+        self.client.chat.completions.create.side_effect = lambda **_: self.response()
+        with self.assertRaisesRegex(RuntimeError, 'unresolved outcomes'):
+            self.run_collection(resume_blocked=True)
+        self.assertEqual(self.client.chat.completions.create.call_count, 5)
+        self.assertTrue(journal.read_bytes().startswith(before))
+        after_states = q.replay(journal, manifest)
+        for key, state in before_states.items():
+            if json.loads(key)[1] == 'paused_model':
+                self.assertEqual(after_states[key], state)
+        frame = pd.read_csv(self.output, keep_default_na=False)
+        self.assertEqual(frame['Diagnosis_paused_model'].tolist(), saved)
+        self.assertEqual((frame['Diagnosis_any_model'] == 'synthetic finding').sum(), 3)
+        # Restoring the full original roster can resume the held provider at its next attempt.
+        self.models.append(paused)
+        self.run_collection(resume_blocked=True)
+        self.assertEqual(self.client.chat.completions.create.call_count, 7)
+        # Subset does not make a model config change acceptable.
+        self.models = [dict(self.models[0], id='vendor/changed')]
+        with self.assertRaisesRegex(ValueError, 'identity changed'):
+            self.run_collection()
+        self.assertEqual(self.client.chat.completions.create.call_count, 7)
+
     def test_output_limit_retries_without_pausing_collection(self):
         attempts = []
         def call(**kwargs):
