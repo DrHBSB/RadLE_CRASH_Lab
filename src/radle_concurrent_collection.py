@@ -1,6 +1,6 @@
 """Durable concurrent collection for the existing Morning benchmark contracts."""
-from collections import Counter
-from datetime import datetime, timezone
+from collections import Counter, deque
+from datetime import datetime, timezone, timedelta
 import hashlib
 import json
 import os
@@ -65,6 +65,153 @@ def progress_summary(states, active, jobs_by_case, total_jobs, total_cases):
     review = sum(counts[k] for k in ('uncertain', 'blocked', 'quota', 'terminal'))
     return (f"{collected}/{total_jobs} answers collected | {cases_done}/{total_cases} cases complete | "
             f"{len(active)} running | {counts['retry']} retry waiting | {review} need review | {counts['pending']} queued")
+
+
+
+def notebook_display():
+    """Use the notebook publisher when available; ordinary consoles stay plain."""
+    try:
+        from IPython import get_ipython
+        from IPython.display import display
+        if getattr(get_ipython(), 'kernel', None) is not None:
+            return display
+    except Exception:
+        pass
+    return None
+
+
+class LiveProgress:
+    """Read-only view of coordinator state; rendering never controls collection."""
+    zone = timezone(timedelta(hours=5, minutes=30), 'IST')
+
+    def __init__(self, models, cases, jobs, jobs_by_case, concurrency, max_attempts, checkpoint_path):
+        self.models, self.cases = models, cases
+        self.jobs_by_case = jobs_by_case
+        self.by_model = {m['name']: [j.key for j in jobs if j.model == m['name']] for m in models}
+        self.slots, self.max_attempts = concurrency, max_attempts
+        self.publisher, self.handle = notebook_display(), None
+        self.starts, self.events = {}, deque(maxlen=5)
+        self.states, self.active = {}, ()
+        self.phase, self.last_save, self.backup = 'RUNNING', None, 'None yet'
+        try:
+            record = json.loads(Path(checkpoint_path).read_text(encoding='utf-8'))
+            self.backup = self.backup_label(record['numbered_backup'], record['saved_utc'])
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+
+    @classmethod
+    def stamp(cls):
+        return datetime.now(cls.zone).strftime('%H:%M:%S')
+
+    @classmethod
+    def backup_label(cls, path, saved_utc):
+        name = str(path).replace('\\', '/').rsplit('/', 1)[-1]
+        when = datetime.fromisoformat(saved_utc).astimezone(cls.zone).strftime('%H:%M:%S IST')
+        return f'{name} at {when}'
+
+    def record(self, message):
+        self.events.append(f'{self.stamp()}  {message}')
+
+    def update(self, event, key, states, active):
+        if self.publisher is None:
+            return False
+        try:
+            self.states, self.active = states, tuple(active)
+            if event == 'resumed':
+                self.record('RESUMED · saved answers reused; request history preserved')
+            elif event == 'started':
+                self.starts[key] = time.monotonic()
+            elif event == 'saved':
+                state = states[key]
+                case, model = json.loads(key)
+                duration = max(0, time.monotonic() - self.starts.pop(key, time.monotonic()))
+                status, value = state['status'], state.get('value', {})
+                reason = (value.get('diagnostic') or {}).get('summary') or value.get('reason') or 'See saved evidence'
+                reason = reason.replace('_', ' ')
+                if status in {'success', 'flagged'}:
+                    self.last_save = time.monotonic()
+                    detail = f'SAVED · Case {case} · {model.replace("_", " ")} · {duration:.0f}s'
+                    if status == 'flagged':
+                        detail += f' · flag: {reason}'
+                else:
+                    action = {'retry': f'retry queued; {state["attempts"]}/{self.max_attempts} attempts used',
+                              'uncertain': 'held for review; other jobs continue',
+                              'quota': 'credit issue; dispatch paused',
+                              'blocked': 'access/request issue; dispatch paused',
+                              'terminal': 'attempt limit reached; review needed'}[status]
+                    detail = f'{status.upper()} · Case {case} · {model.replace("_", " ")} · {reason} → {action}'
+                self.record(detail)
+            if any(v['status'] in {'quota', 'blocked'} for v in states.values()):
+                self.phase = 'PAUSING · saving active requests'
+            if event == 'stopped':
+                self.phase = ('COMPLETE' if all(v['status'] in {'success', 'flagged'} for v in states.values())
+                              else 'STOPPED · saved progress retained; see outstanding work below')
+            self.draw()
+            return True
+        except Exception:
+            self.publisher = None
+            print('Live display unavailable; continuing with console progress.', flush=True)
+            return False
+
+    def saved_backup(self, path, saved_utc):
+        if self.publisher is None:
+            return False
+        try:
+            self.backup = self.backup_label(path, saved_utc)
+            self.record('BACKUP · ' + self.backup)
+            self.draw()
+            return True
+        except Exception:
+            self.publisher = None
+            return False
+
+    def render(self):
+        states, active = self.states, set(self.active)
+        counts = Counter(v['status'] for k, v in states.items() if k not in active)
+        total = len(self.models) * len(self.cases)
+        saved = total - len(states) + counts['success'] + counts['flagged']
+        done = sum(all(states[k]['status'] in {'success', 'flagged'} for k in keys)
+                   for keys in self.jobs_by_case.values())
+        fill = int(20 * saved / total) if total else 20
+        percent = 100 * saved / total if total else 100
+        lines = [f'BENCHMARK · {len(self.cases)} cases × {len(self.models)} models · {self.phase}', '',
+                 f'Answers saved  {saved:,} / {total:,}  {"█" * fill}{"░" * (20 - fill)}  {percent:.0f}%',
+                 f'Cases complete {done} / {len(self.cases)} · Requests active {len(active)} / {self.slots}', '']
+        rows = []
+        for model in self.models:
+            name = model['name']
+            keys = self.by_model[name]
+            complete = len(self.cases) - len(keys) + sum(states[k]['status'] in {'success', 'flagged'} for k in keys)
+            running = [k for k in self.active if k in keys]
+            activity = '; '.join(f'Case {json.loads(k)[0]} · {max(0, time.monotonic() - self.starts.get(k, time.monotonic())):.0f}s'
+                                 f' · try {states[k]["attempts"]}/{self.max_attempts}' for k in running)
+            if not activity:
+                waiting = any(states[k]['status'] in {'pending', 'retry'} for k in keys)
+                activity = 'Complete' if complete == len(self.cases) else (
+                    'Waiting for slot' if waiting and self.phase == 'RUNNING' else 'Awaiting review' if not waiting else 'Idle')
+            mc = Counter(states[k]['status'] for k in keys if k not in active)
+            attention = [f'{mc[k]} {label}' for k, label in [('retry', 'retry'), ('uncertain', 'held'),
+                         ('quota', 'credit'), ('blocked', 'blocked'), ('terminal', 'exhausted'), ('flagged', 'flagged')] if mc[k]]
+            rows.append([str(model.get('display_name') or name.replace('_', ' ')), f'{complete} / {len(self.cases)}',
+                         activity, ', '.join(attention) or '—'])
+        table = [['MODEL', 'SAVED', 'ACTIVITY', 'ATTENTION']] + rows
+        widths = [max(len(row[i]) for row in table) for i in range(3)]
+        lines.extend('  '.join(row[i].ljust(widths[i]) for i in range(3)) + '  ' + row[3] for row in table)
+        held = sum(counts[k] for k in ('uncertain', 'quota', 'blocked', 'terminal'))
+        last = f'{max(0, time.monotonic() - self.last_save):.0f}s ago' if self.last_save is not None else 'No new answer this session'
+        lines += ['', f'Waiting: {counts["pending"]} queued · {counts["retry"]} retry · {held} need review',
+                  f'Last answer saved: {last}', f'Last backup: {self.backup}',
+                  f'Updated: {self.stamp()} IST · refresh every 5s while collecting', '', 'RECENT EVENTS', *self.events]
+        return '\n'.join(lines)
+
+    def draw(self):
+        content = {'text/plain': self.render()}
+        if self.handle is None:
+            self.handle = self.publisher(content, raw=True, display_id=True)
+            if self.handle is None:
+                raise RuntimeError('Notebook display did not return an update handle')
+        else:
+            self.handle.update(content, raw=True)
 
 
 def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
@@ -168,10 +315,17 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
         jobs_by_case = {case: [j.key for j in jobs if j.case == case] for case in cases}
         latest_states = {}
         starts = {}
+        live = LiveProgress(models, cases, jobs, jobs_by_case, concurrency, max_attempts, folder / 'checkpoint.json')
         def log(message):
             print(datetime.now(timezone.utc).strftime('[%H:%M:%S UTC] ') + message, flush=True)
 
         def progress(event, key, states, active):
+            if live.update(event, key, states, active):
+                return
+            if event == 'heartbeat' and time.monotonic() - progress.last_console < 30:
+                return
+            if event == 'heartbeat':
+                progress.last_console = time.monotonic()
             if event == 'started':
                 starts[key] = time.monotonic()
                 case, name = json.loads(key)
@@ -205,6 +359,8 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                     f"case {json.loads(k)[0]} / {json.loads(k)[1].replace('_', ' ')} ({time.monotonic() - starts.get(k, time.monotonic()):.0f}s)"
                     for k in active))
 
+        progress.last_console = time.monotonic()
+
         def export():
             # Keep original baseline column order, then deterministic added columns.
             old_columns = list(pd.read_csv(baseline, nrows=0).columns)
@@ -214,7 +370,8 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             atomic_json(folder / 'checkpoint.json', {'csv_sha256': digest(output_csv),
                 'numbered_backup': str(path), 'saved_utc': datetime.now(timezone.utc).isoformat(),
                 'states': {k: {'status': v['status'], 'attempts': v['attempts']} for k, v in latest_states.items()}})
-            log(f'BACKUP SAVED: {path}')
+            if not live.saved_backup(path, datetime.now(timezone.utc).isoformat()):
+                log(f'BACKUP SAVED: {path}')
 
         def checkpoint(states):
             nonlocal latest_states, df
@@ -281,13 +438,13 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             return queue.Outcome(kind, {'fields': rb.make_json_safe(fields), 'reason': info['reason']},
                                  retry_after=2 if kind == 'retry' else 0)
 
-        print(f'Concurrent collection: {len(jobs)} pending jobs, {concurrency} slots; max {max_attempts} attempts/job in this journal.', flush=True)
+        print(f'Concurrent collection: {len(jobs)} journal jobs, {concurrency} slots; max {max_attempts} attempts/job in this journal.', flush=True)
         if legacy_failures:
             print(f'Preserved {len(legacy_failures)} pre-journal failures; historical attempts remain in the original logs.', flush=True)
         result = queue.run(jobs, call, folder / 'queue', concurrency=concurrency,
                            max_attempts=max_attempts, initial_attempts=initial_attempts,
                            contract=contract, stop=stop, resume_blocked=resume_blocked,
-                           checkpoint=checkpoint, on_event=progress)
+                           checkpoint=checkpoint, on_event=progress, heartbeat_seconds=5)
         checkpoint(result['states'])
         export()
         counts = dict(Counter(v['status'] for v in result['states'].values()))

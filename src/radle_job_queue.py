@@ -190,14 +190,14 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                         active[pool.submit(call, job, attempt)] = key
                         calls += 1
                         report("started", key)
+                    if time.monotonic() - last_heartbeat >= heartbeat_seconds:
+                        report("heartbeat")
+                        last_heartbeat = time.monotonic()
                     if not active:
                         if pending and not paused and not stop.is_set():
                             stop.wait(min(.05, max(0, min(states[k]["ready_at"] for k in pending) - time.time())))
                         continue
                     done, _ = wait(active, timeout=.05, return_when=FIRST_COMPLETED)
-                    if time.monotonic() - last_heartbeat >= heartbeat_seconds:
-                        report("heartbeat")
-                        last_heartbeat = time.monotonic()
                     for future in done:
                         key = active[future]
                         state = states[key]

@@ -68,6 +68,30 @@ class IntegrationTests(unittest.TestCase):
         pd.testing.assert_frame_equal(final, pd.read_csv(self.output, dtype=str, keep_default_na=False))
         self.client.with_options.assert_called_with(max_retries=0, timeout=600)
 
+    def test_live_display_updates_and_final_backup_snapshot(self):
+        handle = Mock()
+        publisher = Mock(return_value=handle)
+        with patch.object(cc, 'notebook_display', return_value=publisher):
+            self.run_collection()
+        self.assertEqual(publisher.call_count, 1)
+        self.assertGreater(handle.update.call_count, 3)
+        final = handle.update.call_args.args[0]['text/plain']
+        self.assertIn('COMPLETE', final)
+        self.assertIn('Answers saved  3 / 3', final)
+        self.assertIn('results_BACKUP_', final)
+        self.assertEqual(self.client.chat.completions.create.call_count, 3)
+        self.assertTrue(self.output.exists())
+
+    def test_failed_display_update_keeps_results_and_console_fallback(self):
+        handle = Mock()
+        handle.update.side_effect = RuntimeError('frontend failed')
+        with patch.object(cc, 'notebook_display', return_value=Mock(return_value=handle)):
+            self.run_collection()
+        self.assertEqual(handle.update.call_count, 1)
+        self.assertEqual(self.client.chat.completions.create.call_count, 3)
+        final = pd.read_csv(self.output)
+        self.assertEqual((final['Diagnosis_any_model'] == 'synthetic finding').sum(), 3)
+
     def test_input_drift_refuses_calls(self):
         self.run_collection()
         Image.new('RGB', (8, 8), 'blue').save(self.images / '1.png')
