@@ -323,6 +323,63 @@ class IntegrationTests(unittest.TestCase):
     def test_astra_style_untyped_refusal_does_not_halt_other_pairs(self):
         self.check_untyped_refusal_is_held(responses=True)
 
+    def test_checkpoint_projects_new_result_after_active_attempt_carries_old_fields(self):
+        real_run = q.run
+        for repair in (False, True):
+            with self.subTest(repair=repair):
+                self.output = self.root / ('repair.csv' if repair else 'retry.csv')
+                release = threading.Event()
+                second_attempt = threading.Event()
+                witnessed = []
+                expected = {}
+                def wrapped_run(jobs, call, folder, **options):
+                    checkpoint = options['checkpoint']
+                    def project(states):
+                        checkpoint(states)
+                        key1, key2 = q.Job('1', 'any_model', {}).key, q.Job('2', 'any_model', {}).key
+                        if (states[key1]['attempts'] == 2 and states[key1]['status'] == 'uncertain'
+                                and states[key2]['attempts'] == 2 and states[key2]['status'] == 'success'):
+                            witnessed.append(states[key1]['value']['fields']['Diagnosis_any_model'])
+                            release.set()
+                    options['checkpoint'] = project
+                    def fixture(job, attempt):
+                        diagnosis = f'case {job.case}, attempt {attempt}'
+                        fields = {'Diagnosis_any_model': diagnosis,
+                                  'Raw_Response_any_model': json.dumps({'diagnosis': diagnosis}),
+                                  'Reasoning_Raw_any_model': f'exact reasoning, case {job.case}\ntry {attempt}'}
+                        if job.case in {'1', '2'} and attempt == 1:
+                            return q.Outcome('terminal' if repair else 'retry', {'fields': fields})
+                        if job.case == '1':
+                            second_attempt.set()
+                            if not release.wait(5):
+                                raise AssertionError('companion checkpoint did not release active request')
+                        elif job.case == '2':
+                            if not second_attempt.wait(5):
+                                raise AssertionError('second attempt did not overlap')
+                        expected[job.case] = fields
+                        return q.Outcome('success', {'fields': fields})
+                    return real_run(jobs, fixture, folder, **options)
+                with patch.object(q, 'run', side_effect=wrapped_run), contextlib.redirect_stdout(io.StringIO()):
+                    frame = self.run_collection(concurrency=2, repair_once=repair)
+                self.assertEqual(witnessed, ['case 1, attempt 1'])
+                final = pd.read_csv(self.output, dtype=str, keep_default_na=False).set_index('Master_Case_ID')
+                for case, fields in expected.items():
+                    for column, value in fields.items():
+                        self.assertEqual(final.loc[case, column], value)
+                journal = Path(str(self.output) + '.concurrent/queue/events.jsonl')
+                before = journal.read_bytes()
+                manifest = json.loads(before.splitlines()[0])
+                states = q.replay(journal, manifest)
+                for key, state in states.items():
+                    case, _ = json.loads(key)
+                    self.assertEqual(state['value']['fields'], expected[case])
+                self.client.chat.completions.create.assert_not_called()
+                with contextlib.redirect_stdout(io.StringIO()):
+                    resumed = self.run_collection(concurrency=3, repair_once=repair)
+                self.client.chat.completions.create.assert_not_called()
+                pd.testing.assert_frame_equal(frame, resumed)
+                self.assertTrue(journal.read_bytes().startswith(before))
+
     def test_explicit_repair_recovers_uncertain_once_and_preserves_other_answers(self):
         self.client.chat.completions.create.side_effect = [TimeoutError('fixture'), self.response(), self.response(), self.response()]
         frame = self.run_collection(concurrency=1, repair_once=True)

@@ -419,13 +419,17 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             nonlocal latest_states, df
             latest_states = states
             for key, state in states.items():
-                if not state['value'] or applied.get(key) == state['attempts']:
+                fields = state['value'].get('fields', {})
+                if not fields:
+                    continue
+                # Starting another attempt retains the prior result until its replacement arrives.
+                # Cache the fields themselves, not the active attempt counter.
+                field_hash = hashlib.sha256(queue.encode(fields).encode('utf-8')).hexdigest()
+                if applied.get(key) == field_hash:
                     continue
                 case, name = json.loads(key)
-                fields = state['value'].get('fields', {})
-                if fields:
-                    df = rb._assign_row_values(df, row_by_case[case], fields)
-                applied[key] = state['attempts']
+                df = rb._assign_row_values(df, row_by_case[case], fields)
+                applied[key] = field_hash
             finished_cases = {case for case, keys in jobs_by_case.items() if keys and
                 all(states[k]['status'] in {'success', 'flagged', 'terminal', 'rejected', 'failed'} for k in keys)}
             if len(finished_cases - exported_cases) >= rb.CHECKPOINT_CASE_INTERVAL:
