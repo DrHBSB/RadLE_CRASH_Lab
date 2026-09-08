@@ -162,7 +162,7 @@ class SchedulerTests(unittest.TestCase):
         def call(*_):
             raise TimeoutError("secret-token-should-not-be-saved")
         first = s.run(jobs(2), call, self.folder, concurrency=1)
-        self.assertTrue(first["paused"])
+        self.assertFalse(first["paused"])
         again = s.run(jobs(2), call, self.folder, resume_blocked=True)
         self.assertEqual(again["calls"], 0)
         self.assertNotIn("secret-token", (self.folder / "events.jsonl").read_text())
@@ -205,7 +205,7 @@ class SchedulerTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 s.run(jobs(1), lambda *_: s.Outcome("success"), self.folder)
         again = s.run(jobs(1), lambda *_: self.fail(), self.folder)
-        self.assertTrue(again["paused"])
+        self.assertFalse(again["paused"])
         self.assertEqual(again["calls"], 0)
 
     def test_killed_process_blocks_replay_even_after_verified_lock_removal(self):
@@ -226,7 +226,7 @@ run([Job('0', 'unseen_model_0', {'input_hash':'0', 'effort':'high'})], call, sys
         # subprocess.run returned: this specific local test process is definitely dead.
         (self.folder / "writer.lock").unlink()
         again = s.run(jobs(1), lambda *_: self.fail(), self.folder)
-        self.assertTrue(again["paused"])
+        self.assertFalse(again["paused"])
         self.assertEqual(again["calls"], 0)
 
     def test_thousand_jobs_no_duplicate_keys_and_serial_parity(self):

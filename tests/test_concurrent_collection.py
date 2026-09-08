@@ -146,6 +146,26 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(self.client.chat.completions.create.call_count, 3)
         self.assertIsNone(result['final_manifest'])
 
+    def test_output_limit_retries_without_pausing_collection(self):
+        attempts = []
+        def call(**kwargs):
+            attempts.append(1)
+            if len(attempts) == 1:
+                failure = RuntimeError('known incomplete stream')
+                failure.radle_diagnostic = {'category': 'output_limit',
+                    'summary': 'Response stopped at its output-token limit.',
+                    'output_tokens': 8192, 'max_output_tokens': 8192}
+                raise failure
+            return self.response()
+        self.client.chat.completions.create.side_effect = call
+        self.run_collection(test_limit=1)
+        self.assertEqual(len(attempts), 2)
+        status = json.loads(Path(str(self.output) + '.concurrent/status.json').read_text())
+        self.assertTrue(status['complete'])
+        self.assertFalse(status['paused'])
+        self.assertEqual(status['counts'], {'flagged': 1})
+
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -27,6 +27,46 @@ def atomic_json(path, value):
     os.replace(temp, path)
 
 
+def diagnostic(exc):
+    known = getattr(exc, "radle_diagnostic", None)
+    if isinstance(known, dict):
+        result = dict(known)
+    else:
+        known_messages = {
+            "Responses stream ended without a completed response.": "Stream ended before a complete response arrived.",
+            "Streamed reasoning differs from the final typed reasoning fields.": "Stream reasoning failed its consistency check.",
+            "Reasoning stream delta/done mismatch.": "Stream fragments failed their consistency check.",
+        }
+        summary = known_messages.get(str(exc), "Request outcome could not be verified; inspect saved evidence.")
+        status = getattr(exc, "status_code", None)
+        if status == 429:
+            summary = "Provider rate limit; retry will wait."
+        elif status in {401, 403}:
+            summary = "Provider rejected this request; check access or key allowance."
+        elif status == 402:
+            summary = "Insufficient provider credit."
+        elif status in {500, 502, 503, 504}:
+            summary = "Temporary provider server error."
+        elif "Timeout" in type(exc).__name__:
+            summary = "Request timed out; remote completion is unknown."
+        result = {"summary": summary}
+    result["error_type"] = type(exc).__name__
+    if getattr(exc, "radle_archive", None):
+        result["archive"] = str(exc.radle_archive)
+    return result
+
+
+def progress_summary(states, active, jobs_by_case, total_jobs, total_cases):
+    active = set(active)
+    counts = Counter(v['status'] for k, v in states.items() if k not in active)
+    collected = total_jobs - len(states) + counts['success'] + counts['flagged']
+    cases_done = sum(not keys or all(states[k]['status'] in {'success', 'flagged'} for k in keys)
+                     for keys in jobs_by_case.values())
+    review = sum(counts[k] for k in ('uncertain', 'blocked', 'quota', 'terminal'))
+    return (f"{collected}/{total_jobs} answers collected | {cases_done}/{total_cases} cases complete | "
+            f"{len(active)} running | {counts['retry']} retry waiting | {review} need review | {counts['pending']} queued")
+
+
 def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             prompt=None, max_output_tokens=16384, universal_temperature=.01,
             backup_dir=None, concurrency=2, max_attempts=3, migration=None,
@@ -127,6 +167,43 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
         exported_cases = set()
         jobs_by_case = {case: [j.key for j in jobs if j.case == case] for case in cases}
         latest_states = {}
+        starts = {}
+        def log(message):
+            print(datetime.now(timezone.utc).strftime('[%H:%M:%S UTC] ') + message, flush=True)
+
+        def progress(event, key, states, active):
+            if event == 'started':
+                starts[key] = time.monotonic()
+                case, name = json.loads(key)
+                log(f"RUNNING  case {case} | {name.replace('_', ' ')} | attempt {states[key]['attempts']}/{max_attempts}")
+            elif event == 'saved':
+                state = states[key]
+                case, name = json.loads(key)
+                value = state['value']
+                elapsed = time.monotonic() - starts.pop(key, time.monotonic())
+                labels = {'success': 'OK', 'flagged': 'OK + FLAG', 'retry': 'RETRY WAIT',
+                          'uncertain': 'REVIEW', 'quota': 'PAUSE', 'blocked': 'PAUSE', 'terminal': 'EXHAUSTED'}
+                detail = (value.get('diagnostic') or {}).get('summary') or value.get('reason') or value.get('error_type', '')
+                if detail:
+                    detail = detail.replace('_', ' ')
+                if state['status'] == 'retry':
+                    detail += f"; eligible in {max(0, round(state['ready_at'] - time.time()))}s, when a slot is free"
+                log(f"{labels[state['status']]}  case {case} | {name.replace('_', ' ')} | {elapsed:.1f}s | {detail} | saved")
+                evidence = value.get('diagnostic') or {}
+                if 'output_tokens' in evidence:
+                    log(f"  Output tokens: {evidence['output_tokens']} / {evidence.get('max_output_tokens', '?')}")
+                if evidence.get('archive'):
+                    log(f"  Evidence: {evidence['archive']}")
+                if state['status'] in {'quota', 'blocked'}:
+                    log('PAUSING: account/access problem; waiting for in-flight responses to be saved.')
+                elif state['status'] == 'uncertain':
+                    log('HELD for targeted review; other jobs continue. This request will not be blindly resent.')
+            if event in {'resumed', 'saved', 'heartbeat', 'stopped'}:
+                log(progress_summary(states, active, jobs_by_case, len(cases) * len(models), len(cases)))
+            if event == 'heartbeat' and active:
+                log('Still waiting: ' + '; '.join(
+                    f"case {json.loads(k)[0]} / {json.loads(k)[1].replace('_', ' ')} ({time.monotonic() - starts.get(k, time.monotonic()):.0f}s)"
+                    for k in active))
 
         def export():
             # Keep original baseline column order, then deterministic added columns.
@@ -137,7 +214,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             atomic_json(folder / 'checkpoint.json', {'csv_sha256': digest(output_csv),
                 'numbered_backup': str(path), 'saved_utc': datetime.now(timezone.utc).isoformat(),
                 'states': {k: {'status': v['status'], 'attempts': v['attempts']} for k, v in latest_states.items()}})
-            print('Concurrent checkpoint saved:', path, flush=True)
+            log(f'BACKUP SAVED: {path}')
 
         def checkpoint(states):
             nonlocal latest_states, df
@@ -150,7 +227,6 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 if fields:
                     df = rb._assign_row_values(df, row_by_case[case], fields)
                 applied[key] = state['attempts']
-                print(f"SAVED case={case} model={name} attempt={state['attempts']} status={state['status']}", flush=True)
             finished_cases = {case for case, keys in jobs_by_case.items() if keys and
                 all(states[k]['status'] in {'success', 'flagged', 'terminal'} for k in keys)}
             if len(finished_cases - exported_cases) >= rb.CHECKPOINT_CASE_INTERVAL:
@@ -159,7 +235,6 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
 
         def call(job, attempt):
             model = model_by_name[job.model]
-            print(f'START case={job.case} model={job.model} attempt={attempt}', flush=True)
             content = rb.build_content_array(job.case, image_index, prompt=prompt)
             params = rb.build_api_params(model, content, max_output_tokens, universal_temperature)
             t0 = time.time()
@@ -171,7 +246,9 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             except Exception as exc:
                 status = getattr(exc, 'status_code', None)
                 message = str(exc).lower()
-                if status == 402 or (status == 403 and any(x in message for x in ('limit exceeded', 'quota', 'balance'))):
+                if (getattr(exc, 'radle_diagnostic', {}) or {}).get('category') == 'output_limit':
+                    kind = 'retry'
+                elif status == 402 or (status == 403 and any(x in message for x in ('limit exceeded', 'quota', 'balance'))):
                     kind = 'quota'
                 elif status in {400, 401, 403, 404, 422}:
                     kind = 'blocked'
@@ -186,7 +263,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                         delay = max(delay, float(exc.response.headers.get('retry-after', delay)))
                     except (ValueError, AttributeError):
                         pass
-                return queue.Outcome(kind, {'http_status': status, 'error_type': type(exc).__name__},
+                return queue.Outcome(kind, {'http_status': status, 'error_type': type(exc).__name__, 'diagnostic': diagnostic(exc)},
                                      retry_after=delay if kind == 'retry' else 0)
             fields = rb.extract_result(response, round(time.time() - t0, 1), params, False, model)
             info = rb.classify_cell_for_audit(pd.Series(fields), job.model, attempts=0,
@@ -210,7 +287,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
         result = queue.run(jobs, call, folder / 'queue', concurrency=concurrency,
                            max_attempts=max_attempts, initial_attempts=initial_attempts,
                            contract=contract, stop=stop, resume_blocked=resume_blocked,
-                           checkpoint=checkpoint)
+                           checkpoint=checkpoint, on_event=progress)
         checkpoint(result['states'])
         export()
         counts = dict(Counter(v['status'] for v in result['states'].values()))
@@ -219,5 +296,13 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                     'legacy_failures': legacy_failures, 'attempt_budget_scope': 'journal',
                     'updated_utc': datetime.now(timezone.utc).isoformat()})
         if not result['complete'] or any(v['status'] == 'terminal' for v in result['states'].values()):
-            raise RuntimeError(f'Concurrent collection saved; unresolved outcomes require review: {counts}. No legacy retry cascade will run.')
+            log('REVIEW REQUIRED. Completed answers are saved; unresolved requests were not blindly resent.')
+            for key, state in result['states'].items():
+                if state['status'] in {'uncertain', 'quota', 'blocked', 'terminal'}:
+                    case, name = json.loads(key)
+                    detail = (state['value'].get('diagnostic') or {}).get('summary') or state['value'].get('reason') or 'Older log has no detailed error; inspect the saved stream.'
+                    log(f"  case {case} | {name.replace('_', ' ')}: {detail}")
+            log(f"Evidence journal: {folder / 'queue' / 'events.jsonl'}")
+            log('Next: review the listed request evidence before resuming. Do not delete the journal or rerun uncertain calls blindly.')
+            raise RuntimeError('Collection has unresolved outcomes; completed answers saved. See the case-specific explanation above.')
         return rb._sort_benchmark_df(df)

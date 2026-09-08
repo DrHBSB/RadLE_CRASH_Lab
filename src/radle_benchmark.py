@@ -1679,7 +1679,19 @@ def collect_openrouter_response_stream(stream, archive=None):
             archive.flush()
         kind = event.get("type", "")
         if kind in {"error", "response.failed", "response.incomplete"}:
-            raise RuntimeError("Responses stream failed or was incomplete; retain its event archive.")
+            failure = RuntimeError("Responses stream failed or was incomplete; retain its event archive.")
+            response_data = event.get("response") or {}
+            reason = (response_data.get("incomplete_details") or {}).get("reason")
+            usage = response_data.get("usage") or {}
+            failure.radle_diagnostic = {
+                "category": "output_limit" if reason == "max_output_tokens" else "stream_incomplete",
+                "summary": "Response stopped at its output-token limit." if reason == "max_output_tokens" else "Provider stream did not complete.",
+            }
+            for key, value in (("output_tokens", usage.get("output_tokens")),
+                               ("max_output_tokens", response_data.get("max_output_tokens"))):
+                if type(value) is int:
+                    failure.radle_diagnostic[key] = value
+            raise failure
         if kind == "response.completed":
             if terminal is not None:
                 raise RuntimeError("Multiple terminal Responses events.")
@@ -1779,6 +1791,10 @@ def call_openrouter_responses(api_client, api_params, model):
                     data = collect_openrouter_response_stream(response, archive)
             else:
                 data = collect_openrouter_response_stream(response)
+        except Exception as exc:
+            if archive_path:
+                exc.radle_archive = str(archive_path)
+            raise
         finally:
             if hasattr(response, "close"):
                 response.close()
