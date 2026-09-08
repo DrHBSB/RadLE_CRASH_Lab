@@ -110,7 +110,7 @@ class LiveProgress:
         return f'{name} at {when}'
 
     def record(self, message):
-        self.events.append(f'{self.stamp()}  {message}')
+        self.events.append(f'{self.stamp()} IST  {message}')
 
     def update(self, event, key, states, active):
         if self.publisher is None:
@@ -319,7 +319,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
         starts = {}
         live = LiveProgress(models, cases, jobs, jobs_by_case, concurrency, max_attempts, folder / 'checkpoint.json')
         def log(message):
-            print(datetime.now(timezone.utc).strftime('[%H:%M:%S UTC] ') + message, flush=True)
+            print(f'[{LiveProgress.stamp()} IST] ' + message, flush=True)
 
         def progress(event, key, states, active):
             if event == 'started':
