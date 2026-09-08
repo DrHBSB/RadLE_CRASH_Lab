@@ -52,6 +52,73 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(again["calls"], 0)
         self.assertEqual(result["states"], again["states"])
 
+    def test_grouped_backlog_starts_three_different_models_together(self):
+        work = [s.Job(str(i), model, {}) for model in ('custom_a', 'custom_b', 'custom_c') for i in range(3)]
+        barrier = threading.Barrier(3)
+        started = []
+        def call(job, attempt):
+            if job.case == '0':
+                barrier.wait(3)
+            return s.Outcome('success')
+        def event(kind, key, states, active):
+            if kind == 'started':
+                started.append(json.loads(key)[1])
+        result = s.run(work, call, self.folder, concurrency=3, on_event=event)
+        self.assertTrue(result['complete'])
+        self.assertEqual(started[:3], ['custom_a', 'custom_b', 'custom_c'])
+        self.assertEqual(result['calls'], len(work))
+
+    def test_one_remaining_model_uses_all_three_slots(self):
+        work = [s.Job(str(i), 'any_new_model', {}) for i in range(3)]
+        barrier = threading.Barrier(3)
+        def call(job, attempt):
+            barrier.wait(3)
+            return s.Outcome('success')
+        result = s.run(work, call, self.folder, concurrency=3)
+        self.assertTrue(result['complete'])
+        self.assertEqual(result['calls'], 3)
+
+    def test_model_in_backoff_does_not_leave_a_slot_idle(self):
+        work = [s.Job('0', 'cooling_model', {}), s.Job('1', 'available_model', {}), s.Job('2', 'available_model', {})]
+        stop = threading.Event()
+        s.run(work, lambda *_: s.Outcome('retry', retry_after=60), self.folder,
+              concurrency=1, stop=stop, checkpoint=lambda _: stop.set())
+        journal = self.folder/'events.jsonl'
+        original = journal.read_bytes()
+        ready_at = json.loads(original.splitlines()[-1])['ready_at']
+        clock = [ready_at - 10]
+        barrier = threading.Barrier(2)
+        seen = []
+        def call(job, attempt):
+            seen.append((job.case, attempt))
+            if job.model == 'available_model':
+                barrier.wait(3)
+                clock[0] = ready_at + 1
+            return s.Outcome('success')
+        with patch.object(s.time, 'time', side_effect=lambda: clock[0]):
+            result = s.run(work, call, self.folder, concurrency=2)
+        self.assertTrue(result['complete'])
+        self.assertEqual(set(seen[:2]), {('1', 1), ('2', 1)})
+        self.assertEqual(seen[-1], ('0', 2))
+        self.assertTrue(journal.read_bytes().startswith(original))
+
+    def test_resume_from_two_to_three_preserves_saved_answers_and_attempts(self):
+        work = jobs(9)
+        stop = threading.Event()
+        first = s.run(work, lambda *_: s.Outcome('success'), self.folder, concurrency=2,
+                      stop=stop, checkpoint=lambda _: stop.set())
+        saved = {k: v for k, v in first['states'].items() if v['status'] == 'success'}
+        seen = []
+        def call(job, attempt):
+            self.assertNotIn(job.key, saved)
+            self.assertEqual(attempt, 1)
+            seen.append(job.key)
+            return s.Outcome('success')
+        resumed = s.run(work, call, self.folder, concurrency=3)
+        self.assertTrue(resumed['complete'])
+        self.assertEqual(len(seen), len(work) - len(saved))
+        self.assertEqual({k: resumed['states'][k] for k in saved}, saved)
+
     def test_slow_request_does_not_create_case_barrier(self):
         slow_started = threading.Event()
         fast_second = threading.Event()

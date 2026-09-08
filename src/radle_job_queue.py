@@ -200,7 +200,11 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                     while pending and len(active) < concurrency and not paused and not stop.is_set():
                         now = time.time()
                         eligible = recovery[:1] if recovery else pending
-                        key = next((k for k in eligible if k in pending and states[k]["ready_at"] <= now), None)
+                        ready = [k for k in eligible if k in pending and states[k]["ready_at"] <= now]
+                        active_models = {by_key[k].model for k in active.values()}
+                        # Spread ready work across models; fill spare slots when no alternative is ready.
+                        key = next((k for k in ready if by_key[k].model not in active_models),
+                                   ready[0] if ready else None)
                         if key is None:
                             break
                         pending.remove(key)
