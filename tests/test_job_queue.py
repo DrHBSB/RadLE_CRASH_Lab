@@ -261,6 +261,42 @@ class SchedulerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'review hold'):
             s.run(work, lambda *_: self.fail(), self.folder)
 
+    def test_explicit_quota_hold_preserves_exhausted_attempts_and_releases_pending(self):
+        work = jobs(3)
+        original_value = {'reason': 'insufficient credits', 'http_status': 402}
+        for _ in range(3):
+            exhausted = s.run(work, lambda *_: s.Outcome('quota', original_value),
+                              self.folder, concurrency=1, resume_blocked=True)
+        key = work[0].key
+        self.assertEqual(exhausted['states'][key]['attempts'], 3)
+        ordinary = s.run(work, lambda *_: self.fail('exhausted quota was retried'),
+                         self.folder, concurrency=1, resume_blocked=True)
+        self.assertTrue(ordinary['paused'])
+        self.assertEqual(ordinary['calls'], 0)
+        journal = self.folder/'events.jsonl'
+        before = journal.read_bytes()
+        reason = 'Credit restoration verified; reviewed pair held without increasing its budget'
+        s.append(journal, {'type': 'review_hold', 'key': key, 'attempt': 3, 'reason': reason})
+        seen = []
+        def call(job, attempt):
+            self.assertNotEqual(job.key, key)
+            self.assertEqual(attempt, 1)
+            seen.append(job.key)
+            return s.Outcome('success')
+        result = s.run(work, call, self.folder, concurrency=3, resume_blocked=True)
+        self.assertEqual(set(seen), {j.key for j in work[1:]})
+        self.assertFalse(result['paused'])
+        self.assertFalse(result['complete'])
+        held = result['states'][key]
+        self.assertEqual(held['status'], 'uncertain')
+        self.assertEqual(held['attempts'], 3)
+        self.assertEqual(held['value'], dict(original_value, review_hold_reason=reason))
+        self.assertTrue(journal.read_bytes().startswith(before))
+        again = s.run(work, lambda *_: self.fail('held pair resent'), self.folder,
+                      concurrency=3, resume_blocked=True)
+        self.assertEqual(again['calls'], 0)
+        self.assertEqual(again['states'], result['states'])
+
     def test_selection_ignores_excluded_block_without_changing_history(self):
         work = jobs(4)
         first = s.run(work, lambda *_: s.Outcome('blocked'), self.folder, concurrency=1)

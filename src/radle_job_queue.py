@@ -114,7 +114,7 @@ def replay(path, manifest):
         elif event["type"] == "review_hold":
             # An explicit evidence review can isolate a previously global block.
             # Preserve every original event and attempt; this does not send a request.
-            if state['status'] != 'blocked' or event.get('attempt') != state['attempts']:
+            if state['status'] not in {'blocked', 'quota'} or event.get('attempt') != state['attempts']:
                 raise ValueError('Invalid review hold transition')
             if not isinstance(event.get('reason'), str) or not event['reason'].strip():
                 raise ValueError('Review hold requires a reason')
