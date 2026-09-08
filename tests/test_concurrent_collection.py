@@ -1,4 +1,7 @@
 import copy
+import contextlib
+import io
+import re
 import json
 from pathlib import Path
 import sys
@@ -91,6 +94,31 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(self.client.chat.completions.create.call_count, 3)
         final = pd.read_csv(self.output)
         self.assertEqual((final['Diagnosis_any_model'] == 'synthetic finding').sum(), 3)
+
+    def test_display_failure_preserves_fallback_elapsed_time(self):
+        handle = Mock()
+        def update(data, **kwargs):
+            if 'SAVED' in data['text/plain'].split('RECENT EVENTS')[-1]:
+                raise RuntimeError('display failed after response')
+        handle.update.side_effect = update
+        def response(**kwargs):
+            time.sleep(.12)
+            return self.response()
+        self.client.chat.completions.create.side_effect = response
+        with patch.object(cc, 'notebook_display', return_value=Mock(return_value=handle)), contextlib.redirect_stdout(io.StringIO()) as output:
+            self.run_collection(test_limit=1, concurrency=1)
+        durations = re.findall(r'OK.*?\| ([0-9.]+)s \|', output.getvalue())
+        self.assertEqual(len(durations), 1)
+        self.assertGreaterEqual(float(durations[0]), .1)
+        self.assertTrue(self.output.exists())
+
+    def test_resume_returns_same_columns_and_preserves_csv_bytes(self):
+        first = self.run_collection()
+        saved = self.output.read_bytes()
+        resumed = self.run_collection()
+        pd.testing.assert_frame_equal(first, resumed)
+        self.assertEqual(saved, self.output.read_bytes())
+        self.assertEqual(self.client.chat.completions.create.call_count, 3)
 
     def test_input_drift_refuses_calls(self):
         self.run_collection()

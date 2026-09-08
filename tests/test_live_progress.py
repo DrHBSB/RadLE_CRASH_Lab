@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 import unittest
+import warnings
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
@@ -103,6 +104,37 @@ class LiveProgressTests(unittest.TestCase):
         ui, _, states = self.fixture(None)
         self.assertFalse(ui.update('resumed', None, states, []))
         self.assertFalse(ui.saved_backup('/tmp/a.csv', '2026-09-08T07:28:00+00:00'))
+
+    def test_pause_label_clears_when_blocked_job_resumes(self):
+        ui, jobs, states = self.fixture(lambda *a, **kw: Handle())
+        states[jobs[0].key]['status'] = 'quota'
+        ui.update('resumed', None, states, [])
+        self.assertTrue(ui.phase.startswith('PAUSING'))
+        states[jobs[0].key].update(status='uncertain', attempts=2)
+        ui.update('started', jobs[0].key, states, [jobs[0].key])
+        self.assertEqual(ui.phase, 'RUNNING')
+        self.assertNotIn('credit', ui.render())
+
+    def test_complete_requires_successful_final_backup_notification(self):
+        ui, jobs, states = self.fixture(lambda *a, **kw: Handle())
+        for state in states.values():
+            state['status'] = 'success'
+        ui.update('stopped', None, states, [])
+        self.assertIn('final backup pending', ui.phase)
+        self.assertNotEqual(ui.phase, 'COMPLETE')
+        ui.saved_backup('/tmp/results_BACKUP_0001.csv', '2026-09-08T07:28:00+00:00')
+        self.assertEqual(ui.phase, 'COMPLETE')
+
+    def test_observer_error_with_warning_errors_does_not_stop_saving(self):
+        job = q.Job('1', 'any', {})
+        def broken(*args):
+            raise RuntimeError('display failed')
+        with tempfile.TemporaryDirectory() as folder, warnings.catch_warnings():
+            warnings.simplefilter('error')
+            result = q.run([job], lambda *_: q.Outcome('success'), folder, on_event=broken)
+            records = [json.loads(line) for line in Path(folder, 'events.jsonl').read_text().splitlines()]
+        self.assertTrue(result['complete'])
+        self.assertEqual(sum(r.get('type') == 'result' for r in records), 1)
 
     def test_heartbeat_during_retry_delay_without_active_requests(self):
         job = q.Job('1', 'any', {})

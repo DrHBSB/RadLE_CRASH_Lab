@@ -169,7 +169,11 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                 try:
                     on_event(event, key, states, tuple(active.values()))
                 except Exception:
-                    warnings.warn("Progress display failed; collection and saving continue.", RuntimeWarning)
+                    try:
+                        warnings.warn("Progress display failed; collection and saving continue.", RuntimeWarning)
+                    except Exception:
+                        # A warnings-as-errors policy must not turn a UI fault into a collection fault.
+                        pass
         report("resumed")
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
             while active or (pending and not paused and not stop.is_set()):

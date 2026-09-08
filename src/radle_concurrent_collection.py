@@ -141,10 +141,10 @@ class LiveProgress:
                               'terminal': 'attempt limit reached; review needed'}[status]
                     detail = f'{status.upper()} · Case {case} · {model.replace("_", " ")} · {reason} → {action}'
                 self.record(detail)
-            if any(v['status'] in {'quota', 'blocked'} for v in states.values()):
-                self.phase = 'PAUSING · saving active requests'
+            self.phase = ('PAUSING · saving active requests'
+                          if any(v['status'] in {'quota', 'blocked'} for v in states.values()) else 'RUNNING')
             if event == 'stopped':
-                self.phase = ('COMPLETE' if all(v['status'] in {'success', 'flagged'} for v in states.values())
+                self.phase = ('COLLECTED · final backup pending' if all(v['status'] in {'success', 'flagged'} for v in states.values())
                               else 'STOPPED · saved progress retained; see outstanding work below')
             self.draw()
             return True
@@ -159,6 +159,8 @@ class LiveProgress:
         try:
             self.backup = self.backup_label(path, saved_utc)
             self.record('BACKUP · ' + self.backup)
+            if self.phase == 'COLLECTED · final backup pending':
+                self.phase = 'COMPLETE'
             self.draw()
             return True
         except Exception:
@@ -320,6 +322,9 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             print(datetime.now(timezone.utc).strftime('[%H:%M:%S UTC] ') + message, flush=True)
 
         def progress(event, key, states, active):
+            if event == 'started':
+                starts[key] = time.monotonic()
+            elapsed = max(0, time.monotonic() - starts.pop(key, time.monotonic())) if event == 'saved' else 0
             if live.update(event, key, states, active):
                 return
             if event == 'heartbeat' and time.monotonic() - progress.last_console < 30:
@@ -327,14 +332,12 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             if event == 'heartbeat':
                 progress.last_console = time.monotonic()
             if event == 'started':
-                starts[key] = time.monotonic()
                 case, name = json.loads(key)
                 log(f"RUNNING  case {case} | {name.replace('_', ' ')} | attempt {states[key]['attempts']}/{max_attempts}")
             elif event == 'saved':
                 state = states[key]
                 case, name = json.loads(key)
                 value = state['value']
-                elapsed = time.monotonic() - starts.pop(key, time.monotonic())
                 labels = {'success': 'OK', 'flagged': 'OK + FLAG', 'retry': 'RETRY WAIT',
                           'uncertain': 'REVIEW', 'quota': 'PAUSE', 'blocked': 'PAUSE', 'terminal': 'EXHAUSTED'}
                 detail = (value.get('diagnostic') or {}).get('summary') or value.get('reason') or value.get('error_type', '')
@@ -372,6 +375,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 'states': {k: {'status': v['status'], 'attempts': v['attempts']} for k, v in latest_states.items()}})
             if not live.saved_backup(path, datetime.now(timezone.utc).isoformat()):
                 log(f'BACKUP SAVED: {path}')
+            return final
 
         def checkpoint(states):
             nonlocal latest_states, df
@@ -446,7 +450,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                            contract=contract, stop=stop, resume_blocked=resume_blocked,
                            checkpoint=checkpoint, on_event=progress, heartbeat_seconds=5)
         checkpoint(result['states'])
-        export()
+        final_df = export()
         counts = dict(Counter(v['status'] for v in result['states'].values()))
         atomic_json(folder / 'status.json', {'complete': result['complete'], 'paused': result['paused'],
                     'new_calls': result['calls'], 'counts': counts, 'concurrency': concurrency,
@@ -462,4 +466,4 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             log(f"Evidence journal: {folder / 'queue' / 'events.jsonl'}")
             log('Next: review the listed request evidence before resuming. Do not delete the journal or rerun uncertain calls blindly.')
             raise RuntimeError('Collection has unresolved outcomes; completed answers saved. See the case-specific explanation above.')
-        return rb._sort_benchmark_df(df)
+        return final_df
