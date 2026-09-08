@@ -2650,6 +2650,7 @@ def run_benchmark(
     max_job_attempts=3,
     migration=None,
     resume_blocked=False,
+    repair_once=False,
 ):
     """Run the RadLE benchmark, resuming existing clean cells when possible."""
     if concurrency is not None:
@@ -2661,7 +2662,7 @@ def run_benchmark(
             output_csv=output_csv, models=models or MODELS, test_limit=test_limit,
             prompt=prompt, max_output_tokens=max_output_tokens,
             universal_temperature=universal_temperature, backup_dir=backup_dir,
-            concurrency=concurrency, max_attempts=max_job_attempts, migration=migration, resume_blocked=resume_blocked)
+            concurrency=concurrency, max_attempts=max_job_attempts, migration=migration, resume_blocked=resume_blocked, repair_once=repair_once)
     models = models or MODELS
     image_index = build_image_index(image_folder)
     items = sorted(image_index.items(), key=lambda x: numeric_case_sort_key(x[0]))
@@ -3561,6 +3562,7 @@ def run_autonomous_openrouter_workflow(
     max_job_attempts=3,
     migration=None,
     resume_blocked=True,
+    repair_once=False,
 ):
     """Run smoke, full benchmark, audit, repair, and hard gates with minimal notebook state."""
     if allow_missing_reasoning and (promote_private or export_public):
@@ -3679,7 +3681,21 @@ def run_autonomous_openrouter_workflow(
         max_job_attempts=max_job_attempts,
         migration=migration,
         resume_blocked=resume_blocked,
+        repair_once=repair_once,
     )
+    if full_df.attrs.get("failed_pairs"):
+        failed_pairs = full_df.attrs["failed_pairs"]
+        print(f"Collection finished with {len(failed_pairs)} failed pairs; no clean-run gate or promotion was performed.")
+        return {
+            "status": "completed_with_failures", "smoke": smoke_result, "full": full_df,
+            "final_df": full_df, "final_source_csv": run_paths["raw_results_csv"],
+            "final_source_label": "raw_with_failures",
+            "final_audit": audit_benchmark_output(run_paths["raw_results_csv"], models=models,
+                expected_case_ids=range(1, expected_cases + 1), max_output_tokens=max_output_tokens),
+            "gate_receipt": pd.DataFrame(), "final_manifest": None, "scorer_result": None,
+            "public_release_files": None, "failed_pairs": failed_pairs,
+            "failed_pairs_path": full_df.attrs["failed_pairs_path"],
+        }
     full_cascade = run_repair_cascade_until_clean(
         client=client,
         openai_client=openai_client,

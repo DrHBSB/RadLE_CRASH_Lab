@@ -297,6 +297,107 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(again['calls'], 0)
         self.assertEqual(again['states'], result['states'])
 
+    def test_repair_once_grants_attempt_four_and_preserves_history(self):
+        work = jobs(1)
+        original = s.run(work, lambda *_: s.Outcome('retry'), self.folder)
+        self.assertEqual(original['states'][work[0].key]['attempts'], 3)
+        journal = self.folder/'events.jsonl'
+        before = journal.read_bytes()
+        seen = []
+        def call(job, attempt):
+            seen.append(attempt)
+            return s.Outcome('success', {'answer': 'repaired'})
+        repaired = s.run(work, call, self.folder, repair_once=True)
+        self.assertEqual(seen, [4])
+        self.assertEqual(repaired['states'][work[0].key]['attempts'], 4)
+        self.assertTrue(journal.read_bytes().startswith(before))
+        for explicit in (False, True):
+            again = s.run(work, lambda *_: self.fail('repair repeated'), self.folder, repair_once=explicit)
+            self.assertEqual(again['states'], repaired['states'])
+        records = [json.loads(line) for line in journal.read_bytes().splitlines()]
+        self.assertEqual(records[0]['max_attempts'], 3)
+        self.assertEqual(sum(e.get('type') == 'repair_authorized' for e in records), 1)
+
+    def test_repair_selected_holds_only_and_finalizes_rejection(self):
+        work = jobs(3)
+        s.run(work, lambda job, _: s.Outcome('success' if job.case == '2' else 'uncertain'), self.folder)
+        key = work[0].key
+        seen = []
+        def call(job, attempt):
+            seen.append((job.key, attempt))
+            return s.Outcome('rejected', {'reason': 'image refusal'})
+        result = s.run(work, call, self.folder, repair_once=True, selected_keys={key, work[2].key})
+        self.assertEqual(seen, [(key, 2)])
+        self.assertEqual(result['states'][key]['status'], 'failed')
+        self.assertEqual(result['states'][key]['value'],
+                         {'reason': 'image refusal', 'repair_outcome': 'rejected'})
+        self.assertEqual(result['states'][work[1].key]['status'], 'uncertain')
+        again = s.run(work, lambda *_: self.fail(), self.folder, repair_once=True, selected_keys={key})
+        self.assertEqual(again['calls'], 0)
+
+    def test_repair_authorized_before_interruption_requires_explicit_dispatch(self):
+        work = jobs(1)
+        s.run(work, lambda *_: s.Outcome('uncertain'), self.folder)
+        journal = self.folder/'events.jsonl'
+        s.append(journal, {'type': 'repair_authorized', 'key': work[0].key, 'attempt': 2})
+        default = s.run(work, lambda *_: self.fail(), self.folder)
+        self.assertEqual(default['calls'], 0)
+        repaired = s.run(work, lambda *_: s.Outcome('flagged'), self.folder, repair_once=True)
+        self.assertEqual(repaired['calls'], 1)
+        self.assertEqual(repaired['states'][work[0].key]['status'], 'flagged')
+
+    def test_interrupted_repair_becomes_failed_without_resending(self):
+        work = jobs(1)
+        s.run(work, lambda *_: s.Outcome('uncertain', {'reason': 'original'}), self.folder)
+        journal = self.folder/'events.jsonl'
+        s.append(journal, {'type': 'repair_authorized', 'key': work[0].key, 'attempt': 2})
+        s.append(journal, {'type': 'start', 'key': work[0].key, 'attempt': 2})
+        before = journal.read_bytes()
+        checkpoints = []
+        result = s.run(work, lambda *_: self.fail('unknown repair resent'), self.folder,
+                       repair_once=True, checkpoint=lambda states: checkpoints.append(states))
+        state = result['states'][work[0].key]
+        self.assertEqual(state['status'], 'failed')
+        self.assertEqual(state['attempts'], 2)
+        self.assertTrue(state['value']['remote_outcome_unknown'])
+        self.assertEqual(state['value']['reason'], 'original')
+        self.assertTrue(result['complete'])
+        self.assertTrue(checkpoints)
+        self.assertTrue(journal.read_bytes().startswith(before))
+        again = s.run(work, lambda *_: self.fail(), self.folder, repair_once=True)
+        self.assertEqual(again['states'], result['states'])
+
+    def test_repair_quota_pauses_other_repairs_until_explicit_account_resume(self):
+        work = jobs(3)
+        s.run(work, lambda *_: s.Outcome('uncertain'), self.folder)
+        result = s.run(work, lambda *_: s.Outcome('quota', {'http_status': 402}), self.folder,
+                       concurrency=1, repair_once=True)
+        self.assertEqual(result['calls'], 1)
+        self.assertTrue(result['paused'])
+        key = work[0].key
+        self.assertEqual(result['states'][key]['status'], 'failed')
+        paused = s.run(work, lambda *_: self.fail('account stop ignored'), self.folder, repair_once=True)
+        self.assertTrue(paused['paused'])
+        self.assertEqual(paused['calls'], 0)
+        seen = []
+        def call(job, attempt):
+            seen.append(job.key)
+            self.assertEqual(attempt, 2)
+            return s.Outcome('success')
+        resumed = s.run(work, call, self.folder, repair_once=True, resume_blocked=True)
+        self.assertEqual(set(seen), {j.key for j in work[1:]})
+        self.assertTrue(resumed['complete'])
+        self.assertEqual(resumed['states'][key], result['states'][key])
+
+    def test_account_block_does_not_authorize_repairs(self):
+        work = jobs(2)
+        s.run(work, lambda job, _: s.Outcome('uncertain' if job.case == '0' else 'quota'),
+              self.folder, concurrency=1)
+        journal = self.folder/'events.jsonl'
+        result = s.run(work, lambda *_: self.fail('account blocked'), self.folder, repair_once=True)
+        self.assertTrue(result['paused'])
+        self.assertNotIn(b'repair_authorized', journal.read_bytes())
+
     def test_selection_ignores_excluded_block_without_changing_history(self):
         work = jobs(4)
         first = s.run(work, lambda *_: s.Outcome('blocked'), self.folder, concurrency=1)

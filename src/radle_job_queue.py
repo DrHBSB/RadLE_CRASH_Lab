@@ -31,12 +31,12 @@ class Job:
 
 @dataclass
 class Outcome:
-    status: str  # success, flagged, retry, terminal, quota, blocked, uncertain, rejected
+    status: str  # success, flagged, retry, terminal, quota, blocked, uncertain, rejected, failed
     value: dict = field(default_factory=dict)
     retry_after: float = 0
 
 
-STATUSES = {"success", "flagged", "retry", "terminal", "quota", "blocked", "uncertain", "rejected"}
+STATUSES = {"success", "flagged", "retry", "terminal", "quota", "blocked", "uncertain", "rejected", "failed"}
 
 
 @contextmanager
@@ -106,11 +106,18 @@ def replay(path, manifest):
             continue
         state = states[event["key"]]
         if event["type"] == "start":
-            if state["status"] not in {"pending", "retry", "quota", "blocked"}:
+            if (state["status"] not in {"pending", "retry", "quota", "blocked"}
+                    and event["attempt"] != state.get("repair_attempt")):
                 raise ValueError("Invalid start transition")
             if event["attempt"] != state["attempts"] + 1:
                 raise ValueError("Invalid attempt sequence")
             state.update(status="uncertain", attempts=event["attempt"])
+        elif event["type"] == "repair_authorized":
+            if (state['status'] not in {'uncertain', 'terminal', 'rejected'}
+                    or 'repair_attempt' in state
+                    or event.get('attempt') != state['attempts'] + 1):
+                raise ValueError('Invalid repair authorization')
+            state['repair_attempt'] = event['attempt']
         elif event["type"] == "review_hold":
             # An explicit evidence review can isolate a previously global block.
             # Preserve every original event and attempt; this does not send a request.
@@ -133,12 +140,13 @@ def replay(path, manifest):
 
 
 def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
-        stop=None, resume_blocked=False, checkpoint=None, initial_attempts=None, on_event=None, heartbeat_seconds=30, selected_keys=None):
+        stop=None, resume_blocked=False, checkpoint=None, initial_attempts=None, on_event=None, heartbeat_seconds=30, selected_keys=None, repair_once=False):
     """call(job, attempt) makes ONE bounded-time request, with SDK retries disabled.
 
     checkpoint is an optional coordinator callback after each durable result.
     Unknown exceptions are held for review while unrelated jobs continue.
     Account/access failures pause new dispatches and drain in-flight calls.
+    repair_once explicitly grants at most one durable extra attempt per unresolved job.
     """
     if type(concurrency) is not int or concurrency < 1:
         raise ValueError("concurrency must be a positive integer")
@@ -175,10 +183,37 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
         paused = bool(recovery) and (not resume_blocked or
                     any(states[k]["attempts"] >= max_attempts for k in recovery))
         if not resume_blocked:
+            paused = paused or any(
+                key in selected and state['status'] == 'failed'
+                and state['value'].get('repair_outcome') in {'quota', 'blocked'}
+                for key, state in states.items())
             recovery = []
         allowed = {"pending", "retry"} | ({"quota", "blocked"} if resume_blocked else set())
         pending = [key for key, state in states.items()
                    if key in selected and state["status"] in allowed and state["attempts"] < max_attempts]
+        finalized = []
+        if repair_once:
+            for key, state in states.items():
+                if (key in selected and state['status'] == 'uncertain'
+                        and state.get('repair_attempt') == state['attempts']):
+                    # A dispatched repair has no saved result. Do not send it twice.
+                    value = dict(state['value'], repair_outcome='uncertain',
+                                 remote_outcome_unknown=True)
+                    append(journal, {'type': 'result', 'key': key, 'attempt': state['attempts'],
+                                     'status': 'failed', 'value': value, 'ready_at': 0})
+                    state.update(status='failed', value=value, ready_at=0)
+                    finalized.append(key)
+            if not paused:
+                for key, state in states.items():
+                    if key not in selected or state['status'] not in {'uncertain', 'terminal', 'rejected'}:
+                        continue
+                    if 'repair_attempt' not in state:
+                        attempt = state['attempts'] + 1
+                        append(journal, {'type': 'repair_authorized', 'key': key, 'attempt': attempt})
+                        state['repair_attempt'] = attempt
+                    if state['attempts'] < state['repair_attempt']:
+                        state['ready_at'] = 0
+                        pending.append(key)
         active = {}
         calls = 0
         last_heartbeat = time.monotonic()
@@ -193,6 +228,10 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                         # A warnings-as-errors policy must not turn a UI fault into a collection fault.
                         pass
         report("resumed")
+        for key in finalized:
+            report('saved', key)
+            if checkpoint:
+                checkpoint(states)
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
             while active or (pending and not paused and not stop.is_set()):
                 try:
@@ -238,6 +277,12 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                         except Exception as exc:
                             # Do not journal provider exception text: it may contain secrets.
                             outcome = Outcome("uncertain", {"error_type": type(exc).__name__})
+                        account_failure = outcome.status in {'quota', 'blocked'}
+                        if state.get('repair_attempt') == state['attempts'] and outcome.status not in {'success', 'flagged'}:
+                            value = dict(outcome.value, repair_outcome=outcome.status)
+                            if outcome.status == 'uncertain':
+                                value['remote_outcome_unknown'] = True
+                            outcome = Outcome('failed', value)
                         if outcome.status == "retry" and state["attempts"] >= max_attempts:
                             outcome.status = "terminal"
                         ready_at = time.time() + outcome.retry_after
@@ -250,7 +295,7 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                             recovery.remove(key)
                             if recovery_prior[key] == "quota" and outcome.status not in {"success", "flagged", "rejected"}:
                                 paused = True
-                        if outcome.status in {"quota", "blocked"}:
+                        if account_failure:
                             paused = True
                         elif outcome.status == "retry":
                             pending.append(key)
@@ -262,6 +307,6 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                     stop.set()
         report("stopped")
         return {"calls": calls, "states": states,
-                "complete": all(s["status"] in {"success", "flagged", "terminal"}
+                "complete": all(s["status"] in {"success", "flagged", "terminal", "failed"}
                                 for s in states.values()),
                 "paused": paused or stop.is_set()}

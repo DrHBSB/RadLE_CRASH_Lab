@@ -323,6 +323,55 @@ class IntegrationTests(unittest.TestCase):
     def test_astra_style_untyped_refusal_does_not_halt_other_pairs(self):
         self.check_untyped_refusal_is_held(responses=True)
 
+    def test_explicit_repair_recovers_uncertain_once_and_preserves_other_answers(self):
+        self.client.chat.completions.create.side_effect = [TimeoutError('fixture'), self.response(), self.response(), self.response()]
+        frame = self.run_collection(concurrency=1, repair_once=True)
+        self.assertEqual(self.client.chat.completions.create.call_count, 4)
+        self.assertEqual(frame['Diagnosis_any_model'].tolist(), ['synthetic finding'] * 3)
+        self.assertEqual(frame.attrs['failed_pairs'], [])
+        self.run_collection(concurrency=3, repair_once=True)
+        self.assertEqual(self.client.chat.completions.create.call_count, 4)
+
+    def test_persistent_case_rejection_finishes_workflow_with_failure_record(self):
+        import httpx
+        import openai
+        refusal = openai.PermissionDeniedError('Refused fixture image',
+            response=httpx.Response(403, request=httpx.Request('POST','https://fixture.invalid')),
+            body={'error_type':'content_policy_violation'})
+        self.client.chat.completions.create.side_effect = [refusal, self.response(), self.response(), refusal]
+        paths = rb.build_run_paths(self.root, run_label='fixture')
+        paths['master_images_folder'] = str(self.images)
+        paths['raw_results_csv'] = str(self.output)
+        def workflow():
+            return rb.run_autonomous_openrouter_workflow(client=self.client, dataset_root=self.root,
+                run_paths=paths, models=self.models, expected_cases=3,
+                expected_returned_model_ids={'any_model': {'vendor/any-model'}},
+                expected_providers={'any_model': 'Fixture Provider'}, run_label='fixture',
+                smoke_first=False, allow_missing_reasoning=True, concurrency=1, repair_once=True)
+        result = workflow()
+        self.assertEqual(result['status'], 'completed_with_failures')
+        self.assertEqual(self.client.chat.completions.create.call_count, 4)
+        self.assertEqual(result['failed_pairs'][0]['Master_Case_ID'], '1')
+        self.assertEqual(result['failed_pairs'][0]['attempts'], 2)
+        self.assertEqual(result['final_df']['Diagnosis_any_model'].fillna('').tolist(), ['', 'synthetic finding', 'synthetic finding'])
+        self.assertIsNone(result['final_manifest'])
+        self.assertIsNone(result['public_release_files'])
+        self.assertTrue(result['gate_receipt'].empty)
+        self.assertEqual(json.loads(Path(result['failed_pairs_path']).read_text()), result['failed_pairs'])
+        again = workflow()
+        self.assertEqual(again['status'], 'completed_with_failures')
+        self.assertEqual(self.client.chat.completions.create.call_count, 4)
+
+    def test_automatic_repair_does_not_ignore_credit_pause(self):
+        class NoCredit(Exception):
+            status_code = 402
+        self.client.chat.completions.create.side_effect = NoCredit('fixture')
+        with self.assertRaisesRegex(RuntimeError, 'unresolved outcomes'):
+            self.run_collection(concurrency=1, repair_once=True)
+        self.assertEqual(self.client.chat.completions.create.call_count, 1)
+        state = json.loads(Path(str(self.output)+'.concurrent/status.json').read_text())
+        self.assertTrue(state['paused'])
+
     def test_output_limit_retries_without_pausing_collection(self):
         attempts = []
         def call(**kwargs):

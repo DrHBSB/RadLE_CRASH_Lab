@@ -49,6 +49,22 @@ class LiveProgressTests(unittest.TestCase):
         self.assertIn('IST', text)
         self.assertNotIn('3 held', text)
 
+    def test_failed_repair_is_finished_without_counting_as_saved(self):
+        ui, jobs, states = self.fixture(lambda *a, **kw: Handle())
+        ui.repair_enabled = True
+        for state in states.values():
+            state.update(status='success', attempts=1)
+        states[jobs[0].key].update(status='failed', attempts=4, repair_attempt=4,
+                                  value={'reason':'repair failed'})
+        self.assertTrue(ui.update('saved', jobs[0].key, states, []))
+        self.assertTrue(ui.update('stopped', None, states, []))
+        text = ui.render()
+        self.assertIn('COMPLETE WITH FAILURES', text)
+        self.assertIn('Finished with failures', text)
+        self.assertIn('Answers saved  5 / 6', text)
+        self.assertIn('1 failed', text)
+        self.assertNotIn('Awaiting review', text)
+
     def test_real_ipython_uses_one_display_id_then_updates(self):
         from IPython.core.interactiveshell import InteractiveShell
         from IPython.display import display
