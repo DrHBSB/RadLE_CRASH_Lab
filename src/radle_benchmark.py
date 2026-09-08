@@ -3687,7 +3687,7 @@ def run_autonomous_openrouter_workflow(
         failed_pairs = full_df.attrs["failed_pairs"]
         print(f"Collection finished with {len(failed_pairs)} failed pairs; no clean-run gate or promotion was performed.")
         return {
-            "status": "completed_with_failures", "smoke": smoke_result, "full": full_df,
+            "status": "completed_with_failures", "smoke": smoke_result, "raw_df": full_df,
             "final_df": full_df, "final_source_csv": run_paths["raw_results_csv"],
             "final_source_label": "raw_with_failures",
             "final_audit": audit_benchmark_output(run_paths["raw_results_csv"], models=models,

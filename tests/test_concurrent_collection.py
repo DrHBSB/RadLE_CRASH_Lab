@@ -350,6 +350,7 @@ class IntegrationTests(unittest.TestCase):
                 smoke_first=False, allow_missing_reasoning=True, concurrency=1, repair_once=True)
         result = workflow()
         self.assertEqual(result['status'], 'completed_with_failures')
+        self.assertIs(result['raw_df'], result['final_df'])
         self.assertEqual(self.client.chat.completions.create.call_count, 4)
         self.assertEqual(result['failed_pairs'][0]['Master_Case_ID'], '1')
         self.assertEqual(result['failed_pairs'][0]['attempts'], 2)
