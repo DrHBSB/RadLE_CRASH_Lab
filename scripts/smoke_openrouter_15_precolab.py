@@ -34,23 +34,21 @@ PROMPT = (
 # id, target effort, endpoint tag, expected provider, ZDR, output-token parameter.
 # Qwen Flash has no OpenRouter effort control. Alibaba documents native xhigh as
 # its default; the receipt keeps that separate from a proven explicit effort.
-ARMS = [
-    ("qwen/qwen3.8-flash", None, "alibaba", "Alibaba", False, "max_tokens"),
-    ("deepseek/deepseek-v4-flash-vision-exp", "max", "deepinfra/fp8", "DeepInfra", True, "max_tokens"),
-    ("meta/muse-spark-1.3", "max", "meta", "Meta", False, "max_tokens"),
-    ("z-ai/glm-5.3-flash", "max", "z-ai/fp8", "Z.AI", True, "max_tokens"),
-    ("qwen/qwen3.8-max-prime", "xhigh", "alibaba", "Alibaba", False, "max_tokens"),
-    ("anthropic/claude-sonnet-5.5", "max", "google-vertex/global", "Google", True, "max_tokens"),
-    ("anthropic/claude-opus-5.5", "max", "google-vertex/global", "Google", True, "max_tokens"),
-    ("deepseek/deepseek-v4.1-flash", "max", "fireworks", "Fireworks", True, "max_tokens"),
-    ("google/gemini-3.7-flash", "high", "google-vertex/global", "Google", True, "max_tokens"),
-    ("meta/muse-spark-1.2", "xhigh", "meta", "Meta", False, "max_tokens"),
-    ("moonshotai/kimi-k3", "max", "moonshotai/mxfp4", "Moonshot AI", True, "max_tokens"),
-    ("openai/gpt-6.1-sol-pro", "max", "azure", "Azure", True, "max_completion_tokens"),
-    ("openai/gpt-6-sol", "max", "azure", "Azure", True, "max_completion_tokens"),
-    ("x-ai/grok-4.7", "xhigh", "xai/zdr", "xAI", True, "max_tokens"),
-    ("z-ai/glm-5.3-flashx", "max", "z-ai/fp8", "Z.AI", True, "max_tokens"),
-]
+ARMS = [('qwen/qwen3.8-flash', None, 'alibaba', 'Alibaba', False, 'max_tokens'),
+ ('deepseek/deepseek-v4-flash-vision-exp', 'max', 'deepinfra/fp8', 'DeepInfra', True, 'max_tokens'),
+ ('meta/muse-spark-1.3', 'max', 'meta', 'Meta', False, 'max_tokens'),
+ ('z-ai/glm-5.3-flash', 'max', 'z-ai/fp8', 'Z.AI', True, 'max_tokens'),
+ ('qwen/qwen3.8-max-prime', 'xhigh', 'alibaba', 'Alibaba', False, 'max_tokens'),
+ ('anthropic/claude-sonnet-5.5', 'max', 'anthropic', 'Anthropic', False, 'max_tokens'),
+ ('anthropic/claude-opus-5.5', 'max', 'anthropic', 'Anthropic', False, 'max_tokens'),
+ ('deepseek/deepseek-v4.1-flash', 'max', 'fireworks', 'Fireworks', True, 'max_tokens'),
+ ('google/gemini-3.7-flash', 'high', 'google-vertex/global', 'Google', True, 'max_tokens'),
+ ('meta/muse-spark-1.2', 'xhigh', 'meta', 'Meta', False, 'max_tokens'),
+ ('moonshotai/kimi-k3', 'max', 'moonshotai/mxfp4', 'Moonshot AI', True, 'max_tokens'),
+ ('openai/gpt-6.1-sol-pro', 'max', 'openai', 'OpenAI', False, 'max_tokens'),
+ ('openai/gpt-6-sol', 'max', 'openai', 'OpenAI', False, 'max_tokens'),
+ ('x-ai/grok-4.7', 'xhigh', 'xai/zdr', 'xAI', True, 'max_tokens'),
+ ('z-ai/glm-5.3-flashx', 'max', 'z-ai/fp8', 'Z.AI', True, 'max_tokens')]
 
 
 def utc_now() -> str:
@@ -176,8 +174,8 @@ def preflight(key: str) -> list[dict]:
         zdr_listed = (model_id, tag, endpoint["name"]) in zdr_keys
         if zdr_required and not zdr_listed:
             raise RuntimeError(f"{model_id}: {tag} is no longer ZDR listed")
-        if not zdr_required and any(item[0] == model_id for item in zdr_keys):
-            raise RuntimeError(f"{model_id}: ZDR route became available; select it before inference")
+        if not zdr_required and (model_id, tag, endpoint["name"]) in zdr_keys:
+            raise RuntimeError(f"{model_id}: Selected official route became ZDR listed; enable ZDR before inference")
         modalities = (model.get("architecture") or {}).get("input_modalities") or []
         if "text" not in modalities:
             raise RuntimeError(f"{model_id}: text input not advertised")

@@ -47,8 +47,13 @@ class Contracts(unittest.TestCase):
         from PIL import Image
         sys.path.insert(0,str(root/'scripts'))
         import smoke_openrouter_15_precolab as route
+        import radle_replacement_seed as seed
+        def fake_seed(rb, old_root, output, models, image_index):
+            pd.DataFrame([rb.rebuild_base_row(str(i), image_index[str(i)]) for i in range(1,201)]).to_csv(output,index=False)
+            return {'reused_answers':0,'replacement_pairs':[]}
         n=json.loads((root/'notebooks/RadLE_v1_5_Morning.ipynb').read_text(encoding='utf-8'))
         source=''.join([c for c in n['cells'] if c['cell_type']=='code'][2]['source'])
+        source=source.replace('radle_replacement_seed = importlib.reload(radle_replacement_seed)', '')
         with tempfile.TemporaryDirectory() as temp:
             dataset=pathlib.Path(temp); images=dataset/'RadLE v2 Master Data'; images.mkdir()
             for i in range(1,201): Image.new('RGB',(2,2),'white').save(images/f'{i}.png')
@@ -56,7 +61,7 @@ class Contracts(unittest.TestCase):
             source=source.replace('dataset_root = '+repr(str(dataset)), 'dataset_root = Path('+repr(str(dataset))+')')
             ns=dict(importlib=importlib,REPO_DIR=root,REPO_REF='codex/radle-15-20261007',radle_benchmark=rb,_openrouter_key='synthetic')
             live=[dict(id=m['id'],image=True) for m in MODELS]
-            with patch.object(route,'request_json',return_value=(200,{})),patch.object(route,'preflight',return_value=live):
+            with patch.object(route,'request_json',return_value=(200,{})),patch.object(route,'preflight',return_value=live),patch.object(seed,'prepare',side_effect=fake_seed):
                 exec(source,ns); exec(source,ns)
                 self.assertEqual(len(pd.read_csv(ns['final_output_csv'])),200)
                 Image.new('RGB',(2,2),'black').save(images/'1.png')

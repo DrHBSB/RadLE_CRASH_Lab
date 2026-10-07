@@ -259,6 +259,8 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
         raise ValueError('Empty or duplicate model names')
     if any(rb.uses_native_openai(m) or rb.uses_native_anthropic(m) or rb.uses_native_google(m) for m in models):
         raise ValueError('Concurrent mode currently requires OpenAI-compatible provider clients')
+    history_path = output_csv.parent / 'replacement_history.json'
+    previous_attempts = json.loads(history_path.read_text(encoding='utf-8')).get('previous_attempts', {}) if history_path.exists() else {}
     stop = stop or threading.Event()
     prompt = rb.PROMPT if prompt is None else prompt
     image_index = rb.build_image_index(image_folder)
@@ -440,6 +442,8 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             model = model_by_name[job.model]
             content = rb.build_content_array(job.case, image_index, prompt=prompt)
             params = rb.build_api_params(model, content, max_output_tokens, universal_temperature)
+            previous = previous_attempts.get(json.dumps([job.case, job.model], separators=(',', ':')), 0)
+            attempt_history = {'prior_attempts': previous, 'new_attempt': attempt, 'cumulative_attempt': previous + attempt, 'is_replacement_retry': previous > 0}
             t0 = time.time()
             try:
                 if model.get('api_surface') == 'responses':
@@ -477,7 +481,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                         delay = max(delay, float(exc.response.headers.get('retry-after', delay)))
                     except (ValueError, AttributeError):
                         pass
-                return queue.Outcome(kind, {'http_status': status, 'error_type': type(exc).__name__, 'diagnostic': diagnostic(exc)},
+                return queue.Outcome(kind, {'http_status': status, 'error_type': type(exc).__name__, 'diagnostic': diagnostic(exc), 'attempt_history': attempt_history},
                                      retry_after=delay if kind == 'retry' else 0)
             fields = rb.extract_result(response, round(time.time() - t0, 1), params, False, model)
             info = rb.classify_cell_for_audit(pd.Series(fields), job.model, attempts=0,
@@ -492,7 +496,9 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 kind = 'blocked'
             else:
                 kind = 'retry'
-            return queue.Outcome(kind, {'fields': rb.make_json_safe(fields), 'reason': info['reason']},
+            choice = response.choices[0] if getattr(response, 'choices', None) else None
+            response_metadata = {'response_id': getattr(response, 'id', None), 'finish_reason': getattr(choice, 'finish_reason', None), 'native_finish_reason': getattr(choice, 'native_finish_reason', None)}
+            return queue.Outcome(kind, {'fields': rb.make_json_safe(fields), 'reason': info['reason'], 'response_metadata': response_metadata, 'attempt_history': attempt_history},
                                  retry_after=2 if kind == 'retry' else 0)
 
         print(f'Concurrent collection: {len(jobs)} journal jobs, {concurrency} slots; max {max_attempts} attempts/job in this journal.', flush=True)
