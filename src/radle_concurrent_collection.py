@@ -443,7 +443,8 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             content = rb.build_content_array(job.case, image_index, prompt=prompt)
             params = rb.build_api_params(model, content, max_output_tokens, universal_temperature)
             previous = previous_attempts.get(json.dumps([job.case, job.model], separators=(',', ':')), 0)
-            attempt_history = {'prior_attempts': previous, 'new_attempt': attempt, 'cumulative_attempt': previous + attempt, 'is_replacement_retry': previous > 0}
+            new_attempt = attempt - initial_attempts.get(job.key, 0)
+            attempt_history = {'prior_attempts': previous, 'new_attempt': new_attempt, 'collection_attempt': attempt, 'cumulative_attempt': previous + new_attempt, 'is_replacement_retry': previous > 0, 'max_output_tokens': max_output_tokens}
             t0 = time.time()
             try:
                 if model.get('api_surface') == 'responses':

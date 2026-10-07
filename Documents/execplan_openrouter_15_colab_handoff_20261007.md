@@ -4,6 +4,8 @@ This plan follows ~/.codex/PLANS.md. The user authorized Colab and Git preparati
 
 ## Current State
 
+2026-10-08: User authorized 32,768 output tokens and two collection attempts; third reserved for later repair. Migrating drained official-provider collection into openrouter_15_32k_20261008, preserving saved answers including missing-summary flags and cumulative attempt history. Endpoint metadata confirmed all 15 routes support this cap. Git publication and live resume pending.
+
 2026-10-07, Codex: User authorized replacing both GPT arms from case 1 and launching the revised Colab. Candidate uses official compatible providers with DeepSeek ZDR exceptions; readable summaries mandatory, one new attempt per pair, prior attempts preserved, compatible other answers reused. Verification and publication in progress.
 
 ## Locked Facts
@@ -17,7 +19,7 @@ This plan follows ~/.codex/PLANS.md. The user authorized Colab and Git preparati
 
 ## Do Not Revisit
 
-Do not repeat the completed synthetic inferences. Do not merge or clean the dirty primary checkout. Do not launch Colab collection. Never upload credentials, images, results or reasoning to GitHub.
+Do not repeat the completed synthetic inferences. Do not merge or clean the dirty primary checkout. User has since explicitly authorized launching and resuming Colab collection. Never upload credentials, images, results or reasoning to GitHub.
 
 ## Progress
 

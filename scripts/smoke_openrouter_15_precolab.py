@@ -183,6 +183,7 @@ def preflight(key: str) -> list[dict]:
             "id": model_id, "effort": effort, "tag": tag, "provider": provider_name,
             "zdr": zdr_required, "zdr_listed": zdr_listed, "token_param": token_param,
             "image": "image" in modalities, "endpoint_name": endpoint["name"],
+            "max_completion_tokens": endpoint.get("max_completion_tokens"),
             "pricing": endpoint.get("pricing"), "parameters": sorted(parameters),
         })
     return prepared
