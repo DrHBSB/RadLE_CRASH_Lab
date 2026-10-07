@@ -1517,7 +1517,7 @@ def build_api_params(model, content_array, max_output_tokens, universal_temperat
     api_params = {
         "model": model["id"],
         "messages": [{"role": "user", "content": content_array}],
-        "max_tokens": max_output_tokens,
+        model.get("output_token_parameter", "max_tokens"): max_output_tokens,
     }
 
     if model["id"] not in NO_TEMPERATURE_MODELS and not model.get("omit_sampling", False):
@@ -1888,7 +1888,7 @@ def call_model(
     grok_fallback_used = False
     latency = 0
 
-    for attempt in range(max_retries):
+    for attempt in range(model.get("max_transport_attempts", max_retries)):
         try:
             t0 = time.time()
             if model.get("api_surface") == "responses":
@@ -1948,6 +1948,14 @@ def _logged_request_extra(model, api_params):
 
 def extract_result(response, latency, api_params, grok_fallback_used, model):
     """Extract benchmark CSV fields from one provider response."""
+    # Cohort route assertions run before a response can enter a result row.
+    if model.get("expected_returned_model_ids"):
+        returned_id = getattr(response, "model", None)
+        returned_provider = (getattr(response, "model_extra", None) or {}).get("provider")
+        if returned_id not in model["expected_returned_model_ids"]:
+            raise RuntimeError(f"Returned model mismatch for {model['name']}: {returned_id}")
+        if returned_provider != model.get("expected_provider"):
+            raise RuntimeError(f"Returned provider mismatch for {model['name']}: {returned_provider}")
     if uses_native_anthropic(model):
         raw_answer = ""
         raw_reasoning_text = ""
@@ -3499,6 +3507,9 @@ def run_repair_cascade_until_clean(
         expected_case_ids=expected_case_ids,
         max_output_tokens=max_output_tokens,
     )
+    if audit_repair_target_count(final_audit) == 0:
+        return {"source_csv": current_csv, "source_label": "raw",
+                "audit": final_audit, "repair_results": repair_results, "repair_passes": max_passes}
     raise RuntimeError(
         f"Repair cascade stopped after {max_passes} passes with "
         f"{audit_repair_target_count(final_audit)} targets remaining."
