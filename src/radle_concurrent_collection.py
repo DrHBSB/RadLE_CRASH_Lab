@@ -3,6 +3,8 @@ from collections import Counter, deque
 from datetime import datetime, timezone, timedelta
 import hashlib
 import json
+import math
+import urllib.request
 import os
 from pathlib import Path
 import shutil
@@ -12,6 +14,35 @@ import time
 import pandas as pd
 
 import radle_job_queue as queue
+
+
+def check_openrouter_funds(client):
+    """Read billing metadata only; never persist credentials or raw API errors."""
+    evidence = {'checked_utc': datetime.now(timezone.utc).isoformat(),
+                'status': 'unknown'}
+    try:
+        if str(client.base_url).rstrip('/') != 'https://openrouter.ai/api/v1':
+            return evidence
+        data = {}
+        for endpoint in ('key', 'credits'):
+            request = urllib.request.Request(
+                'https://openrouter.ai/api/v1/' + endpoint,
+                headers={'Authorization': 'Bearer ' + client.api_key})
+            with urllib.request.urlopen(request, timeout=15) as response:
+                data[endpoint] = json.load(response)['data']
+        key = data['key']
+        account_remaining = float(data['credits']['total_credits']) - float(data['credits']['total_usage'])
+        unlimited = key.get('limit') is None and key.get('limit_remaining') is None
+        key_remaining = None if unlimited else float(key['limit_remaining'])
+        if not math.isfinite(account_remaining) or (key_remaining is not None and not math.isfinite(key_remaining)):
+            return evidence
+        evidence.update(account_remaining=account_remaining,
+                        key_remaining=key_remaining, key_unlimited=unlimited,
+                        status='available' if account_remaining > 0 and
+                        (unlimited or key_remaining > 0) else 'exhausted')
+    except Exception:
+        pass
+    return evidence
 
 
 def digest(path):
@@ -452,6 +483,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 else:
                     response = single_client.chat.completions.create(**params)
             except Exception as exc:
+                funds = None
                 status = getattr(exc, 'status_code', None)
                 message = str(exc).lower()
                 case_failure = rb.case_rejection_diagnostic(getattr(exc, 'body', None))
@@ -462,7 +494,8 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 elif (getattr(exc, 'radle_diagnostic', {}) or {}).get('category') == 'output_limit':
                     kind = 'retry'
                 elif status == 402 or (status == 403 and any(x in message for x in ('limit exceeded', 'quota', 'balance', 'budget'))):
-                    kind = 'quota'
+                    funds = check_openrouter_funds(single_client)
+                    kind = 'retry' if funds['status'] == 'available' else 'quota'
                 elif status == 403:
                     # An unexplained request refusal is not proof the whole account is broken.
                     # Hold this pair without resending; unrelated work can continue.
@@ -477,12 +510,14 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                     # A dropped connection/stream may already have incurred inference.
                     kind = 'uncertain'
                 delay = min(60, 2 ** min(attempt, 6))
+                if funds is not None and kind == 'retry':
+                    delay = 30
                 if status == 429:
                     try:
                         delay = max(delay, float(exc.response.headers.get('retry-after', delay)))
                     except (ValueError, AttributeError):
                         pass
-                return queue.Outcome(kind, {'http_status': status, 'error_type': type(exc).__name__, 'diagnostic': diagnostic(exc), 'attempt_history': attempt_history},
+                return queue.Outcome(kind, {'http_status': status, 'error_type': type(exc).__name__, 'diagnostic': diagnostic(exc), 'attempt_history': attempt_history, 'credit_check': funds},
                                      retry_after=delay if kind == 'retry' else 0)
             fields = rb.extract_result(response, round(time.time() - t0, 1), params, False, model)
             info = rb.classify_cell_for_audit(pd.Series(fields), job.model, attempts=0,
@@ -509,7 +544,11 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
         if paused_models:
             log('Paused models this run (saved history retained): ' + ', '.join(paused_models))
         if resume_blocked:
-            log('RESUME: recheck saved access/credit failures first within the original attempt budget.')
+            funds = check_openrouter_funds(single_client)
+            atomic_json(folder / 'resume_credit_check.json', funds)
+            if funds['status'] != 'available':
+                raise RuntimeError('Resume paused: billing check is exhausted or unavailable; see resume_credit_check.json.')
+            log('RESUME: billing check passed; original attempt limits retained.')
         queue_options = dict(concurrency=concurrency, max_attempts=max_attempts,
                              initial_attempts=initial_attempts, contract=contract, stop=stop,
                              resume_blocked=resume_blocked, checkpoint=checkpoint,
