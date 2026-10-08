@@ -179,9 +179,12 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
             append(journal, {"type": "code_version", "at": time.time(), "hashes": code})
         # A deliberate resume rechecks known rejections before spending on other jobs.
         recovery = [k for k, s in states.items() if k in selected and s["status"] in {"quota", "blocked"}]
+        paused = bool(recovery) and not resume_blocked
+        # An authorized resume may continue unrelated jobs while exhausted
+        # access/quota pairs stay held. Never grant them an extra attempt.
+        if resume_blocked:
+            recovery = [k for k in recovery if states[k]["attempts"] < max_attempts]
         recovery_prior = {k: states[k]['status'] for k in recovery}
-        paused = bool(recovery) and (not resume_blocked or
-                    any(states[k]["attempts"] >= max_attempts for k in recovery))
         if not resume_blocked:
             paused = paused or any(
                 key in selected and state['status'] == 'failed'
