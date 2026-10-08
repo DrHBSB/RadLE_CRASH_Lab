@@ -6,7 +6,7 @@ Restore the familiar four-cell notebook so the user can run one coherent noteboo
 
 ## Current State
 
-Local restoration prepared on codex/openrouter-official-provider in C:/tmp/radle_muse13_colab. Publish tag codex/radle-16-workflow-restored-20261008, then open its canonical notebook in Colab. Inspect and drain the previous running cell before starting a second collector. Verify setup, imports, configuration and workflow in order.
+Restoration published as b9a2b9b, tag codex/radle-16-workflow-restored-20261008. Monitor prompt updated with Git-only rules. One graceful stop requested on old tab171255063/browser2 at about12:55IST, last observed1424saved/3active. Subsequent browser reads timed out; drain and final backup are NOT confirmed. Do not start another collector until those are confirmed. Then open the canonical Git notebook and run its normal cells in order; never edit code in Chrome.
 
 ## Locked Facts
 
@@ -21,7 +21,8 @@ Never edit notebook cells through Chrome. Local edits, Git commit/push, then ref
 - [x] 2026-10-08 root: inspected historical209beae, initialffee0cc and current01e0cba notebook structures.
 - [x] 2026-10-08 root: restored original Cell4 autonomous call and its result summaries; retained current budget, migration and privacy configuration.
 - [x] 2026-10-08 root: wrote durable AGENTS.md restrictions.
-- [ ] Publish release, update monitor prompt, drain old cell, open Git notebook and confirm collection progresses.
+- [x] 2026-10-08 root: published restoration b9a2b9b and immutable tag; updated active half-hour monitor restrictions.
+- [ ] Confirm old cell drain and final backup; browser control currently times out. Open Git notebook and confirm collection progresses after drain.
 
 ## Surprises & Discoveries
 
@@ -37,7 +38,7 @@ Never edit notebook cells through Chrome. Local edits, Git commit/push, then ref
 
 ## Outcomes & Retrospective
 
-Pending runtime handoff. No local tests requested or run. Acceptance requires a fresh Git notebook with the four canonical cells, exact runtime release displayed and new saved answers in the same run journal.
+Git restoration complete; runtime handoff blocked by browser read timeouts. No local tests requested or run. Acceptance requires a fresh Git notebook with the four canonical cells, exact runtime release displayed and new saved answers in the same run journal.
 
 ## Suggested Skills By Phase
 
