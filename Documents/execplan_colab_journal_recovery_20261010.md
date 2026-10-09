@@ -6,7 +6,7 @@ Resume the existing RadLE collection without losing paid answers or granting add
 
 ## Current State
 
-2026-10-10 root: implementation, eleven recovery tests and the collector recovery integration test pass. Two queue failures and collector suite four failures/three errors reproduce on unchanged b9a2b9b. Notebook has four syntactically valid cells. Next publish branch/tag, inspect idle runtime, then open/run the Git notebook and observe a new save.
+2026-10-10 root: Git release dd465e7 is published as codex/radle-checkpoint-recovery-v2-20261010. Live recovery succeeded;2703/3200 saved, backup0023 at00:26:29 IST, three active slots. Monitor updated to new release every30minutes. No browser code or manual Drive edits after user Git-only steering. Next automated check: observe ongoing saves and preserve bounded attempts.
 
 ## Locked Facts
 
@@ -25,8 +25,8 @@ Do not skip invalid records or reset jobs. Do not use main's legacy notebook. Do
 - [x] 2026-10-10 root: inspect copied journal/checkpoint and identify corruption; preserve originals.
 - [x] 2026-10-10 root: implement CSV-bound snapshot recovery and original archive verification.
 - [x] 2026-10-10 root: eleven focused tests plus collector integration pass, including no request for recovered completed jobs.
-- [ ] 2026-10-10 root: finish integration validation and push immutable release.
-- [ ] 2026-10-10 root: open/run published notebook and verify a new answer save.
+- [x] 2026-10-10 root: eleven recovery tests and collector recovery integration pass; branch/tag published and remote SHA verified.
+- [x] 2026-10-10 root: open/run published notebook; recovery succeeds, muse_spark_1_3 case180 saved at00:25:27 IST, backup0023 saved and three slots active.
 
 ## Surprises & Discoveries
 
@@ -60,6 +60,6 @@ Planning: global ExecPlan instructions. Notebook: jupyter-notebook skill for tar
 
 ## Outcomes & Retrospective
 
-Pending Git publication and live runtime acceptance. Root cause of Drive journal corruption is not proven; recovery does not claim to eliminate recurrence.
+Git and live runtime acceptance complete. Original journal archived by SHA256, checkpoint counts preserved, new answer and backup observed. Existing exhausted/rate-limited pairs remain held under the two-attempt budget. Root cause of Drive journal corruption is not proven; recovery does not claim to eliminate recurrence.
 
 2026-10-10 root: initial release a6da9de published; opened notebook and renewed existing Drive access. Stopped setup before collector to add CSV large-field compatibility; revised v2 immutable tag pending.
