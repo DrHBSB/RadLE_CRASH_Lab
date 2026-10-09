@@ -554,6 +554,10 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                              resume_blocked=resume_blocked, checkpoint=checkpoint,
                              on_event=progress, heartbeat_seconds=5,
                              selected_keys={j.key for j in jobs if j.model in active_model_names})
+        if resume_blocked:
+            from radle_journal_recovery import recover
+            queue_options['journal_recovery'] = lambda journal, manifest: recover(
+                queue, journal, manifest, output_csv, folder / 'checkpoint.json')
         result = queue.run(jobs, call, folder / 'queue', **queue_options)
         if repair_once and not result['paused']:
             log('REPAIR PASS: one additional attempt per unresolved pair; persistent failures finish as FAILED.')

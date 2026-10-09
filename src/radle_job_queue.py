@@ -101,7 +101,22 @@ def replay(path, manifest):
     records = [json.loads(line) for line in data.splitlines()]
     if not records or identity(records[0]) != identity(manifest):
         raise ValueError("Run identity changed; refuse to reuse journal")
-    for event in records[1:]:
+    for index, event in enumerate(records[1:], 1):
+        if event['type'] == 'checkpoint_recovery':
+            if index != 1 or set(event['states']) != set(states):
+                raise ValueError('Invalid recovery snapshot position or cohort')
+            from radle_journal_recovery import sha
+            archive = path.with_name('events.original.' + event['original_sha256'] + '.jsonl')
+            if sha(archive) != event['original_sha256']:
+                raise ValueError('Recovery archive hash mismatch')
+            for key, restored in event['states'].items():
+                if (type(restored['attempts']) is not int
+                        or not states[key]['attempts'] <= restored['attempts'] <= manifest['max_attempts']
+                        or restored['status'] not in STATUSES | {'pending'}
+                        or 'repair_attempt' in restored):
+                    raise ValueError('Invalid recovery snapshot state')
+            states = event['states']
+            continue
         if event["type"] == "code_version":
             continue
         state = states[event["key"]]
@@ -140,7 +155,7 @@ def replay(path, manifest):
 
 
 def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
-        stop=None, resume_blocked=False, checkpoint=None, initial_attempts=None, on_event=None, heartbeat_seconds=30, selected_keys=None, repair_once=False):
+        stop=None, resume_blocked=False, checkpoint=None, initial_attempts=None, on_event=None, heartbeat_seconds=30, selected_keys=None, repair_once=False, journal_recovery=None):
     """call(job, attempt) makes ONE bounded-time request, with SDK retries disabled.
 
     checkpoint is an optional coordinator callback after each durable result.
@@ -172,7 +187,12 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
     journal = folder / "events.jsonl"
     stop = stop or threading.Event()
     with graceful_interrupt(stop), writer_lock(folder):
-        states = replay(journal, manifest)
+        try:
+            states = replay(journal, manifest)
+        except (ValueError, UnicodeDecodeError):
+            if journal_recovery is None:
+                raise
+            states = journal_recovery(journal, manifest)
         code = {k: v for k, v in (contract or {}).items() if k in
                 {"source_sha256", "adapter_sha256", "scheduler_sha256"}} if isinstance(contract, dict) else {}
         if code:

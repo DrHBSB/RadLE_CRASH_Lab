@@ -49,6 +49,19 @@ class IntegrationTests(unittest.TestCase):
         return cc.collect(rb, client=self.client, image_folder=self.images,
                           output_csv=self.output, models=self.models, **kwargs)
 
+    def test_csv_bound_recovery_keeps_completed_answers_without_paid_replay(self):
+        self.run_collection(max_attempts=2)
+        before = pd.read_csv(self.output, dtype=str, keep_default_na=False)
+        journal = Path(str(self.output) + '.concurrent') / 'queue' / 'events.jsonl'
+        original = journal.read_bytes() + b'corrupt fragment\n'
+        journal.write_bytes(original)
+        self.client.chat.completions.create.reset_mock()
+        with patch.object(cc, 'check_openrouter_funds', return_value={'status': 'available'}):
+            self.run_collection(max_attempts=2, resume_blocked=True)
+        self.client.chat.completions.create.assert_not_called()
+        pd.testing.assert_frame_equal(before, pd.read_csv(self.output, dtype=str, keep_default_na=False))
+        self.assertEqual(next(journal.parent.glob('events.original.*.jsonl')).read_bytes(), original)
+
     def test_resume_preserves_historical_fields_and_skips_flags(self):
         index = rb.build_image_index(self.images)
         params = rb.build_api_params(self.models[0], [], rb.MAX_OUTPUT_TOKENS, .01)
