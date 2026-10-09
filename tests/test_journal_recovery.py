@@ -116,6 +116,14 @@ class RecoveryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'archive hash'):
             queue.replay(self.journal, self.manifest)
 
+    def test_long_reasoning_fields_preserved(self):
+        reasoning = 'r' * 200000
+        self.csv.write_text('Master_Case_ID,Diagnosis_model,Raw_Response_model,Reasoning_model\n'
+                            '1,saved,answer,' + reasoning + '\n')
+        self.write_checkpoint()
+        csv.field_size_limit(131072)
+        self.assertEqual(self.recover()[self.key]['value']['fields']['Reasoning_model'], reasoning)
+
 
 if __name__ == '__main__':
     unittest.main()

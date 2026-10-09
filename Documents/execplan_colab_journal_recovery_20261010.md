@@ -6,7 +6,7 @@ Resume the existing RadLE collection without losing paid answers or granting add
 
 ## Current State
 
-2026-10-10 root: implementation, ten recovery tests and the collector recovery integration test pass. Two queue failures and collector suite four failures/three errors reproduce on unchanged b9a2b9b. Notebook has four syntactically valid cells. Next publish branch/tag, inspect idle runtime, then open/run the Git notebook and observe a new save.
+2026-10-10 root: implementation, eleven recovery tests and the collector recovery integration test pass. Two queue failures and collector suite four failures/three errors reproduce on unchanged b9a2b9b. Notebook has four syntactically valid cells. Next publish branch/tag, inspect idle runtime, then open/run the Git notebook and observe a new save.
 
 ## Locked Facts
 
@@ -24,7 +24,7 @@ Do not skip invalid records or reset jobs. Do not use main's legacy notebook. Do
 
 - [x] 2026-10-10 root: inspect copied journal/checkpoint and identify corruption; preserve originals.
 - [x] 2026-10-10 root: implement CSV-bound snapshot recovery and original archive verification.
-- [x] 2026-10-10 root: ten focused tests plus collector integration pass, including no request for recovered completed jobs.
+- [x] 2026-10-10 root: eleven focused tests plus collector integration pass, including no request for recovered completed jobs.
 - [ ] 2026-10-10 root: finish integration validation and push immutable release.
 - [ ] 2026-10-10 root: open/run published notebook and verify a new answer save.
 
@@ -36,7 +36,7 @@ Do not skip invalid records or reset jobs. Do not use main's legacy notebook. Do
 ## Decision Log
 
 - 2026-10-10 root: recover only on explicit resume and failed strict replay, under both writer locks. Require exact manifest identity, cohort, attempt bounds, matching CSV hash, and agreement with valid events. Archive every original byte before replacing the replay log with manifest plus checkpoint snapshot. Saved fields come from exact CSV strings; uncertain requests remain held.
-- 2026-10-10 root: new tag codex/radle-checkpoint-recovery-20261010 points to notebook and modules together; preserve old tag and collection contract release field.
+- 2026-10-10 root: new tag codex/radle-checkpoint-recovery-v2-20261010 points to notebook and modules together; preserve old tag and collection contract release field.
 
 ## Plan Of Work / Milestones
 
@@ -44,7 +44,7 @@ Implement src/radle_journal_recovery.py and strict snapshot replay in src/radle_
 
 ## Validation And Acceptance
 
-Run python -m unittest discover -s tests -p test_journal_recovery.py: expect ten passing tests. Run existing queue and collector tests; record any baseline failures explicitly. Check notebook JSON, four-cell count, unchanged contract/settings. Runtime acceptance requires RECOVERED with attempts unchanged, three active slots, then a new saved answer in the same run. A push alone is not runtime success.
+Run python -m unittest discover -s tests -p test_journal_recovery.py: expect eleven passing tests. Run existing queue and collector tests; record any baseline failures explicitly. Check notebook JSON, four-cell count, unchanged contract/settings. Runtime acceptance requires RECOVERED with attempts unchanged, three active slots, then a new saved answer in the same run. A push alone is not runtime success.
 
 ## Idempotence And Recovery
 
@@ -61,3 +61,5 @@ Planning: global ExecPlan instructions. Notebook: jupyter-notebook skill for tar
 ## Outcomes & Retrospective
 
 Pending Git publication and live runtime acceptance. Root cause of Drive journal corruption is not proven; recovery does not claim to eliminate recurrence.
+
+2026-10-10 root: initial release a6da9de published; opened notebook and renewed existing Drive access. Stopped setup before collector to add CSV large-field compatibility; revised v2 immutable tag pending.

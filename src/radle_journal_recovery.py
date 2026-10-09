@@ -66,6 +66,8 @@ def recover(queue, journal, manifest, output_csv, checkpoint_path):
                 raise ValueError('Recovery refused: journal/checkpoint status conflict')
             state['value'] = event['value']
     # CSV is authoritative for saved fields only after its exact hash matches.
+    # Long reasoning traces can exceed the standard library's 128 KiB default.
+    csv.field_size_limit(2**31 - 1)
     with Path(output_csv).open(encoding='utf-8-sig', newline='') as handle:
         reader = csv.DictReader(handle)
         if 'Master_Case_ID' not in (reader.fieldnames or []):
