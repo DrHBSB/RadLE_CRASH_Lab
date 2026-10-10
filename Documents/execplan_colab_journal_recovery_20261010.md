@@ -6,7 +6,7 @@ Resume the existing RadLE collection without losing paid answers or granting add
 
 ## Current State
 
-2026-10-10 root: collection reached3060/3200 answers and final backup0031 at05:03:53 IST. All remaining140 outcomes are exhausted or held;15 pending jobs already have2attempts. Subsequent resume at15:27 failed after renewed corruption because recovery did not recognize its own checkpoint_recovery event. User requested repair. V3 adds prior snapshot validation (position, archive hash, cohort, attempts and status agreement), preserving all bytes and limits. Thirteen focused tests pass outside sandbox (sandbox temp permissions prevented initial run). Publishing v3 and live verification pending. No third attempts or extra paid repair authorized.
+2026-10-10: ca50404 bounded repair release stopped at an existing PID-only writer lock before dispatch. User explicitly approved terminating old runtimes and recovering leftover locks through Git. Manage sessions initially showed current ca50404 and old f1d3bdb (dd465e7 already gone); after Terminate other sessions, it reported No active sessions. New immutable release adds one-time retirement in configuration after contract/metadata checks. It archives both outer and queue legacy PID locks, consumes a durable receipt before unlinking, and refuses any later lock. Runtime acceptance pending; last verified saved answers3060/3200.
 
 ## Locked Facts
 
@@ -16,13 +16,17 @@ Resume the existing RadLE collection without losing paid answers or granting add
 - Original journal: 186277552 bytes, SHA256 7587e7bf0b33f9fa6bf19224f837b1a206fe1bfa6c446629697191ffd607d49c; 13 invalid fragments and out-of-order/missing events. Filtering invalid lines cannot replay.
 - Downloaded checkpoint has1839 jobs. Its CSV hash matched the original CSV in the idle runtime. All valid event attempts are at or below checkpoint counts; latest results at equal attempts agree with checkpoint statuses.
 - Original workspace has unrelated dirty changes; implementation branch codex/radle-journal-recovery is based on b9a2b9b in the managed worktree radle-journal-recovery.
-- No scoring, promotion, export, added attempts, purchases, or bypass of identity/billing/locks.
+- No scoring, promotion, export, purchases, or bypass of identity/billing. One bounded terminal repair attempt and one legacy lock retirement after verified runtime shutdown are explicitly authorized.
 
 ## Do Not Revisit
 
 Do not skip invalid records or reset jobs. Do not use main's legacy notebook. Do not modify browser code or Drive directly (user steering and AGENTS.md).
 
 ## Progress
+
+- [x] User approved old runtime termination; Colab reports No active sessions.
+- [ ] Test and publish one-time lock retirement release.
+- [ ] Run committed release and verify archive receipt plus repair dispatch.
 
 - [x] 2026-10-10 root: inspect copied journal/checkpoint and identify corruption; preserve originals.
 - [x] 2026-10-10 root: implement CSV-bound snapshot recovery and original archive verification.
@@ -62,6 +66,10 @@ Planning: global ExecPlan instructions. Notebook: jupyter-notebook skill for tar
 
 ## Outcomes & Retrospective
 
+Current lock recovery is not yet live-verified. Earlier journal recovery success does not prove this repair has started.
+
 Git and live runtime acceptance complete. Original journal archived by SHA256, checkpoint counts preserved, new answer and backup observed. Existing exhausted/rate-limited pairs remain held under the two-attempt budget. Root cause of Drive journal corruption is not proven; recovery does not claim to eliminate recurrence.
 
 2026-10-10 root: initial release a6da9de published; opened notebook and renewed existing Drive access. Stopped setup before collector to add CSV large-field compatibility; revised v2 immutable tag pending.
+
+2026-10-10 revision: lock retirement is an explicit one-time externally verified shutdown recovery, not PID/age-based automatic reclamation. A failure after receipt creation requires review; never repeat authorization. Focused tests cover both locks, archives, data preservation, rerun idempotence, unknown locks and new locks after consumption.
