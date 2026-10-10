@@ -6,7 +6,7 @@ Resume the existing RadLE collection without losing paid answers or granting add
 
 ## Current State
 
-2026-10-10: ca50404 bounded repair release stopped at an existing PID-only writer lock before dispatch. User explicitly approved terminating old runtimes and recovering leftover locks through Git. Manage sessions initially showed current ca50404 and old f1d3bdb (dd465e7 already gone); after Terminate other sessions, it reported No active sessions. New immutable release adds one-time retirement in configuration after contract/metadata checks. It archives both outer and queue legacy PID locks, consumes a durable receipt before unlinking, and refuses any later lock. Runtime acceptance pending; last verified saved answers3060/3200.
+2026-10-10 22:48:58 IST: repair1 finished, active0, final backup0033,3082/3200 saved,110/200 completecases. User authorized separately durable repair2 for eligible failed pairs. Event repair_round2_authorized preserves original events and repair1 history. Only failed repair1 outcomes terminal/retry qualify; unknown/rejected/quota/blocked, saved and exhausted pending stay held. Replay is idempotent; interrupted requests stay held. Corrupt repair journals remain fail-closed. Five round2 tests and thirteen recovery tests pass. Existing queue suite34/36 with the same two baseline failures. Notebook four cells compile, outputs empty. Publish codex/radle-repair-round2-20261010; runtime acceptance pending.
 
 ## Locked Facts
 
@@ -16,7 +16,7 @@ Resume the existing RadLE collection without losing paid answers or granting add
 - Original journal: 186277552 bytes, SHA256 7587e7bf0b33f9fa6bf19224f837b1a206fe1bfa6c446629697191ffd607d49c; 13 invalid fragments and out-of-order/missing events. Filtering invalid lines cannot replay.
 - Downloaded checkpoint has1839 jobs. Its CSV hash matched the original CSV in the idle runtime. All valid event attempts are at or below checkpoint counts; latest results at equal attempts agree with checkpoint statuses.
 - Original workspace has unrelated dirty changes; implementation branch codex/radle-journal-recovery is based on b9a2b9b in the managed worktree radle-journal-recovery.
-- No scoring, promotion, export, purchases, or bypass of identity/billing. One bounded terminal repair attempt and one legacy lock retirement after verified runtime shutdown are explicitly authorized.
+- No scoring, promotion, export, purchases, or bypass of identity/billing. Two separately authorized bounded repair rounds and one legacy lock retirement after verified runtime shutdown are explicitly authorized.
 
 ## Do Not Revisit
 
@@ -25,8 +25,9 @@ Do not skip invalid records or reset jobs. Do not use main's legacy notebook. Do
 ## Progress
 
 - [x] User approved old runtime termination; Colab reports No active sessions.
-- [ ] Test and publish one-time lock retirement release.
-- [ ] Run committed release and verify archive receipt plus repair dispatch.
+- [x] Five lock tests and thirteen journal tests pass. Published baff6a7c9fd3afef0339b963ded71f76a6ccd569, tag codex/radle-lock-retirement-20261010; remote tag SHA verified.
+- [x] baff6a7 lock archive and repair1 verified; final backup0033 saved.
+- [ ] Test, publish and start separately authorized repair2; verify live dispatch.
 
 - [x] 2026-10-10 root: inspect copied journal/checkpoint and identify corruption; preserve originals.
 - [x] 2026-10-10 root: implement CSV-bound snapshot recovery and original archive verification.

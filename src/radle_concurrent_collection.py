@@ -275,7 +275,7 @@ class LiveProgress:
 def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             prompt=None, max_output_tokens=16384, universal_temperature=.01,
             backup_dir=None, concurrency=2, max_attempts=3, migration=None,
-            stop=None, resume_blocked=False, repair_once=False):
+            stop=None, resume_blocked=False, repair_once=False, repair_round=1):
     """One request per attempt. CSV is derived from baseline + journal.
 
     Attempts are counted durably from journal creation. Pre-journal failures are
@@ -560,14 +560,14 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 queue, journal, manifest, output_csv, folder / 'checkpoint.json')
         result = queue.run(jobs, call, folder / 'queue', **queue_options)
         if repair_once and not result['paused']:
-            log('REPAIR PASS: one additional attempt for terminal failures; uncertain, rejected, quota and pending evidence stays held.')
+            log(f'REPAIR ROUND {repair_round}: one authorized attempt; uncertain, rejected, quota and exhausted pending evidence stays held.')
             previous_calls = result['calls']
             repair_options = dict(queue_options)
             repair_options['selected_keys'] = {
                 key for key, state in result['states'].items()
                 if key in queue_options['selected_keys']
                 and (state['status'] == 'terminal' or 'repair_attempt' in state)}
-            result = queue.run(jobs, call, folder / 'queue', repair_once=True, **repair_options)
+            result = queue.run(jobs, call, folder / 'queue', repair_once=True, repair_round=repair_round, **repair_options)
             result['calls'] += previous_calls
         checkpoint(result['states'])
         final_df = export()

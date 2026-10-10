@@ -133,6 +133,17 @@ def replay(path, manifest):
                     or event.get('attempt') != state['attempts'] + 1):
                 raise ValueError('Invalid repair authorization')
             state['repair_attempt'] = event['attempt']
+        elif event["type"] == "repair_round2_authorized":
+            if (state['status'] != 'failed'
+                    or state.get('repair_attempt') != state['attempts']
+                    or state.get('repair_round', 1) != 1
+                    or state['value'].get('repair_outcome') not in {'terminal', 'retry'}
+                    or state['value'].get('remote_outcome_unknown')
+                    or event.get('attempt') != state['attempts'] + 1
+                    or event.get('authorization') != '20261010-user-round2'):
+                raise ValueError('Invalid second repair round authorization')
+            state['repair_round'] = 2
+            state['repair_attempt'] = event['attempt']
         elif event["type"] == "review_hold":
             # An explicit evidence review can isolate a previously global block.
             # Preserve every original event and attempt; this does not send a request.
@@ -155,7 +166,7 @@ def replay(path, manifest):
 
 
 def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
-        stop=None, resume_blocked=False, checkpoint=None, initial_attempts=None, on_event=None, heartbeat_seconds=30, selected_keys=None, repair_once=False, journal_recovery=None):
+        stop=None, resume_blocked=False, checkpoint=None, initial_attempts=None, on_event=None, heartbeat_seconds=30, selected_keys=None, repair_once=False, journal_recovery=None, repair_round=1):
     """call(job, attempt) makes ONE bounded-time request, with SDK retries disabled.
 
     checkpoint is an optional coordinator callback after each durable result.
@@ -163,6 +174,8 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
     Account/access failures pause new dispatches and drain in-flight calls.
     repair_once explicitly grants at most one durable extra attempt per unresolved job.
     """
+    if type(repair_round) is not int or repair_round not in {1, 2}:
+        raise ValueError('Only explicitly supported repair rounds 1 and 2 are allowed')
     if type(concurrency) is not int or concurrency < 1:
         raise ValueError("concurrency must be a positive integer")
     if type(max_attempts) is not int or max_attempts < 1:
@@ -227,8 +240,24 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                     state.update(status='failed', value=value, ready_at=0)
                     finalized.append(key)
             if not paused:
+                if repair_round == 2:
+                    for key, state in states.items():
+                        if (key in selected and state['status'] == 'failed'
+                                and state.get('repair_attempt') == state['attempts']
+                                and state.get('repair_round', 1) == 1
+                                and state['value'].get('repair_outcome') in {'terminal', 'retry'}
+                                and not state['value'].get('remote_outcome_unknown')):
+                            attempt = state['attempts'] + 1
+                            append(journal, {'type': 'repair_round2_authorized', 'key': key,
+                                            'attempt': attempt, 'authorization': '20261010-user-round2'})
+                            state.update(repair_round=2, repair_attempt=attempt)
+                        if (key in selected and state.get('repair_round') == 2
+                                and state['status'] == 'failed'
+                                and state['attempts'] < state['repair_attempt']):
+                            state['ready_at'] = 0
+                            pending.append(key)
                 for key, state in states.items():
-                    if key not in selected or state['status'] not in {'uncertain', 'terminal', 'rejected'}:
+                    if repair_round != 1 or key not in selected or state['status'] not in {'uncertain', 'terminal', 'rejected'}:
                         continue
                     if 'repair_attempt' not in state:
                         attempt = state['attempts'] + 1
