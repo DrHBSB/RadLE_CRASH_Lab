@@ -2660,6 +2660,7 @@ def run_benchmark(
     resume_blocked=False,
     repair_once=False,
     repair_round=1,
+    allow_partial_result=False,
 ):
     """Run the RadLE benchmark, resuming existing clean cells when possible."""
     if concurrency is not None:
@@ -2671,7 +2672,7 @@ def run_benchmark(
             output_csv=output_csv, models=models or MODELS, test_limit=test_limit,
             prompt=prompt, max_output_tokens=max_output_tokens,
             universal_temperature=universal_temperature, backup_dir=backup_dir,
-            concurrency=concurrency, max_attempts=max_job_attempts, migration=migration, resume_blocked=resume_blocked, repair_once=repair_once, repair_round=repair_round)
+            concurrency=concurrency, max_attempts=max_job_attempts, migration=migration, resume_blocked=resume_blocked, repair_once=repair_once, repair_round=repair_round, allow_partial_result=allow_partial_result)
     models = models or MODELS
     image_index = build_image_index(image_folder)
     items = sorted(image_index.items(), key=lambda x: numeric_case_sort_key(x[0]))
@@ -3544,6 +3545,53 @@ def seed_completed_smoke_results(existing, smoke, models, expected_cases):
     return result
 
 
+def audit_saved_collection(output_csv, models, expected_cases, max_output_tokens):
+    """Read-only audit: no API client, journal writes, recovery or promotion."""
+    import radle_job_queue as queue
+    source = pathlib.Path(output_csv)
+    folder = pathlib.Path(str(source) + '.concurrent')
+    if (folder / 'writer.lock').exists() or (folder / 'queue' / 'writer.lock').exists():
+        raise RuntimeError('Audit refused while a writer lock exists')
+    before = hashlib.sha256(source.read_bytes()).hexdigest()
+    checkpoint = json.loads((folder / 'checkpoint.json').read_text(encoding='utf-8'))
+    if checkpoint['csv_sha256'] != before:
+        raise RuntimeError('Audit checkpoint CSV hash mismatch')
+    journal = folder / 'queue' / 'events.jsonl'
+    manifest = json.loads(journal.read_bytes().splitlines()[0])
+    states = queue.replay(journal, manifest)
+    if set(states) != set(checkpoint['states']) or any(
+            (s['status'], s['attempts']) != (checkpoint['states'][k]['status'], checkpoint['states'][k]['attempts'])
+            for k, s in states.items()):
+        raise RuntimeError('Audit journal/checkpoint disagreement')
+    unresolved = [dict(Master_Case_ID=json.loads(k)[0], model=json.loads(k)[1], status=s['status'], attempts=s['attempts'])
+                  for k, s in states.items() if s['status'] not in {'success', 'flagged'}]
+    inventory = []
+    for key, state in states.items():
+        if state['status'] in {'success', 'flagged'}:
+            continue
+        value = state.get('value', {})
+        metadata = value.get('response_metadata', {}) or {}
+        reason = (value.get('diagnostic') or {}).get('summary') or value.get('reason') or value.get('error_type') or 'unknown'
+        inventory.append(dict(case=json.loads(key)[0], model=json.loads(key)[1],
+            status=state['status'], attempts=state['attempts'], repair_round=state.get('repair_round'),
+            http_status=value.get('http_status'), reason=reason,
+            response_id=metadata.get('response_id'), finish_reason=metadata.get('finish_reason'),
+            native_finish_reason=metadata.get('native_finish_reason'),
+            completion_tokens=metadata.get('completion_tokens'),
+            content_length=metadata.get('content_length'), reasoning_length=metadata.get('reasoning_length')))
+    audit = audit_benchmark_output(source, models=models, expected_case_ids=range(1, expected_cases + 1), max_output_tokens=max_output_tokens)
+    frame = pd.read_csv(source, dtype={'Master_Case_ID': str})
+    if hashlib.sha256(source.read_bytes()).hexdigest() != before:
+        raise RuntimeError('Source changed during read-only audit')
+    return dict(status='audit_only', final_df=frame, raw_df=frame, final_audit=audit,
+                final_source_csv=str(source), final_source_label='raw_audited_unpromoted',
+                source_sha256=before, inference_calls=0, unresolved_pairs=unresolved,
+                failure_inventory=pd.DataFrame(inventory),
+                gate_receipt=pd.DataFrame(), final_manifest=None, public_release_files=None,
+                scorer_result=None, failed_pairs=[p for p in unresolved if p['status'] == 'failed'],
+                failed_pairs_path=None)
+
+
 def run_autonomous_openrouter_workflow(
     client,
     dataset_root,
@@ -3576,8 +3624,13 @@ def run_autonomous_openrouter_workflow(
     resume_blocked=True,
     repair_once=False,
     repair_round=1,
+    audit_only=False,
 ):
     """Run smoke, full benchmark, audit, repair, and hard gates with minimal notebook state."""
+    if audit_only:
+        if promote_private or export_public:
+            raise RuntimeError('Read-only audit cannot promote or export')
+        return audit_saved_collection(run_paths['raw_results_csv'], models, expected_cases, max_output_tokens)
     if allow_missing_reasoning and (promote_private or export_public):
         raise RuntimeError("Flag-tolerant execution cannot promote or export publication results.")
     if promote_private and promote_confirmation != "YES_AUTO_PROMOTE_PRIVATE_FINAL":
@@ -3696,19 +3749,22 @@ def run_autonomous_openrouter_workflow(
         resume_blocked=resume_blocked,
         repair_once=repair_once,
         repair_round=repair_round,
+        allow_partial_result=True,
     )
-    if full_df.attrs.get("failed_pairs"):
-        failed_pairs = full_df.attrs["failed_pairs"]
+    if full_df.attrs.get("unresolved_pairs") or full_df.attrs.get("failed_pairs"):
+        failed_pairs = full_df.attrs.get("failed_pairs", [])
         print(f"Collection finished with {len(failed_pairs)} failed pairs; no clean-run gate or promotion was performed.")
         return {
-            "status": "completed_with_failures", "smoke": smoke_result, "raw_df": full_df,
+            "status": "completed_with_unresolved" if any(p['status'] != 'failed' for p in full_df.attrs.get('unresolved_pairs', [])) else "completed_with_failures", "smoke": smoke_result, "raw_df": full_df,
             "final_df": full_df, "final_source_csv": run_paths["raw_results_csv"],
             "final_source_label": "raw_with_failures",
             "final_audit": audit_benchmark_output(run_paths["raw_results_csv"], models=models,
                 expected_case_ids=range(1, expected_cases + 1), max_output_tokens=max_output_tokens),
             "gate_receipt": pd.DataFrame(), "final_manifest": None, "scorer_result": None,
             "public_release_files": None, "failed_pairs": failed_pairs,
-            "failed_pairs_path": full_df.attrs["failed_pairs_path"],
+            "failed_pairs_path": full_df.attrs.get("failed_pairs_path"),
+            "unresolved_pairs": full_df.attrs.get('unresolved_pairs', []),
+            "unresolved_pairs_path": full_df.attrs.get('unresolved_pairs_path'),
         }
     full_cascade = run_repair_cascade_until_clean(
         client=client,

@@ -39,6 +39,28 @@ class Outcome:
 STATUSES = {"success", "flagged", "retry", "terminal", "quota", "blocked", "uncertain", "rejected", "failed"}
 
 
+def has_attempt(state, max_attempts):
+    """Display and scheduling share the same durable attempt bound."""
+    return state['attempts'] < state.get('repair_attempt', max_attempts)
+
+
+def model_pacing(states):
+    """Recover scheduling evidence without changing request authority."""
+    policies = {}
+    for key, state in states.items():
+        evidence = state.get('value', {}).get('model_pacing')
+        if not isinstance(evidence, dict):
+            continue
+        stamp, until = evidence.get('updated_at'), evidence.get('until')
+        if not all(isinstance(v, (int, float)) and math.isfinite(v) and v >= 0
+                   for v in (stamp, until)):
+            raise ValueError('Invalid model cooldown evidence')
+        model = json.loads(key)[1]
+        if stamp >= policies.get(model, {}).get('updated_at', -1):
+            policies[model] = dict(evidence)
+    return policies
+
+
 @contextmanager
 def graceful_interrupt(stop):
     # A SIGINT between fsync and the state update must not replay a saved event.
@@ -269,12 +291,15 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                         state['ready_at'] = 0
                         pending.append(key)
         active = {}
+        pacing = model_pacing(states)
         calls = 0
         last_heartbeat = time.monotonic()
         def report(event, key=None):
             if on_event:
                 try:
                     on_event(event, key, states, tuple(active.values()))
+                    if paused and active and event != 'pausing':
+                        on_event('pausing', None, states, tuple(active.values()))
                 except Exception:
                     try:
                         warnings.warn("Progress display failed; collection and saving continue.", RuntimeWarning)
@@ -293,7 +318,10 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                     while pending and len(active) < concurrency and not paused and not stop.is_set():
                         now = time.time()
                         eligible = recovery[:1] if recovery else pending
-                        ready = [k for k in eligible if k in pending and states[k]["ready_at"] <= now]
+                        ready = [k for k in eligible if k in pending and states[k]["ready_at"] <= now
+                                 and pacing.get(by_key[k].model, {}).get('until', 0) <= now
+                                 and not (pacing.get(by_key[k].model, {}).get('limited', False)
+                                          and any(by_key[a].model == by_key[k].model for a in active.values()))]
                         active_models = {by_key[k].model for k in active.values()}
                         # Spread ready work across models; fill spare slots when no alternative is ready.
                         key = next((k for k in ready if by_key[k].model not in active_models),
@@ -315,7 +343,8 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                         last_heartbeat = time.monotonic()
                     if not active:
                         if pending and not paused and not stop.is_set():
-                            stop.wait(min(.05, max(0, min(states[k]["ready_at"] for k in pending) - time.time())))
+                            next_ready = min(max(states[k]['ready_at'], pacing.get(by_key[k].model, {}).get('until', 0)) for k in pending)
+                            stop.wait(min(.05, max(.001, next_ready - time.time())))
                         continue
                     done, _ = wait(active, timeout=.05, return_when=FIRST_COMPLETED)
                     for future in done:
@@ -332,11 +361,22 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                             # Do not journal provider exception text: it may contain secrets.
                             outcome = Outcome("uncertain", {"error_type": type(exc).__name__})
                         account_failure = outcome.status in {'quota', 'blocked'}
+                        model = by_key[key].model
+                        if outcome.value.get('http_status') == 429:
+                            policy = dict(updated_at=time.time(),
+                                          until=max(pacing.get(model, {}).get('until', 0),
+                                                    time.time() + outcome.retry_after), limited=True)
+                            pacing[model] = policy
+                            outcome.value = dict(outcome.value, model_pacing=policy)
+                        elif outcome.status in {'success', 'flagged'} and model in pacing:
+                            policy = dict(updated_at=time.time(), until=pacing[model]['until'], limited=False)
+                            pacing[model] = policy
+                            outcome.value = dict(outcome.value, model_pacing=policy)
                         if state.get('repair_attempt') == state['attempts'] and outcome.status not in {'success', 'flagged'}:
                             value = dict(outcome.value, repair_outcome=outcome.status)
                             if outcome.status == 'uncertain':
                                 value['remote_outcome_unknown'] = True
-                            outcome = Outcome('failed', value)
+                            outcome = Outcome('failed', value, outcome.retry_after)
                         if outcome.status == "retry" and state["attempts"] >= max_attempts:
                             outcome.status = "terminal"
                         ready_at = time.time() + outcome.retry_after

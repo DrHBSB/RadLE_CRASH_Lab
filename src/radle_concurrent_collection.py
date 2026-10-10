@@ -1,6 +1,7 @@
 """Durable concurrent collection for the existing Morning benchmark contracts."""
 from collections import Counter, deque
 from datetime import datetime, timezone, timedelta
+from email.utils import parsedate_to_datetime
 import hashlib
 import json
 import math
@@ -14,6 +15,27 @@ import time
 import pandas as pd
 
 import radle_job_queue as queue
+
+
+def retry_delay(header, attempt, now=None):
+    """Respect numeric and HTTP-date Retry-After; malformed values use backoff."""
+    delay = max(60, min(300, 2 ** min(attempt, 8)))
+    try:
+        value = float(header)
+    except (TypeError, ValueError):
+        try:
+            value = parsedate_to_datetime(header).timestamp() - (time.time() if now is None else now)
+        except (TypeError, ValueError, OverflowError):
+            return delay
+    import math
+    return max(delay, value) if math.isfinite(value) and value >= 0 else delay
+
+
+def waiting_counts(states, active, max_attempts):
+    active = set(active)
+    pending = [s for k, s in states.items() if k not in active and s['status'] in {'pending', 'retry'}]
+    return (sum(queue.has_attempt(s, max_attempts) for s in pending),
+            sum(not queue.has_attempt(s, max_attempts) for s in pending))
 
 
 def check_openrouter_funds(client):
@@ -98,7 +120,7 @@ def diagnostic(exc):
     return result
 
 
-def progress_summary(states, active, jobs_by_case, total_jobs, total_cases, repair_enabled=False):
+def progress_summary(states, active, jobs_by_case, total_jobs, total_cases, repair_enabled=False, max_attempts=3):
     active = set(active)
     counts = Counter(v['status'] for k, v in states.items() if k not in active)
     collected = total_jobs - len(states) + counts['success'] + counts['flagged']
@@ -107,8 +129,9 @@ def progress_summary(states, active, jobs_by_case, total_jobs, total_cases, repa
     review = sum(counts[k] for k in ('uncertain', 'blocked', 'quota', 'terminal', 'rejected'))
     review_label = "awaiting repair" if repair_enabled else "need review"
     failed_label = f" | {counts['failed']} failed" if counts['failed'] else ""
+    runnable, exhausted = waiting_counts(states, active, max_attempts)
     return (f"{collected}/{total_jobs} answers collected | {cases_done}/{total_cases} cases complete | "
-            f"{len(active)} running | {counts['retry']} retry waiting | {review} {review_label} | {counts['pending']} queued{failed_label}")
+            f"{len(active)} running | {counts['retry']} retry waiting | {review} {review_label} | {runnable} queued | {exhausted} exhausted{failed_label}")
 
 
 
@@ -189,9 +212,8 @@ class LiveProgress:
                               'failed': 'repair finished unsuccessfully; other jobs continue'}[status]
                     detail = f'{status.upper()} · Case {case} · {model.replace("_", " ")} · {reason} → {action}'
                 self.record(detail)
-            self.phase = ('PAUSING · saving active requests'
-                          if any(v['status'] in {'quota', 'blocked'} and json.loads(k)[1] in self.active_models
-                                 for k, v in states.items()) else 'RUNNING')
+            # Historical holds are not evidence that the scheduler is paused.
+            self.phase = 'PAUSING · saving active requests' if event == 'pausing' else 'RUNNING'
             if event == 'stopped':
                 self.phase = ('COLLECTED · final backup pending' if all(v['status'] in {'success', 'flagged'} for v in states.values())
                               else 'COMPLETE WITH FAILURES' if all(v['status'] in {'success', 'flagged', 'failed'} for v in states.values())
@@ -238,7 +260,7 @@ class LiveProgress:
             running = [k for k in self.active if k in keys]
             activity = '; '.join(f'Case {json.loads(k)[0]} · {max(0, time.monotonic() - self.starts.get(k, time.monotonic())):.0f}s'
                                  f' · try {states[k]["attempts"]}/{states[k].get("repair_attempt", self.max_attempts)}' for k in running)
-            waiting = any(states[k]['status'] in {'pending', 'retry'} for k in keys)
+            waiting = any(states[k]['status'] in {'pending', 'retry'} and queue.has_attempt(states[k], self.max_attempts) for k in keys)
             if not activity:
                 activity = 'Complete' if complete == len(self.cases) else (
                     'Waiting for slot' if waiting and self.phase == 'RUNNING' else 'Awaiting review' if not waiting else 'Idle')
@@ -257,7 +279,9 @@ class LiveProgress:
         held = sum(counts[k] for k in ('uncertain', 'quota', 'blocked', 'terminal', 'rejected'))
         last = f'{max(0, time.monotonic() - self.last_save):.0f}s ago' if self.last_save is not None else 'No new answer this session'
         hold_label = 'awaiting repair' if self.repair_enabled else 'need review'
-        lines += ['', f'Waiting: {counts["pending"]} queued · {counts["retry"]} retry · {held} {hold_label} · {counts["failed"]} failed',
+        runnable, exhausted = waiting_counts(states, active, self.max_attempts)
+        cooling = sum(policy['until'] > time.time() for policy in queue.model_pacing(states).values())
+        lines += ['', f'Waiting: {runnable} queued · {exhausted} exhausted · {cooling} models cooling down · {held} {hold_label} · {counts["failed"]} failed',
                   f'Last answer saved: {last}', f'Last backup: {self.backup}',
                   f'Updated: {self.stamp()} IST · refresh every 5s while collecting', '', 'RECENT EVENTS', *self.events]
         return '\n'.join(lines)
@@ -275,7 +299,7 @@ class LiveProgress:
 def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             prompt=None, max_output_tokens=16384, universal_temperature=.01,
             backup_dir=None, concurrency=2, max_attempts=3, migration=None,
-            stop=None, resume_blocked=False, repair_once=False, repair_round=1):
+            stop=None, resume_blocked=False, repair_once=False, repair_round=1, allow_partial_result=False):
     """One request per attempt. CSV is derived from baseline + journal.
 
     Attempts are counted durably from journal creation. Pre-journal failures are
@@ -427,7 +451,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 elif state['status'] == 'uncertain':
                     log('HELD for targeted review; other jobs continue. This request will not be blindly resent.')
             if event in {'resumed', 'saved', 'heartbeat', 'stopped'}:
-                log(progress_summary(states, active, jobs_by_case, len(cases) * len(models), len(cases), repair_enabled=repair_once))
+                log(progress_summary(states, active, jobs_by_case, len(cases) * len(models), len(cases), repair_enabled=repair_once, max_attempts=max_attempts))
             if event == 'heartbeat' and active:
                 log('Still waiting: ' + '; '.join(
                     f"case {json.loads(k)[0]} / {json.loads(k)[1].replace('_', ' ')} ({time.monotonic() - starts.get(k, time.monotonic()):.0f}s)"
@@ -513,10 +537,8 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 if funds is not None and kind == 'retry':
                     delay = 30
                 if status == 429:
-                    try:
-                        delay = max(delay, float(exc.response.headers.get('retry-after', delay)))
-                    except (ValueError, AttributeError):
-                        pass
+                    headers = getattr(getattr(exc, 'response', None), 'headers', {}) or {}
+                    delay = retry_delay(headers.get('retry-after'), attempt)
                 return queue.Outcome(kind, {'http_status': status, 'error_type': type(exc).__name__, 'diagnostic': diagnostic(exc), 'attempt_history': attempt_history, 'credit_check': funds},
                                      retry_after=delay if kind == 'retry' else 0)
             fields = rb.extract_result(response, round(time.time() - t0, 1), params, False, model)
@@ -534,6 +556,15 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 kind = 'retry'
             choice = response.choices[0] if getattr(response, 'choices', None) else None
             response_metadata = {'response_id': getattr(response, 'id', None), 'finish_reason': getattr(choice, 'finish_reason', None), 'native_finish_reason': getattr(choice, 'native_finish_reason', None)}
+            message = getattr(choice, 'message', None)
+            content = getattr(message, 'content', None)
+            usage = getattr(response, 'usage', None)
+            response_metadata.update(content_type=type(content).__name__,
+                content_length=len(content) if isinstance(content, str) else None,
+                reasoning_length=len(str(getattr(message, 'reasoning', None) or '')),
+                refusal_present=bool(getattr(message, 'refusal', None)),
+                completion_tokens=getattr(usage, 'completion_tokens', None),
+                prompt_tokens=getattr(usage, 'prompt_tokens', None))
             return queue.Outcome(kind, {'fields': rb.make_json_safe(fields), 'reason': info['reason'], 'response_metadata': response_metadata, 'attempt_history': attempt_history},
                                  retry_after=2 if kind == 'retry' else 0)
 
@@ -587,6 +618,16 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
         atomic_json(folder / 'failed_pairs.json', failed_pairs)
         final_df.attrs['failed_pairs'] = failed_pairs
         final_df.attrs['failed_pairs_path'] = str(folder / 'failed_pairs.json')
+        unresolved = []
+        for key, state in result['states'].items():
+            if state['status'] not in {'success', 'flagged'}:
+                case, name = json.loads(key)
+                unresolved.append({'Master_Case_ID': case, 'model': name,
+                    'status': state['status'], 'attempts': state['attempts'],
+                    'category': 'exhausted' if state['status'] in {'pending', 'retry'} and not queue.has_attempt(state, max_attempts) else state['status']})
+        final_df.attrs['unresolved_pairs'] = unresolved
+        final_df.attrs['unresolved_pairs_path'] = str(folder / 'unresolved_pairs.json')
+        atomic_json(folder / 'unresolved_pairs.json', unresolved)
         if result['paused'] or not result['complete'] or any(v['status'] == 'terminal' for v in result['states'].values()):
             log('REVIEW REQUIRED. Completed answers are saved; unresolved requests were not blindly resent.')
             for key, state in result['states'].items():
@@ -596,7 +637,8 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                     log(f"  case {case} | {name.replace('_', ' ')}: {detail}")
             log(f"Evidence journal: {folder / 'queue' / 'events.jsonl'}")
             log('Next: review the listed request evidence before resuming. Do not delete the journal or rerun uncertain calls blindly.')
-            raise RuntimeError('Collection has unresolved outcomes; completed answers saved. See the case-specific explanation above.')
+            if not allow_partial_result:
+                raise RuntimeError('Collection has unresolved outcomes; completed answers saved. See the case-specific explanation above.')
         if failed_pairs:
             log(f'COLLECTION COMPLETE WITH FAILURES: {len(failed_pairs)} pairs failed after the bounded repair pass. Saved answers retained.')
         return final_df

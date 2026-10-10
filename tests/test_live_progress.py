@@ -124,7 +124,7 @@ class LiveProgressTests(unittest.TestCase):
     def test_pause_label_clears_when_blocked_job_resumes(self):
         ui, jobs, states = self.fixture(lambda *a, **kw: Handle())
         states[jobs[0].key]['status'] = 'quota'
-        ui.update('resumed', None, states, [])
+        ui.update('pausing', None, states, [])
         self.assertTrue(ui.phase.startswith('PAUSING'))
         states[jobs[0].key].update(status='uncertain', attempts=2)
         ui.update('started', jobs[0].key, states, [jobs[0].key])
