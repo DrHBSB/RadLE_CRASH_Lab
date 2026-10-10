@@ -6,7 +6,7 @@ Resume the existing RadLE collection without losing paid answers or granting add
 
 ## Current State
 
-2026-10-10 22:48:58 IST: repair1 finished, active0, final backup0033,3082/3200 saved,110/200 completecases. User authorized separately durable repair2 for eligible failed pairs. Event repair_round2_authorized preserves original events and repair1 history. Only failed repair1 outcomes terminal/retry qualify; unknown/rejected/quota/blocked, saved and exhausted pending stay held. Replay is idempotent; interrupted requests stay held. Corrupt repair journals remain fail-closed. Five round2 tests and thirteen recovery tests pass. Existing queue suite34/36 with the same two baseline failures. Notebook four cells compile, outputs empty. Publish codex/radle-repair-round2-20261010; runtime acceptance pending.
+2026-10-10 23:00 IST: user cleared872eb03 prompt; setup/import/config succeeded but collection refused another malformed journal and repair checkpoint above ordinary2. No round2 dispatch verified. Repair-aware recovery now reconstructs durable repair_authorized/repair_round2_authorized grants from exact archived events and validates archive chains, cohorts, bounds and preceding result evidence. No increase from counts alone; failed outcomes without evidence stay unknown held.17 recovery tests pass, including repeated corruption and zero-call resumed repair. Publish codex/radle-repair-recovery-20261010, then open/run immutable notebook; Runanyway remains user handoff. Saved3082/3200 and finalbackup0033 remain last verified.
 
 ## Locked Facts
 

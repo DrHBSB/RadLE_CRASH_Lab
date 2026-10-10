@@ -57,6 +57,56 @@ class RecoveryTests(unittest.TestCase):
             self.recover()
         self.assertEqual(self.journal.read_bytes(), self.original)
 
+    def test_repair_authority_survives_repeated_corruption(self):
+        self.journal.unlink()
+        jobs = [queue.Job('1', 'model', {})]
+        queue.run(jobs, lambda *_: queue.Outcome('terminal', {}), self.folder,
+                  max_attempts=2, contract={})
+        result = queue.run(jobs, lambda *_: queue.Outcome('retry', {}), self.folder,
+                           max_attempts=2, contract={}, repair_once=True)
+        self.write_checkpoint('failed', 2)
+        with self.journal.open('ab') as handle:
+            handle.write(b'corrupted\n')
+        states = self.recover()
+        self.assertEqual(states[self.key]['repair_attempt'], 2)
+        self.assertEqual(states[self.key]['value']['repair_outcome'], 'retry')
+        seen = []
+        def call(job, attempt):
+            seen.append(attempt)
+            return queue.Outcome('retry', {})
+        queue.run(jobs, call, self.folder, max_attempts=2, contract={}, repair_once=True, repair_round=2)
+        self.assertEqual(seen, [3])
+        self.write_checkpoint('failed', 3)
+        with self.journal.open('ab') as handle:
+            handle.write(b'corrupted again\n')
+        states = self.recover()
+        self.assertEqual(states[self.key]['repair_round'], 2)
+        self.assertEqual(states[self.key]['repair_attempt'], 3)
+        queue.run(jobs, lambda *_: self.fail('repair sent twice'), self.folder,
+                  max_attempts=2, contract={}, repair_once=True, repair_round=2)
+
+    def test_extra_attempt_without_grant_is_refused(self):
+        self.write_checkpoint('failed', 3)
+        with self.assertRaisesRegex(ValueError, 'invalid checkpoint state'):
+            self.recover()
+        self.assertEqual(self.journal.read_bytes(), self.original)
+
+    def test_unproven_grant_is_refused(self):
+        queue.append(self.journal, dict(type='repair_authorized', key=self.key, attempt=3))
+        self.write_checkpoint('failed', 3)
+        with self.assertRaisesRegex(ValueError, 'unproven repair authorization'):
+            self.recover()
+
+    def test_consumed_repair_with_missing_outcome_stays_held(self):
+        queue.append(self.journal, dict(type='result', key=self.key, attempt=2,
+                     status='terminal', value={}, ready_at=0))
+        queue.append(self.journal, dict(type='repair_authorized', key=self.key, attempt=3))
+        self.write_checkpoint('failed', 3)
+        states = self.recover()
+        self.assertTrue(states[self.key]['value']['remote_outcome_unknown'])
+        queue.run([queue.Job('1', 'model', {})], lambda *_: self.fail('unknown outcome resent'),
+                  self.folder, max_attempts=2, contract={}, repair_once=True, repair_round=2)
+
     def test_recover_previously_recovered_log(self):
         self.recover()
         first = self.journal.read_bytes()

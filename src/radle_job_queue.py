@@ -105,15 +105,17 @@ def replay(path, manifest):
         if event['type'] == 'checkpoint_recovery':
             if index != 1 or set(event['states']) != set(states):
                 raise ValueError('Invalid recovery snapshot position or cohort')
-            from radle_journal_recovery import sha
+            from radle_journal_recovery import sha, repair_grants
             archive = path.with_name('events.original.' + event['original_sha256'] + '.jsonl')
             if sha(archive) != event['original_sha256']:
                 raise ValueError('Recovery archive hash mismatch')
+            grants = repair_grants(archive.read_bytes(), manifest, path)
             for key, restored in event['states'].items():
+                grant = grants.get(key, {})
                 if (type(restored['attempts']) is not int
-                        or not states[key]['attempts'] <= restored['attempts'] <= manifest['max_attempts']
+                        or not states[key]['attempts'] <= restored['attempts'] <= grant.get('repair_attempt', manifest['max_attempts'])
                         or restored['status'] not in STATUSES | {'pending'}
-                        or 'repair_attempt' in restored):
+                        or any(restored.get(field) != grant.get(field) for field in ('repair_attempt', 'repair_round'))):
                     raise ValueError('Invalid recovery snapshot state')
             states = event['states']
             continue
