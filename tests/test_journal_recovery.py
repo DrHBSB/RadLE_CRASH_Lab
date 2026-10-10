@@ -57,6 +57,28 @@ class RecoveryTests(unittest.TestCase):
             self.recover()
         self.assertEqual(self.journal.read_bytes(), self.original)
 
+    def test_recover_previously_recovered_log(self):
+        self.recover()
+        first = self.journal.read_bytes()
+        with self.journal.open('ab') as handle:
+            handle.write(b'broken fragment\n')
+        damaged = self.journal.read_bytes()
+        restored = self.recover()
+        self.assertEqual(restored[self.key]['attempts'], 2)
+        self.assertEqual(queue.replay(self.journal, self.manifest), restored)
+        self.assertIn(damaged, [p.read_bytes() for p in self.folder.glob('events.original.*.jsonl')])
+        self.assertNotEqual(first, damaged)
+
+    def test_recovery_refuses_damaged_prior_archive(self):
+        self.recover()
+        next(self.folder.glob('events.original.*.jsonl')).write_bytes(b'tampered')
+        with self.journal.open('ab') as handle:
+            handle.write(b'broken fragment\n')
+        before = self.journal.read_bytes()
+        with self.assertRaisesRegex(ValueError, 'prior archive hash'):
+            self.recover()
+        self.assertEqual(self.journal.read_bytes(), before)
+
     def test_later_attempt_refuses_stale_checkpoint(self):
         queue.append(self.journal, dict(type='start', key=self.key, attempt=3))
         before = self.journal.read_bytes()

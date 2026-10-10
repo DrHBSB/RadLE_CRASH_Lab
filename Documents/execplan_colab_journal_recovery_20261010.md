@@ -6,7 +6,7 @@ Resume the existing RadLE collection without losing paid answers or granting add
 
 ## Current State
 
-2026-10-10 root: Git release dd465e7 is published as codex/radle-checkpoint-recovery-v2-20261010. Live recovery succeeded;2703/3200 saved, backup0023 at00:26:29 IST, three active slots. Monitor updated to new release every30minutes. No browser code or manual Drive edits after user Git-only steering. Next automated check: observe ongoing saves and preserve bounded attempts.
+2026-10-10 root: collection reached3060/3200 answers and final backup0031 at05:03:53 IST. All remaining140 outcomes are exhausted or held;15 pending jobs already have2attempts. Subsequent resume at15:27 failed after renewed corruption because recovery did not recognize its own checkpoint_recovery event. User requested repair. V3 adds prior snapshot validation (position, archive hash, cohort, attempts and status agreement), preserving all bytes and limits. Thirteen focused tests pass outside sandbox (sandbox temp permissions prevented initial run). Publishing v3 and live verification pending. No third attempts or extra paid repair authorized.
 
 ## Locked Facts
 

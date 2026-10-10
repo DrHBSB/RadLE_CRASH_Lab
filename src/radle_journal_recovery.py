@@ -44,6 +44,28 @@ def recover(queue, journal, manifest, output_csv, checkpoint_path):
             invalid.append(number)
             continue
         kind = event.get('type')
+        if kind == 'checkpoint_recovery':
+            # A recovered log can itself suffer a later interrupted Drive write.
+            # Validate its original receipt rather than treating it as a new call.
+            if number != 2:
+                raise ValueError('Recovery refused: invalid prior snapshot position')
+            archive = journal.with_name('events.original.' + event['original_sha256'] + '.jsonl')
+            if sha(archive) != event['original_sha256']:
+                raise ValueError('Recovery refused: prior archive hash mismatch')
+            prior_states = event['states']
+            if set(prior_states) != set(states):
+                raise ValueError('Recovery refused: prior snapshot cohort mismatch')
+            for key, prior in prior_states.items():
+                attempt = prior['attempts']
+                inherited = manifest.get('initial_attempts', {}).get(key, 0)
+                if (type(attempt) is not int
+                        or not inherited <= attempt <= states[key]['attempts']
+                        or prior['status'] not in queue.STATUSES | {'pending'}
+                        or 'repair_attempt' in prior):
+                    raise ValueError('Recovery refused: invalid prior snapshot state')
+                latest[key] = dict(attempt=attempt, status=prior['status'],
+                                   value=prior.get('value', {}), snapshot=True)
+            continue
         if kind == 'code_version':
             continue
         if kind not in {'start', 'result'}:
@@ -55,6 +77,12 @@ def recover(queue, journal, manifest, output_csv, checkpoint_path):
             if event['status'] not in queue.STATUSES:
                 raise ValueError('Recovery refused: invalid journal status')
             previous = latest.get(key)
+            if previous and previous.get('snapshot') and event['attempt'] == previous['attempt']:
+                if (previous['status'] not in {'pending', 'uncertain'}
+                        and (event['status'] != previous['status'] or event['value'] != previous['value'])):
+                    raise ValueError('Recovery refused: conflicting snapshot result')
+                latest[key] = event
+                continue
             if previous is None or event['attempt'] > previous['attempt']:
                 latest[key] = event
             elif event['attempt'] == previous['attempt'] and event != previous:
