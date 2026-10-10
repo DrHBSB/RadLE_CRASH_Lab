@@ -560,9 +560,14 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 queue, journal, manifest, output_csv, folder / 'checkpoint.json')
         result = queue.run(jobs, call, folder / 'queue', **queue_options)
         if repair_once and not result['paused']:
-            log('REPAIR PASS: one additional attempt per unresolved pair; persistent failures finish as FAILED.')
+            log('REPAIR PASS: one additional attempt for terminal failures; uncertain, rejected, quota and pending evidence stays held.')
             previous_calls = result['calls']
-            result = queue.run(jobs, call, folder / 'queue', repair_once=True, **queue_options)
+            repair_options = dict(queue_options)
+            repair_options['selected_keys'] = {
+                key for key, state in result['states'].items()
+                if key in queue_options['selected_keys']
+                and (state['status'] == 'terminal' or 'repair_attempt' in state)}
+            result = queue.run(jobs, call, folder / 'queue', repair_once=True, **repair_options)
             result['calls'] += previous_calls
         checkpoint(result['states'])
         final_df = export()

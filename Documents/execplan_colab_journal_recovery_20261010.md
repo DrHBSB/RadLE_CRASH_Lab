@@ -10,6 +10,8 @@ Resume the existing RadLE collection without losing paid answers or granting add
 
 ## Locked Facts
 
+2026-10-10 user explicitly authorized one additional eligible repair attempt. New bounded repair release sets AUTO_REPAIR_UNRESOLVED_ONCE=True. Collector selects terminal failures only, plus jobs with an existing durable repair authorization (to resume/finalize without duplication). Unknown remote outcomes, rejected content, quota and exhausted pending evidence remain held. Original max_attempts remains2 and completed answers are excluded. Prior V3 release published f1d3bdb; live verification blocked by Colab Run anyway security prompt requiring user handoff. Never bypass that rejection.
+
 - Run openrouter_16_32k_20261008: 200 cases, 16 models, concurrency3, cap32768, two attempts including inherited history.
 - Original journal: 186277552 bytes, SHA256 7587e7bf0b33f9fa6bf19224f837b1a206fe1bfa6c446629697191ffd607d49c; 13 invalid fragments and out-of-order/missing events. Filtering invalid lines cannot replay.
 - Downloaded checkpoint has1839 jobs. Its CSV hash matched the original CSV in the idle runtime. All valid event attempts are at or below checkpoint counts; latest results at equal attempts agree with checkpoint statuses.
