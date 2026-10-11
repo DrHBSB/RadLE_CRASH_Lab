@@ -157,16 +157,17 @@ def replay(path, manifest):
                     or event.get('attempt') != state['attempts'] + 1):
                 raise ValueError('Invalid repair authorization')
             state['repair_attempt'] = event['attempt']
-        elif event["type"] == "repair_round2_authorized":
+        elif event["type"] in {"repair_round2_authorized", "repair_round3_authorized"}:
+            round_number = 2 if event['type'] == 'repair_round2_authorized' else 3
             if (state['status'] != 'failed'
                     or state.get('repair_attempt') != state['attempts']
-                    or state.get('repair_round', 1) != 1
+                    or state.get('repair_round', 1) != round_number - 1
                     or state['value'].get('repair_outcome') not in {'terminal', 'retry'}
                     or state['value'].get('remote_outcome_unknown')
                     or event.get('attempt') != state['attempts'] + 1
-                    or event.get('authorization') != '20261010-user-round2'):
+                    or event.get('authorization') != {2: '20261010-user-round2', 3: '20261011-user-round3'}[round_number]):
                 raise ValueError('Invalid second repair round authorization')
-            state['repair_round'] = 2
+            state['repair_round'] = round_number
             state['repair_attempt'] = event['attempt']
         elif event["type"] == "review_hold":
             # An explicit evidence review can isolate a previously global block.
@@ -198,8 +199,8 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
     Account/access failures pause new dispatches and drain in-flight calls.
     repair_once explicitly grants at most one durable extra attempt per unresolved job.
     """
-    if type(repair_round) is not int or repair_round not in {1, 2}:
-        raise ValueError('Only explicitly supported repair rounds 1 and 2 are allowed')
+    if type(repair_round) is not int or repair_round not in {1, 2, 3}:
+        raise ValueError('Only explicitly supported repair rounds 1, 2 and 3 are allowed')
     if type(concurrency) is not int or concurrency < 1:
         raise ValueError("concurrency must be a positive integer")
     if type(max_attempts) is not int or max_attempts < 1:
@@ -264,18 +265,18 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                     state.update(status='failed', value=value, ready_at=0)
                     finalized.append(key)
             if not paused:
-                if repair_round == 2:
+                if repair_round in {2, 3}:
                     for key, state in states.items():
                         if (key in selected and state['status'] == 'failed'
                                 and state.get('repair_attempt') == state['attempts']
-                                and state.get('repair_round', 1) == 1
+                                and state.get('repair_round', 1) == repair_round - 1
                                 and state['value'].get('repair_outcome') in {'terminal', 'retry'}
                                 and not state['value'].get('remote_outcome_unknown')):
                             attempt = state['attempts'] + 1
-                            append(journal, {'type': 'repair_round2_authorized', 'key': key,
-                                            'attempt': attempt, 'authorization': '20261010-user-round2'})
-                            state.update(repair_round=2, repair_attempt=attempt)
-                        if (key in selected and state.get('repair_round') == 2
+                            append(journal, {'type': f'repair_round{repair_round}_authorized', 'key': key,
+                                            'attempt': attempt, 'authorization': {2: '20261010-user-round2', 3: '20261011-user-round3'}[repair_round]})
+                            state.update(repair_round=repair_round, repair_attempt=attempt)
+                        if (key in selected and state.get('repair_round') == repair_round
                                 and state['status'] == 'failed'
                                 and state['attempts'] < state['repair_attempt']):
                             state['ready_at'] = 0

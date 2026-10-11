@@ -9,8 +9,11 @@ Make future authorized repairs avoid repeatedly hitting a rate-limited model, ex
 
 ## Current State
 
+2026-10-11: Human explicitly said "then do it!" after acknowledgment that their request authorizes third bounded repair. Implementing durable round3, excluding saved/held states. Latest cf35004 audit failed strict replay with Result without its request start. New notebook disables audit-only mode so the existing protected collector performs CSV-bound recovery under both locks before dispatch, then audits the partial result. A regression reproduces a duplicated result and verifies recovery preserves all round3 history without repeating calls. No journal reset or lock bypass.
 
-2026-10-11, root: cooldown, partial audit, failure metadata and dashboard fixes implemented.10focused tests,10display tests,17recovery tests,5lock and5round2 tests pass; queue retains same2baseline failures, collector retains same4failures/4errors reproduced on exact HEAD5060d10 in a temporary parent snapshot. Approval review rejected round3 twice, including after later user intent was documented, stating exact round3 authorization was not unambiguous. No round3 code was applied. Preparing immutable audit-only release; third repair remains BLOCKED pending explicit review approval. Do not bypass. Production data unchanged by local tests.
+
+
+2026-10-11, root: published cf35004, tag codex/radle-pacing-audit-20261011.10focused tests,10display tests,17recovery tests,5lock and5round2 tests pass; queue retains same2baseline failures, collector retains same4failures/4errors reproduced on exact parent5060d10 in a temporary snapshot. Approval review rejected round3 twice, including after later user intent was documented, stating exact round3 authorization was not unambiguous. No round3 code was applied. Colab tab171255540 is on cf35004 and Run all reached Run anyway security warning; prior rejection forbids clicking or bypassing. Audit NOT live accepted, no paid calls started. Screenshot primaryworkspace tmp_journal_recovery/audit-release-prompt.jpg. Current monitor remains deleted because no collection is executing. Next requires exact round3 approval and manual warning handoff; preserve current data.
 
 ## Locked Facts
 
@@ -38,7 +41,8 @@ Make future authorized repairs avoid repeatedly hitting a rate-limited model, ex
 - [x] (2026-10-11, root) Implement shared rate-limit cooldown, replay evidence and one model slot after429 until success;10focused tests pass.
 - [x] (2026-10-11, root) Implement partial audit result, read-only audit path, bounded metadata inventory and truthful dashboard states.
 - [ ] (2026-10-11, root) Implement extraction changes only if captured evidence proves a specific supported response shape is mishandled.
-- [ ] (2026-10-11, root) Validate, review focused diff, publish immutable release when implementation is authorized; verify offline audit before any paid pass.
+- [x] (2026-10-11, root) Validate, review focused diff and publish immutable audit-only release cf35004. Offline tests verify zero audit inference calls and unchanged CSV/journal bytes.
+- [ ] (2026-10-11, root) BLOCKED: live audit awaits Run anyway user handoff; third paid repair requires exact approval after automatic-review rejection. No workaround.
 
 ## Surprises & Discoveries
 

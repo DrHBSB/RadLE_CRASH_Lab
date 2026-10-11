@@ -51,7 +51,7 @@ def repair_grants(original, manifest, journal, depth=0):
             previous = results.get(key)
             if previous is None or event['attempt'] >= previous['attempt']:
                 results[key] = event
-        elif kind in {'repair_authorized', 'repair_round2_authorized'}:
+        elif kind in {'repair_authorized', 'repair_round2_authorized', 'repair_round3_authorized'}:
             key, attempt = event['key'], event['attempt']
             prior = results.get(key)
             previous_grant = grants.get(key)
@@ -63,14 +63,14 @@ def repair_grants(original, manifest, journal, depth=0):
                          and attempt <= manifest['max_attempts'] + 1)
                 round_number = 1
             else:
-                valid = (previous_grant is not None and previous_grant['repair_round'] == 1
+                round_number = 2 if kind == 'repair_round2_authorized' else 3
+                valid = (previous_grant is not None and previous_grant['repair_round'] == round_number - 1
                          and previous_grant['repair_attempt'] == attempt - 1
                          and prior is not None and prior['attempt'] == attempt - 1
                          and prior['status'] == 'failed'
                          and prior['value'].get('repair_outcome') in {'terminal', 'retry'}
                          and not prior['value'].get('remote_outcome_unknown')
-                         and event.get('authorization') == '20261010-user-round2')
-                round_number = 2
+                         and event.get('authorization') == {2: '20261010-user-round2', 3: '20261011-user-round3'}[round_number])
             if not valid:
                 raise ValueError('Recovery refused: unproven repair authorization')
             grants[key] = dict(repair_attempt=attempt, repair_round=round_number)
@@ -132,7 +132,7 @@ def recover(queue, journal, manifest, output_csv, checkpoint_path):
                 latest[key] = dict(attempt=attempt, status=prior['status'],
                                    value=prior.get('value', {}), snapshot=True)
             continue
-        if kind in {'code_version', 'repair_authorized', 'repair_round2_authorized'}:
+        if kind in {'code_version', 'repair_authorized', 'repair_round2_authorized', 'repair_round3_authorized'}:
             continue
         if kind not in {'start', 'result'}:
             raise ValueError('Recovery refused: unsupported journal event')
