@@ -51,7 +51,7 @@ class RoundTwoTests(unittest.TestCase):
     def test_unsupported_round_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
             with self.assertRaises(ValueError):
-                q.run([], lambda *_: None, folder, repair_round=4)
+                q.run([], lambda *_: None, folder, repair_round=5)
 
     def test_durable_grant_resumes_once_before_dispatch(self):
         with tempfile.TemporaryDirectory() as folder:

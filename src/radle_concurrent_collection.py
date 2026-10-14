@@ -307,6 +307,8 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
     Unknown request outcomes stop before inference. Native SDKs remain on the legacy lane
     until their concurrency contracts have separately been tested.
     """
+    if repair_once and repair_round == 4 and not resume_blocked:
+        raise RuntimeError('Round 4 requires the existing billing preflight before repair.')
     output_csv = Path(output_csv)
     folder = Path(str(output_csv) + '.concurrent')
     folder.mkdir(parents=True, exist_ok=True)
