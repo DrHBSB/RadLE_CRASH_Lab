@@ -502,11 +502,16 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             from radle_attempt_artifacts import new_identity, persist
             artifacts = folder / 'attempt_artifacts'
             try:
+                model, reasoning_decision = ceiling_policy.choose(model, job.case, attempt, max_output_tokens)
                 content = rb.build_content_array(job.case, image_index, prompt=prompt)
                 params = rb.build_api_params(model, content, max_output_tokens, universal_temperature)
                 identity = new_identity(job.case, job.model, attempt, params)
-                prepared = persist(artifacts, identity, 'prepared', {'api_surface': model.get('api_surface', 'chat_completions')})
+                prepared = persist(artifacts, identity, 'prepared', {
+                    'api_surface': model.get('api_surface', 'chat_completions'),
+                    'max_output_tokens': max_output_tokens, 'reasoning_retry': reasoning_decision})
                 dispatch = persist(artifacts, identity, 'dispatch_entered', {'prepared': prepared})
+                if reasoning_decision['changed']:
+                    log(f"REASONING STEP: case {job.case}/{job.model}: {reasoning_decision['previous_effort']} -> {reasoning_decision['selected_effort']}; {reasoning_decision['ceiling_hits_before']} confirmed ceiling hits; output cap unchanged {max_output_tokens}.")
             except Exception as exc:
                 return queue.Outcome('blocked', {'error_type': type(exc).__name__,
                     'execution_stage': 'local_preparation', 'request_sent': False,
@@ -514,6 +519,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             previous = previous_attempts.get(json.dumps([job.case, job.model], separators=(',', ':')), 0)
             new_attempt = attempt - initial_attempts.get(job.key, 0)
             attempt_history = {'prior_attempts': previous, 'new_attempt': new_attempt, 'collection_attempt': attempt, 'cumulative_attempt': previous + new_attempt, 'is_replacement_retry': previous > 0, 'max_output_tokens': max_output_tokens}
+            attempt_history['reasoning_retry'] = reasoning_decision
             t0 = time.time()
             try:
                 if model.get('api_surface') == 'responses':
@@ -598,7 +604,10 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                     sensitive_values=(getattr(single_client, 'api_key', None),))
                 from radle_attempt_artifacts import jsonable, response_metadata as observe_response
                 response_metadata = observe_response(jsonable(getattr(response, '_radle_original_response', response)))
+                ceiling_policy.received(job.case, job.model, attempt, max_output_tokens, response_metadata)
                 fields = rb.extract_result(response, round(time.time() - t0, 1), params, False, model)
+                fields['Reasoning_Effort_Requested_' + job.model] = reasoning_decision['selected_effort'] or 'provider_default'
+                fields['Reasoning_Retry_Metadata_' + job.model] = queue.encode(reasoning_decision)
                 info = rb.classify_cell_for_audit(pd.Series(fields), job.model, attempts=0,
                     max_output_tokens=max_output_tokens,
                     require_token_usage=rb.requires_positive_token_usage(model),
@@ -650,6 +659,22 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             if funds['status'] != 'available':
                 raise RuntimeError('Resume paused: billing check is exhausted or unavailable; see resume_credit_check.json.')
             log('RESUME: billing check passed; original attempt limits retained.')
+        from radle_reasoning_ceiling import CeilingPolicy
+        history = []
+        if journal.exists():
+            from radle_attempt_ledger import read_ledger
+            with journal.open(encoding='utf-8') as stream:
+                saved_manifest = json.loads(stream.readline())
+            history = read_ledger(journal, saved_manifest)
+        # A legacy CSV contains at most one retained response per pair, not a count
+        # inferred from historical attempt totals. Timestamp aliases prevent repeats.
+        for row in df.to_dict('records'):
+            for model in models:
+                name = model['name']
+                history.append(dict(event='baseline_response', case=str(row['Master_Case_ID']), model=name,
+                    completion_tokens=row.get('Total_Tokens_Out_' + name), configured_output_cap=max_output_tokens,
+                    csv_response_timestamp=row.get('Timestamp_UTC_' + name), response_evidence_source='csv_fields'))
+        ceiling_policy = CeilingPolicy(history)
         queue_options = dict(concurrency=concurrency, max_attempts=max_attempts,
                              initial_attempts=initial_attempts, contract=contract, stop=stop,
                              resume_blocked=resume_blocked, checkpoint=checkpoint,

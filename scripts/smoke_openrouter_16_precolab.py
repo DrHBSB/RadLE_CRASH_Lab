@@ -21,6 +21,7 @@ import zlib
 from datetime import datetime, timezone
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'src'))
 API = "https://openrouter.ai/api/v1"
 KEY_NAME = "OPENROUTER_API_KEY"
 ENV_FILE = ROOT / "radle_api_keys.env"
@@ -178,12 +179,14 @@ def preflight(key: str) -> list[dict]:
         modalities = (model.get("architecture") or {}).get("input_modalities") or []
         if "text" not in modalities:
             raise RuntimeError(f"{model_id}: text input not advertised")
+        from radle_reasoning_ceiling import effort_profile
         prepared.append({
             "id": model_id, "effort": effort, "tag": tag, "provider": provider_name,
             "zdr": zdr_required, "zdr_listed": zdr_listed, "token_param": token_param,
             "image": "image" in modalities, "endpoint_name": endpoint["name"],
             "max_completion_tokens": endpoint.get("max_completion_tokens"),
             "pricing": endpoint.get("pricing"), "parameters": sorted(parameters),
+            "reasoning_profile": effort_profile(model.get("reasoning") or {}),
         })
     return prepared
 

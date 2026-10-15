@@ -44,7 +44,10 @@ def read_ledger(journal, manifest):
                            event_attempt=event.get('attempt'), remote_execution_proven=False)
                 if kind == 'result':
                     row.update(evidence_record(event['key'], dict(status=event['status'],
-                               attempts=event['attempt'], value=event['value'])))
+                               attempts=event['attempt'], value=event['value']),
+                               max_output_tokens=(event['value'].get('attempt_history') or {}).get(
+                                   'max_output_tokens', (manifest.get('contract') or {}).get('max_output_tokens', 32768))))
+                    row['reasoning_retry'] = (event['value'].get('attempt_history') or {}).get('reasoning_retry')
                     row['response_received_recorded'] = bool(event['value'].get('response_received'))
                 elif kind == 'start':
                     row['observation'] = 'Scheduler reserved attempt before submitting worker; HTTP delivery not established.'
@@ -65,10 +68,19 @@ def read_ledger(journal, manifest):
         key = encode([ident['case'], ident['model']])
         if key not in manifest['jobs']:
             raise ValueError('Attempt artifact outside original cohort')
-        records.append(dict(source_sha256=digest, case=ident['case'], model=ident['model'],
+        row = dict(source_sha256=digest, case=ident['case'], model=ident['model'],
                             event='artifact_' + artifact['stage'],
                             event_attempt=ident['journal_attempt'], attempt_id=ident['attempt_id'],
                             request_sha256=ident['request_sha256'], remote_execution_proven=False,
                             response_received_recorded=artifact['stage'] == 'response_received',
-                            observation='Verified private stage receipt; inspect lineage before authorizing another call.'))
+                            observation='Verified private stage receipt; inspect lineage before authorizing another call.')
+        if artifact['stage'] == 'prepared':
+            row['reasoning_retry'] = artifact['payload'].get('reasoning_retry')
+        elif artifact['stage'] == 'response_received':
+            from radle_attempt_artifacts import response_metadata
+            row.update(response_metadata(artifact['payload']))
+            row.update(response_attempt=ident['journal_attempt'],
+                       configured_output_cap=(manifest.get('contract') or {}).get('max_output_tokens', 32768),
+                       response_evidence_source='verified_response_artifact')
+        records.append(row)
     return records
