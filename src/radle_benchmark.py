@@ -1297,6 +1297,7 @@ def audit_benchmark_output(
                 "reason": info.get("reason", ""),
                 "needs_api_repair": bool(info.get("needs_api_repair", False)),
                 "repair_attempts_so_far": attempts,
+                "attempt_count_source": "legacy_repair_call_log_not_concurrent_journal",
                 "max_attempts": max_attempts,
                 "remaining_attempts": max(0, int(max_attempts) - int(attempts)),
                 "diagnosis": safe_str(row.get(f"Diagnosis_{model_name}", "")),
@@ -1681,8 +1682,12 @@ def case_rejection_diagnostic(body):
                   "image_not_found", "image_download_failed"}
     if code in case_codes or (code is None and isinstance(metadata.get("reasons"), list)
                              and metadata["reasons"] and "flagged_input" in metadata):
+        policy_codes = {'content_policy_violation', 'image_content_policy_violation', 'refusal'}
+        reason = ('Provider returned a content-policy/refusal code.' if code in policy_codes
+                  else 'Provider returned a technical image-input error code.' if code is not None
+                  else 'Provider metadata contains moderation flags; exact error code unavailable.')
         return {"category": "case_rejected", "provider_error_code": code or "moderation_flagged",
-                "summary": "Provider rejected this case's content or image; held for review, other jobs continue."}
+                "summary": reason + " Case held; no underlying clinical cause is inferred."}
     return None
 
 
@@ -3565,20 +3570,9 @@ def audit_saved_collection(output_csv, models, expected_cases, max_output_tokens
         raise RuntimeError('Audit journal/checkpoint disagreement')
     unresolved = [dict(Master_Case_ID=json.loads(k)[0], model=json.loads(k)[1], status=s['status'], attempts=s['attempts'])
                   for k, s in states.items() if s['status'] not in {'success', 'flagged'}]
-    inventory = []
-    for key, state in states.items():
-        if state['status'] in {'success', 'flagged'}:
-            continue
-        value = state.get('value', {})
-        metadata = value.get('response_metadata', {}) or {}
-        reason = (value.get('diagnostic') or {}).get('summary') or value.get('reason') or value.get('error_type') or 'unknown'
-        inventory.append(dict(case=json.loads(key)[0], model=json.loads(key)[1],
-            status=state['status'], attempts=state['attempts'], repair_round=state.get('repair_round'),
-            http_status=value.get('http_status'), reason=reason,
-            response_id=metadata.get('response_id'), finish_reason=metadata.get('finish_reason'),
-            native_finish_reason=metadata.get('native_finish_reason'),
-            completion_tokens=metadata.get('completion_tokens'),
-            content_length=metadata.get('content_length'), reasoning_length=metadata.get('reasoning_length')))
+    from radle_error_evidence import evidence_record
+    inventory = [evidence_record(key, state, max_output_tokens)
+                 for key, state in states.items() if state['status'] not in {'success', 'flagged'}]
     audit = audit_benchmark_output(source, models=models, expected_case_ids=range(1, expected_cases + 1), max_output_tokens=max_output_tokens)
     frame = pd.read_csv(source, dtype={'Master_Case_ID': str})
     if hashlib.sha256(source.read_bytes()).hexdigest() != before:
@@ -3763,6 +3757,8 @@ def run_autonomous_openrouter_workflow(
             "gate_receipt": pd.DataFrame(), "final_manifest": None, "scorer_result": None,
             "public_release_files": None, "failed_pairs": failed_pairs,
             "failed_pairs_path": full_df.attrs.get("failed_pairs_path"),
+            "failure_inventory": pd.DataFrame(full_df.attrs.get("failure_evidence", [])),
+            "failure_evidence_path": full_df.attrs.get("failure_evidence_path"),
             "unresolved_pairs": full_df.attrs.get('unresolved_pairs', []),
             "unresolved_pairs_path": full_df.attrs.get('unresolved_pairs_path'),
         }

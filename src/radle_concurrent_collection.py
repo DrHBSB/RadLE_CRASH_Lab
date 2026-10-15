@@ -195,7 +195,8 @@ class LiveProgress:
                 case, model = json.loads(key)
                 duration = max(0, time.monotonic() - self.starts.pop(key, time.monotonic()))
                 status, value = state['status'], state.get('value', {})
-                reason = (value.get('diagnostic') or {}).get('summary') or value.get('reason') or 'See saved evidence'
+                from radle_error_evidence import evidence_summary
+                reason = evidence_summary(key, state)
                 reason = reason.replace('_', ' ')
                 if status in {'success', 'flagged'}:
                     self.last_save = time.monotonic()
@@ -265,7 +266,7 @@ class LiveProgress:
                 activity = 'Complete' if complete == len(self.cases) else (
                     'Waiting for slot' if waiting and self.phase == 'RUNNING' else 'Awaiting review' if not waiting else 'Idle')
             if not running and not waiting and complete != len(self.cases):
-                activity = 'Finished with failures' if all(states[k]['status'] in {'success', 'flagged', 'failed'} for k in keys) else ('Repair pending' if self.repair_enabled else activity)
+                activity = 'Finished with failures' if all(states[k]['status'] in {'success', 'flagged', 'failed'} for k in keys) else ('Held or exhausted; run stopped' if self.phase == 'STOPPED' else 'Awaiting eligibility review' if self.repair_enabled else activity)
             if name not in self.active_models:
                 activity = 'Paused this run'
             mc = Counter(states[k]['status'] for k in keys if k not in active)
@@ -437,7 +438,8 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 value = state['value']
                 labels = {'success': 'OK', 'flagged': 'OK + FLAG', 'retry': 'RETRY WAIT',
                           'uncertain': 'REVIEW', 'quota': 'PAUSE', 'blocked': 'PAUSE', 'terminal': 'EXHAUSTED', 'rejected': 'CASE REJECTED', 'failed': 'FAILED'}
-                detail = (value.get('diagnostic') or {}).get('summary') or value.get('reason') or value.get('error_type', '')
+                from radle_error_evidence import evidence_summary
+                detail = evidence_summary(key, state)
                 if detail:
                     detail = detail.replace('_', ' ')
                 if state['status'] == 'retry':
@@ -567,10 +569,11 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 refusal_present=bool(getattr(message, 'refusal', None)),
                 completion_tokens=getattr(usage, 'completion_tokens', None),
                 prompt_tokens=getattr(usage, 'prompt_tokens', None))
+            response_metadata['reasoning_tokens'] = fields.get('Reasoning_Tokens_' + job.model)
             return queue.Outcome(kind, {'fields': rb.make_json_safe(fields), 'reason': info['reason'], 'response_metadata': response_metadata, 'attempt_history': attempt_history},
                                  retry_after=2 if kind == 'retry' else 0)
 
-        print(f'Concurrent collection: {len(jobs)} journal jobs, {concurrency} slots; max {max_attempts} attempts/job in this journal.', flush=True)
+        print(f'Concurrent collection: {len(jobs)} journal jobs, {concurrency} slots; ordinary limit {max_attempts} attempts/job. Additional explicit repair grants are retained separately in the journal.', flush=True)
         if legacy_failures:
             print(f'Preserved {len(legacy_failures)} pre-journal failures; historical attempts remain in the original logs.', flush=True)
         paused_models = sorted(set(model_by_name) - active_model_names)
@@ -593,7 +596,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 queue, journal, manifest, output_csv, folder / 'checkpoint.json')
         result = queue.run(jobs, call, folder / 'queue', **queue_options)
         if repair_once and not result['paused']:
-            log(f'REPAIR ROUND {repair_round}: one authorized attempt; uncertain, rejected, quota and exhausted pending evidence stays held.')
+            log(f'REPAIR ROUND {repair_round}: one authorized attempt per eligible pair; unselected held or exhausted states remain unchanged.')
             previous_calls = result['calls']
             repair_options = dict(queue_options)
             repair_options['selected_keys'] = {
@@ -609,6 +612,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                     'new_calls': result['calls'], 'counts': counts, 'concurrency': concurrency,
                     'legacy_failures': legacy_failures, 'attempt_budget_scope': 'journal',
                     'updated_utc': datetime.now(timezone.utc).isoformat()})
+        from radle_error_evidence import evidence_summary
         failed_pairs = []
         for key, state in result['states'].items():
             if state['status'] == 'failed':
@@ -616,8 +620,15 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 value = state['value']
                 failed_pairs.append({'Master_Case_ID': case, 'model': name, 'status': 'failed',
                     'attempts': state['attempts'], 'http_status': value.get('http_status'),
-                    'reason': (value.get('diagnostic') or {}).get('summary') or value.get('reason') or value.get('error_type') or 'Repair outcome could not be verified'})
+                    'reason': evidence_summary(key, state)})
         atomic_json(folder / 'failed_pairs.json', failed_pairs)
+        from radle_error_evidence import evidence_record
+        failure_evidence = [evidence_record(key, state, max_output_tokens)
+                            for key, state in result['states'].items()
+                            if state['status'] not in {'success', 'flagged'}]
+        atomic_json(folder / 'failure_evidence.json', failure_evidence)
+        final_df.attrs['failure_evidence'] = failure_evidence
+        final_df.attrs['failure_evidence_path'] = str(folder / 'failure_evidence.json')
         final_df.attrs['failed_pairs'] = failed_pairs
         final_df.attrs['failed_pairs_path'] = str(folder / 'failed_pairs.json')
         unresolved = []
@@ -635,7 +646,8 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             for key, state in result['states'].items():
                 if state['status'] in {'uncertain', 'quota', 'blocked', 'terminal', 'rejected'}:
                     case, name = json.loads(key)
-                    detail = (state['value'].get('diagnostic') or {}).get('summary') or state['value'].get('reason') or 'Older log has no detailed error; inspect the saved stream.'
+                    from radle_error_evidence import evidence_summary
+                    detail = evidence_summary(key, state)
                     log(f"  case {case} | {name.replace('_', ' ')}: {detail}")
             log(f"Evidence journal: {folder / 'queue' / 'events.jsonl'}")
             log('Next: review the listed request evidence before resuming. Do not delete the journal or rerun uncertain calls blindly.')
