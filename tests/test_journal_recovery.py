@@ -57,6 +57,19 @@ class RecoveryTests(unittest.TestCase):
             self.recover()
         self.assertEqual(self.journal.read_bytes(), self.original)
 
+    def test_validation_only_leaves_all_files_and_directory_unchanged(self):
+        before = {p.name: p.read_bytes() for p in self.folder.iterdir()}
+        states = recover(queue, self.journal, self.manifest, self.csv, self.checkpoint, validate_only=True)
+        self.assertEqual(states[self.key]['attempts'], 2)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.folder.iterdir()})
+
+    def test_validation_only_refuses_hash_mismatch_without_writes(self):
+        self.csv.write_text('changed')
+        before = {p.name: p.read_bytes() for p in self.folder.iterdir()}
+        with self.assertRaisesRegex(ValueError, 'hash mismatch'):
+            recover(queue, self.journal, self.manifest, self.csv, self.checkpoint, validate_only=True)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.folder.iterdir()})
+
     def test_repair_authority_survives_repeated_corruption(self):
         self.journal.unlink()
         jobs = [queue.Job('1', 'model', {})]

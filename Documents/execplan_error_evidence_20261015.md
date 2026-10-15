@@ -1,6 +1,9 @@
 # Evidence-qualified collection diagnostics
 
 ## Current State
+
+2026-10-15 root: user audit hit malformed journal JSON. Added validate_only checkpoint reconstruction using all existing hash/cohort/grant/attempt checks, returning before any archive/candidate/journal writes. Audit verifies no writer and unchanged CSV/journal/checkpoint before returning; no API calls. New release preserves user concurrency1, reloads recovery dependency, and defaults audit-only. Verification pending.
+
 2026-10-15 root: reviewing saved columns and adding observation-only error evidence; no paid calls, scheduling changes, promotions or Drive edits. Last supplied round4output3119saved/3200,81unresolved,67reasoningflags,backup0039. Isolated codex/radle-journal-recovery worktree.
 
 ## Locked Facts

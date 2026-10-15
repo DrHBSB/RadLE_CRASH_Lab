@@ -124,6 +124,25 @@ class PartialAuditTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'unresolved outcomes'), contextlib.redirect_stdout(io.StringIO()):
             f.run_collection(max_attempts=2)
 
+    def test_audit_validates_damaged_journal_without_writes_or_calls(self):
+        f = self.fixture
+        with contextlib.redirect_stdout(io.StringIO()):
+            f.run_collection(max_attempts=2)
+        journal = Path(str(f.output) + '.concurrent/queue/events.jsonl')
+        with journal.open('ab') as stream:
+            stream.write(b'not json\n')
+        folder = Path(str(f.output) + '.concurrent')
+        before = {str(p.relative_to(folder)): p.read_bytes() for p in folder.rglob('*') if p.is_file()}
+        csv_before = f.output.read_bytes()
+        f.client.chat.completions.create.reset_mock()
+        with contextlib.redirect_stdout(io.StringIO()):
+            result = rb.audit_saved_collection(f.output, f.models, 3, 16384)
+        self.assertEqual(result['evidence_source'], 'validated_csv_bound_checkpoint')
+        self.assertEqual(result['inference_calls'], 0)
+        f.client.chat.completions.create.assert_not_called()
+        self.assertEqual(csv_before, f.output.read_bytes())
+        self.assertEqual(before, {str(p.relative_to(folder)): p.read_bytes() for p in folder.rglob('*') if p.is_file()})
+
     def test_audit_refuses_lock_and_hash_mismatch(self):
         f = self.fixture
         with contextlib.redirect_stdout(io.StringIO()):

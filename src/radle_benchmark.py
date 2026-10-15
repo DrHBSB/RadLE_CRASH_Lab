@@ -3551,7 +3551,7 @@ def seed_completed_smoke_results(existing, smoke, models, expected_cases):
 
 
 def audit_saved_collection(output_csv, models, expected_cases, max_output_tokens):
-    """Read-only audit: no API client, journal writes, recovery or promotion."""
+    """Read-only audit, with non-mutating checkpoint validation if replay fails."""
     import radle_job_queue as queue
     source = pathlib.Path(output_csv)
     folder = pathlib.Path(str(source) + '.concurrent')
@@ -3563,7 +3563,15 @@ def audit_saved_collection(output_csv, models, expected_cases, max_output_tokens
         raise RuntimeError('Audit checkpoint CSV hash mismatch')
     journal = folder / 'queue' / 'events.jsonl'
     manifest = json.loads(journal.read_bytes().splitlines()[0])
-    states = queue.replay(journal, manifest)
+    journal_before = file_sha256(journal)
+    checkpoint_before = (folder / 'checkpoint.json').read_bytes()
+    evidence_source = 'strict_journal_replay'
+    try:
+        states = queue.replay(journal, manifest)
+    except (ValueError, UnicodeDecodeError):
+        from radle_journal_recovery import recover
+        states = recover(queue, journal, manifest, source, folder / 'checkpoint.json', validate_only=True)
+        evidence_source = 'validated_csv_bound_checkpoint'
     if set(states) != set(checkpoint['states']) or any(
             (s['status'], s['attempts']) != (checkpoint['states'][k]['status'], checkpoint['states'][k]['attempts'])
             for k, s in states.items()):
@@ -3577,9 +3585,14 @@ def audit_saved_collection(output_csv, models, expected_cases, max_output_tokens
     frame = pd.read_csv(source, dtype={'Master_Case_ID': str})
     if hashlib.sha256(source.read_bytes()).hexdigest() != before:
         raise RuntimeError('Source changed during read-only audit')
+    if ((folder / 'writer.lock').exists() or (folder / 'queue' / 'writer.lock').exists()
+            or file_sha256(journal) != journal_before
+            or (folder / 'checkpoint.json').read_bytes() != checkpoint_before):
+        raise RuntimeError('Audit evidence changed or a writer started during audit')
     return dict(status='audit_only', final_df=frame, raw_df=frame, final_audit=audit,
                 final_source_csv=str(source), final_source_label='raw_audited_unpromoted',
                 source_sha256=before, inference_calls=0, unresolved_pairs=unresolved,
+                evidence_source=evidence_source,
                 failure_inventory=pd.DataFrame(inventory),
                 gate_receipt=pd.DataFrame(), final_manifest=None, public_release_files=None,
                 scorer_result=None, failed_pairs=[p for p in unresolved if p['status'] == 'failed'],

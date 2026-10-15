@@ -77,8 +77,11 @@ def repair_grants(original, manifest, journal, depth=0):
     return grants
 
 
-def recover(queue, journal, manifest, output_csv, checkpoint_path):
-    """Called under both collection and queue writer locks; never resets attempts."""
+def recover(queue, journal, manifest, output_csv, checkpoint_path, *, validate_only=False):
+    """Validate checkpoint evidence; writes require both writer locks held by caller.
+
+    validate_only returns reconstructed states without changing any file.
+    """
     original = journal.read_bytes()
     lines = original.splitlines()
     if not lines or queue.identity(json.loads(lines[0])) != queue.identity(manifest):
@@ -188,6 +191,12 @@ def recover(queue, journal, manifest, output_csv, checkpoint_path):
         if fields:
             state['value'] = dict(state['value'], fields=fields)
     digest = hashlib.sha256(original).hexdigest()
+    if validate_only:
+        if (sha(journal) != digest or Path(checkpoint_path).read_bytes() != checkpoint_bytes
+                or sha(output_csv) != checkpoint['csv_sha256']):
+            raise ValueError('Audit refused: files changed during checkpoint validation')
+        print('AUDIT VALIDATED: CSV-bound checkpoint; damaged journal unchanged; no API calls.', flush=True)
+        return states
     archive = journal.with_name('events.original.' + digest + '.jsonl')
     if archive.exists():
         if sha(archive) != digest:
