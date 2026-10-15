@@ -1,56 +1,64 @@
-# Prepare the separate Gemini 4 Argon Colab run
+# Admit Argon as the seventeenth model through Morning
+
+This living ExecPlan follows ~/.codex/PLANS.md and the collection worktree AGENTS.md.
 
 ## Purpose / Big Picture
 
-Provide a Git-backed four-cell notebook the user can start before sleeping. Collect Argon on the same 200 images and prompt, without modifying the completed 16-model run. Publish aligned Python/notebook under an immutable tag. No paid requests are issued locally.
+Expand the current October16-model collection to17 through the existing four-cell Morning notebook. Preserve all prior answers, failures, flags and attempt evidence; collect only the200Argon responses, automatically audit, run bounded eligible repairs and audit the combined3400cells. The user starts Colab. Older historical-study consolidation happens after this cohort is audited/promoted, not during this task. No private data or paid clinical requests are sent locally.
 
 ## Current State
 
-2026-10-16 root: implementation and45focusedtests verified on existing codex/radle-journal-recovery worktree, parent f7f3d33. Live authenticated metadata verifies pinned Google route and ZDR; receipt Documents/argon4_route_receipt_20261016.json contains no credentials. Next commit only new Argon files, push branch/tag and provide full-SHA Colab URL. Existing dirty plans/logs are excluded.
+2026-10-16 root: user resolved the scope explicitly: add17th to16 now, then combine with previous main after promotion. The earlier isolated notebook186fabb is superseded and deleted in the current working tree. Corrected Morning notebook and src/radle_argon4.py are prepared on codex/radle-journal-recovery, parent186fabbea0e213261849c4c6dc2c016e4d32c88a. Seven focused correction tests passed before the latest explicit audit-order labels; rerun those, then stage only scoped files, commit/push and tag codex/radle-17-argon4-20261016. No live Argon inference started. Unrelated dirty plans/logs remain untouched.
 
 ## Locked Facts
 
-- User approved maximum four paid attempts per case-model pair: two ordinary plus two repair attempts; stop on success and hold unknown/refusal/billing/local failures.
-- Output cap32768, concurrency1, same200cases/prompt/images. High initial effort, medium/low enabled fallbacks after confirmed ceilings. No promotion/export/judging.
-- Source16-model contract is read only; source results and backup0045 remain untouched. New run gemini_argon4_32k_20261016 has no answer/attempt migration.
-- Metadata verified2026-10-16: canonicalgoogle/gemini-4-argon-20261013, Google google-vertex/global status0 cap65536, effortshigh/medium/low. Authenticated ZDR listing and billing are checked in Colab before inference.
+- Canonical notebook: notebooks/RadLE_v1_5_Morning.ipynb, exactly four cells, autonomous workflow calls in Cell4. No separate Argon notebook.
+- Existing source: Runs/openrouter_16_32k_20261008/raw/results.csv; user output reports3186saved,14unresolved,200rows269columns and finalbackup0045. This is user-provided runtime evidence, not a fresh agent download.
+- Expanded cohort version: Runs/openrouter_17_32k_20261016. Its initial wide CSV is a byte-for-byte copy of the16-model source, not an Argon-only dataset. Source16-model run remains immutable.
+- ACTIVE_MODELS contains source16models plusArgon; COLLECTION_MODELS contains Argon only. The new collection journal grants authority only forArgon, while cohort_admission.json pins the original journals/checkpoint and retains all inherited unresolved states/attempt counts.
+- Argon google/gemini-4-argon, canonicalgoogle/gemini-4-argon-20261013; pinned Google google-vertex/global, ZDR, data_collection deny, no provider fallbacks. High initial reasoning, medium/low supported fallbacks;32768cap,concurrency1,sameprompt/images.
+- At most2ordinary plus2durable spaced repairs perArgon pair; fixed policyIDradle-argon4-two-repairs-20261016,minimum60secondspacing. Stop on success; uncertainty/refusal/quota/local blocks stayheld. SDK transport retries disabled. Known empty-at-cap can end ordinary phase early;4is an upper bound, not required spending.
+- Automatic order: collect -> pre-repair audit -> eligible bounded repairs -> final full17-model audit. No automatic private promotion, public export, judging or old-model requests. User separately requested later audit/promotion and subsequent historical consolidation.
 
 ## Do Not Revisit
 
-- No extra synthetic paid smoke: first actual dataset request is saved under ordinary journal authority. No new retry IDs on rerun (Decision2026-10-16).
-- No browser code edits or manual Drive modifications. Existing canonical16-arm notebook remains unchanged.
+- User approved narrowed17-model phase after identifying the missing historical scope; do not block this launch on consolidating the29historical arms (Decision2026-10-16).
+- Do not create another notebook, change paid IDs, reset counts, overwrite old source columns, resend old failures or replace immutable historical releases. Do not edit Colab cells or Drive manually.
+- Do not call anArgon-only gate a clean17-model gate; inherited14unresolved outcomes remain explicit in combined status.
 
 ## Progress
 
-- [x] (2026-10-16 root) Read applicable AGENTS, globalPLANS, existing workflow, retry queue and reasoning helper; verify public endpoint metadata.
-- [x] (2026-10-16 root) Prepare isolated module and four-cell notebook with contract/image guard and ordinary-then-repair workflow.
-- [x] (2026-10-16 root) Verify mocked route drift/privacy checks, prompt/image isolation, four-attempt/restart bounds and notebook compilation.
-- [ ] (2026-10-16 root) Commit/push new Argon files and immutable tag; provide runnable URL. Live inference is user-started and unverified here.
+- [x] (2026-10-16 root) Read Octoberreadiness/Morning handoff, collection recovery/retry, and incremental-admission ExecPlans. Trace Mistral315be12cohort extension and historicalwide source headers.
+- [x] (2026-10-16 root) Correct notebook targeting and preserve16-modelwide source by validated admission; remove standalone notebook.
+- [x] (2026-10-16 root) Seven correction tests prove metadata drift holds,4-attempt replay bound, reasoning ladder, oldfield/evidence preservation, new-arm-onlydispatch, canonicalworkflowcombinedstatus and4-cellcompilation.
+- [ ] (2026-10-16 root) Rerun focused tests after explicit pre-repair audit labels; stage scoped changes, commit/push and immutable tag; verify remoteSHA and hand off canonicalColabURL.
 
 ## Surprises & Discoveries
 
-2026-10-16 root: explicit generic retry mode replaces ordinary pending authority, so fresh run must execute ordinary phase first, followed by one durable repair phase. A confirmed empty-at-cap outcome can terminate ordinary phase early; four is a maximum, not a requirement to spend all four. Existing recovery/stepdown capture is reused without modification.
+2026-10-16 root: generic retry mode selects only its granted jobs and replaces ordinary pending authority, so ordinary collection runs first, then one durable repair phase. Old unresolved responses must not be given this grant. Collection lane remains Argon-only even though the CSV and final audit include17models.
 
 ## Decision Log
 
-2026-10-16 root: fixed new Argon run and retry ID; exclude uncertain/quota/refusal/local-block outcomes from repair. Pin canonical version in metadata preflight, official Google route, ZDR and data_collection deny. Highest/fallback ladder is checked live; future metadata drift stops before spending.
+2026-10-16 user/root: narrowed scope approved after correction: finish17-modelOctobercohort now; historical29-arm consolidation later through the established admission process. Prior separate notebook is removed, its Git history remains recoverable.
+
+2026-10-16 root: follow priorMistral pattern with canonicalMorning plus expanded cohort version carrying oldwidecolumns. Keep old journal/artifacts at pinned immutable paths rather than injecting fabricated old requests into the newArgonjournal. SourceCSV/contract/checkpoint copied privately; sourcejournal digest and paths plus original unresolved evidence retained. Source locks/hash mismatches fail closed.
 
 ## Revision Notes
 
-2026-10-16 root: initial authorized implementation. Existing plans/logs preserved and excluded from commit.
+2026-10-16 root: reconcile previous wrong separate-notebook design in place. Contradicting artifact: October5readinessplan says no parallel notebook; user expected oneexperiment. Missed verification: source/admissionplans before initialimplementation. Userview: isolatedArgonlink, then17-onlyproposal before explaining29historicalarms. User now explicitly approves17now/historicalmerge later, resolving scope block. No historical consolidation claimed.
 
 ## Outcomes & Retrospective
 
-Offline verification complete:5Argon tests,12retry tests,9reasoning tests and19journal recovery tests pass (45total); four notebook cells compile. Live metadata authentication and ZDR verification pass; no paid smoke performed. Publication next. No local paid calls, live Drive mount, or collection completion claim. No new reusable skill needed for this scoped admission.
+Corrected offline implementation ready for finaltests/publication. Prior40retry/reasoning/recoveryregressions passed on unchanged sharedcollector modules;7Argoncorrectiontests passed. Latest route receipt Documents/argon4_route_receipt_20261016.json confirms metadata/authenticatedZDR only, not clinical response success. Live acceptance remains user-started. No reusable skill mutation needed.
 
 ## Suggested Skills By Phase
 
-Planning: execplan/manual. Notebook creation: jupyter-notebook/manual, clone existing tested four-cell workflow. Testing/publication: none. No delegation.
+Execplan/manual for planning and corrections; jupyter-notebook/manual for aligned four-cellNotebook. StandardPython/unittest for validation. No delegation. Browser limited to opening/running/monitoring committed release if later requested.
 
 ## Concrete Steps and Acceptance
 
-From existing feature worktree run python -m unittest discover -s tests -p test_argon4_colab.py, then relevant retry/reasoning regressions. Tests must prove unchanged original artifacts, same four-attempt upper bound after repeated execution, protected held states, route/cap/privacy drift failure and compiled four-cell notebook. Publish tag codex/radle-argon4-colab-20261016 and verify remote SHA. User opens immutable Colab URL and Run all; normal Drive/Secrets approval may appear. Live acceptance requires READY exactrelease, billingpassed, actual dispatch and durable result backup.
+From existing collection worktree run python -X utf8 -m unittest discover -s tests -p test_argon4_colab.py; expect7passingtests. Compilefourcells and git diff --check. Commit only Documents/execplan_argon4_colab_20261016.md, src/radle_argon4.py, tests/test_argon4_colab.py, notebooks/RadLE_v1_5_Morning.ipynb and deletionnotebooks/RadLE_Gemini_4_Argon.ipynb. Pushbranch andtagcodex/radle-17-argon4-20261016, verifyremoteSHA. User opens fullSHAcanonicalMorningURL andRunall. ExpectREADY17modelscope/Argononly, billingpassed, actualArgonrequest, durablebackup,pre-repairaudit, boundedrepairs and combined3400cellaudit. No repeated grant onresume.
 
 ## Idempotence and Recovery
 
-Resume with same run label and authorization ID. Contract mismatch, unknown lock or journal evidence failure stops; never delete/reset history. Collector uses existing protected recovery and private response artifacts. Existing16-model paths are read only. If publication fails, preserve commit and report exact limitation.
+ParentCSV/journal/checkpoint/contract are hash-pinned and must stay unchanged onresume. Freshadmission fails if locks, incompatible sourcecontract, non200casecohort, incompleteinitialization or already-started supersededArgon-onlyoutput exists. Never silently discard suchdata. NewCSVbaseline preserves all oldcolumns; finalcombinedaudit compares every inheritedfield to frozenparent. SameRunlabel/policyID resumes onlyunusedArgonauthority. No lockreclamation or journalreset.
