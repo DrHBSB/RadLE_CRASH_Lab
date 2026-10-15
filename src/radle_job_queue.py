@@ -164,7 +164,7 @@ def replay(path, manifest):
                 if (type(restored['attempts']) is not int
                         or not states[key]['attempts'] <= restored['attempts'] <= grant.get('repair_attempt', manifest['max_attempts'])
                         or restored['status'] not in STATUSES | {'pending'}
-                        or any(restored.get(field) != grant.get(field) for field in ('repair_attempt', 'repair_round'))):
+                        or any(restored.get(field) != grant.get(field) for field in ('repair_attempt', 'repair_round', 'retry_authorizations', 'retry_policy'))):
                     raise ValueError('Invalid recovery snapshot state')
             states = event['states']
             continue
@@ -172,12 +172,20 @@ def replay(path, manifest):
             continue
         state = states[event["key"]]
         if event["type"] == "start":
+            if state.get('retry_policy'):
+                from radle_retry_policy import resumable
+                if not resumable(state, state['retry_policy']):
+                    raise ValueError('Invalid start after protected or held retry outcome')
             if (state["status"] not in {"pending", "retry", "quota", "blocked"}
-                    and event["attempt"] != state.get("repair_attempt")):
+                    and event["attempt"] != state.get("repair_attempt")
+                    and not (state.get('retry_policy') and event['attempt'] <= state['repair_attempt'])):
                 raise ValueError("Invalid start transition")
             if event["attempt"] != state["attempts"] + 1:
                 raise ValueError("Invalid attempt sequence")
             state.update(status="uncertain", attempts=event["attempt"])
+        elif event['type'] == 'retry_pass_authorized':
+            from radle_retry_policy import apply
+            apply(state, event)
         elif event["type"] == "repair_authorized":
             if (state['status'] not in {'uncertain', 'terminal', 'rejected'}
                     or 'repair_attempt' in state
@@ -218,7 +226,7 @@ def replay(path, manifest):
 
 
 def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
-        stop=None, resume_blocked=False, checkpoint=None, initial_attempts=None, on_event=None, heartbeat_seconds=30, selected_keys=None, repair_once=False, journal_recovery=None, repair_round=1):
+        stop=None, resume_blocked=False, checkpoint=None, initial_attempts=None, on_event=None, heartbeat_seconds=30, selected_keys=None, repair_once=False, journal_recovery=None, repair_round=1, retry_authorization=None):
     """call(job, attempt) makes ONE bounded-time request, with SDK retries disabled.
 
     checkpoint is an optional coordinator callback after each durable result.
@@ -228,6 +236,11 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
     """
     if type(repair_round) is not int or repair_round not in {1, 2, 3, 4}:
         raise ValueError('Only explicitly supported repair rounds 1 through 4 are allowed')
+    if retry_authorization is not None:
+        from radle_retry_policy import validate
+        validate(retry_authorization)
+        if repair_once or not resume_blocked:
+            raise ValueError('Explicit retry pass requires billing resume and excludes legacy repair mode')
     if type(concurrency) is not int or concurrency < 1:
         raise ValueError("concurrency must be a positive integer")
     if type(max_attempts) is not int or max_attempts < 1:
@@ -280,10 +293,11 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
         pending = [key for key, state in states.items()
                    if key in selected and state["status"] in allowed and state["attempts"] < max_attempts]
         finalized = []
-        if repair_once:
+        if repair_once or retry_authorization is not None:
             for key, state in states.items():
                 if (key in selected and state['status'] == 'uncertain'
-                        and state.get('repair_attempt') == state['attempts']):
+                        and (state.get('repair_attempt') == state['attempts']
+                             or state.get('retry_policy'))):
                     # A dispatched repair has no saved result. Do not send it twice.
                     value = dict(state['value'], repair_outcome='uncertain',
                                  remote_outcome_unknown=True)
@@ -291,7 +305,26 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                                      'status': 'failed', 'value': value, 'ready_at': 0})
                     state.update(status='failed', value=value, ready_at=0)
                     finalized.append(key)
-            if not paused:
+            if retry_authorization is not None:
+                from radle_retry_policy import eligible, event_for, apply, resumable
+                policy = retry_authorization
+                candidates = [k for k, s in states.items() if k in selected and eligible(s, policy)]
+                previously = [k for k, s in states.items() if policy['id'] in s.get('retry_authorizations', [])]
+                if len(set(candidates + previously)) > policy['max_pairs']:
+                    raise ValueError('Retry candidates exceed the explicit maximum pair count')
+                # Explicit pass selects only its own grants, never ordinary or older unused authority.
+                pending = []
+                if not paused:
+                    for key in candidates:
+                        event = event_for(key, states[key], policy)
+                        append(journal, event)
+                        apply(states[key], event)
+                    for key, state in states.items():
+                        if key in selected and resumable(state, policy):
+                            pending.append(key)
+                if checkpoint:
+                    checkpoint(states)
+            if not paused and retry_authorization is None:
                 if repair_round in {2, 3, 4}:
                     for key, state in states.items():
                         if (key in selected and state['status'] == 'failed'
@@ -400,12 +433,18 @@ def run(jobs, call, folder, *, concurrency=2, max_attempts=3, contract=None,
                             policy = dict(updated_at=time.time(), until=pacing[model]['until'], limited=False)
                             pacing[model] = policy
                             outcome.value = dict(outcome.value, model_pacing=policy)
-                        if state.get('repair_attempt') == state['attempts'] and outcome.status not in {'success', 'flagged'}:
+                        if retry_authorization is not None and outcome.status in {'terminal', 'retry'}:
+                            outcome.retry_after = max(outcome.retry_after, retry_authorization['spacing_seconds'])
+                            if state['attempts'] < state['repair_attempt']:
+                                outcome.status = 'retry'
+                        if ((state.get('repair_attempt') == state['attempts']
+                             or (retry_authorization is not None and outcome.status in {'uncertain', 'quota', 'blocked', 'rejected'}))
+                                and outcome.status not in {'success', 'flagged'}):
                             value = dict(outcome.value, repair_outcome=outcome.status)
                             if outcome.status == 'uncertain':
                                 value['remote_outcome_unknown'] = True
                             outcome = Outcome('failed', value, outcome.retry_after)
-                        if outcome.status == "retry" and state["attempts"] >= max_attempts:
+                        if outcome.status == "retry" and state["attempts"] >= state.get('repair_attempt', max_attempts):
                             outcome.status = "terminal"
                         ready_at = time.time() + outcome.retry_after
                         append(journal, {"type": "result", "key": key,

@@ -2683,6 +2683,7 @@ def run_benchmark(
     resume_blocked=False,
     repair_once=False,
     repair_round=1,
+    retry_authorization=None,
     allow_partial_result=False,
 ):
     """Run the RadLE benchmark, resuming existing clean cells when possible."""
@@ -2695,7 +2696,7 @@ def run_benchmark(
             output_csv=output_csv, models=models or MODELS, test_limit=test_limit,
             prompt=prompt, max_output_tokens=max_output_tokens,
             universal_temperature=universal_temperature, backup_dir=backup_dir,
-            concurrency=concurrency, max_attempts=max_job_attempts, migration=migration, resume_blocked=resume_blocked, repair_once=repair_once, repair_round=repair_round, allow_partial_result=allow_partial_result)
+            concurrency=concurrency, max_attempts=max_job_attempts, migration=migration, resume_blocked=resume_blocked, repair_once=repair_once, repair_round=repair_round, allow_partial_result=allow_partial_result, retry_authorization=retry_authorization)
     models = models or MODELS
     image_index = build_image_index(image_folder)
     items = sorted(image_index.items(), key=lambda x: numeric_case_sort_key(x[0]))
@@ -3655,6 +3656,7 @@ def run_autonomous_openrouter_workflow(
     resume_blocked=True,
     repair_once=False,
     repair_round=1,
+    retry_authorization=None,
     audit_only=False,
 ):
     """Run smoke, full benchmark, audit, repair, and hard gates with minimal notebook state."""
@@ -3780,6 +3782,7 @@ def run_autonomous_openrouter_workflow(
         resume_blocked=resume_blocked,
         repair_once=repair_once,
         repair_round=repair_round,
+        retry_authorization=retry_authorization,
         allow_partial_result=True,
     )
     if full_df.attrs.get("unresolved_pairs") or full_df.attrs.get("failed_pairs"):

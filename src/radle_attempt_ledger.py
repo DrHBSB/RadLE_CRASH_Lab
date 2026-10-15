@@ -48,7 +48,7 @@ def read_ledger(journal, manifest):
                     row['response_received_recorded'] = bool(event['value'].get('response_received'))
                 elif kind == 'start':
                     row['observation'] = 'Scheduler reserved attempt before submitting worker; HTTP delivery not established.'
-                elif kind and kind.startswith('repair_'):
+                elif kind and (kind.startswith('repair_') or kind == 'retry_pass_authorized'):
                     row['observation'] = 'Durable permission for an additional attempt; not proof of dispatch.'
                 records.append(row)
     visit(Path(journal))

@@ -300,7 +300,7 @@ class LiveProgress:
 def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             prompt=None, max_output_tokens=16384, universal_temperature=.01,
             backup_dir=None, concurrency=2, max_attempts=3, migration=None,
-            stop=None, resume_blocked=False, repair_once=False, repair_round=1, allow_partial_result=False):
+            stop=None, resume_blocked=False, repair_once=False, repair_round=1, allow_partial_result=False, retry_authorization=None):
     """One request per attempt. CSV is derived from baseline + journal.
 
     Attempts are counted durably from journal creation. Pre-journal failures are
@@ -308,8 +308,8 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
     Unknown request outcomes stop before inference. Native SDKs remain on the legacy lane
     until their concurrency contracts have separately been tested.
     """
-    if repair_once and repair_round == 4 and not resume_blocked:
-        raise RuntimeError('Round 4 requires the existing billing preflight before repair.')
+    if (retry_authorization is not None or (repair_once and repair_round == 4)) and not resume_blocked:
+        raise RuntimeError('Paid repair requires the existing billing preflight before dispatch.')
     output_csv = Path(output_csv)
     folder = Path(str(output_csv) + '.concurrent')
     folder.mkdir(parents=True, exist_ok=True)
@@ -659,7 +659,15 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
             from radle_journal_recovery import recover
             queue_options['journal_recovery'] = lambda journal, manifest: recover(
                 queue, journal, manifest, output_csv, folder / 'checkpoint.json')
-        result = queue.run(jobs, call, folder / 'queue', **queue_options)
+        if retry_authorization is not None:
+            if repair_once:
+                raise ValueError('Choose explicit retry policy or legacy repair, not both')
+            from radle_retry_policy import validate
+            validate(retry_authorization)
+            log(f"RETRY PASS {retry_authorization['id']}: up to {retry_authorization['attempts_per_pair']} spaced attempts per eligible pair; saved answers/refusals protected.")
+            result = queue.run(jobs, call, folder / 'queue', retry_authorization=retry_authorization, **queue_options)
+        else:
+            result = queue.run(jobs, call, folder / 'queue', **queue_options)
         if repair_once and not result['paused']:
             log(f'REPAIR ROUND {repair_round}: one authorized attempt per eligible pair; unselected held or exhausted states remain unchanged.')
             previous_calls = result['calls']

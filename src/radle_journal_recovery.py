@@ -45,7 +45,7 @@ def repair_grants(original, manifest, journal, depth=0):
                 if (type(state['attempts']) is not int
                         or not manifest.get('initial_attempts', {}).get(key, 0) <= state['attempts'] <= grant.get('repair_attempt', manifest['max_attempts'])
                         or state['status'] not in {'pending', 'success', 'flagged', 'terminal', 'failed', 'uncertain', 'retry', 'quota', 'blocked', 'rejected'}
-                        or any(state.get(field) != grant.get(field) for field in ('repair_attempt', 'repair_round'))):
+                        or any(state.get(field) != grant.get(field) for field in ('repair_attempt', 'repair_round', 'retry_authorizations', 'retry_policy'))):
                     raise ValueError('Recovery refused: invalid prior snapshot state')
                 results[key] = dict(attempt=state['attempts'], status=state['status'], value=state.get('value', {}))
         elif kind == 'result':
@@ -53,6 +53,16 @@ def repair_grants(original, manifest, journal, depth=0):
             previous = results.get(key)
             if previous is None or event['attempt'] >= previous['attempt']:
                 results[key] = event
+        elif kind == 'retry_pass_authorized':
+            from radle_retry_policy import apply
+            key = event['key']
+            if key not in manifest['jobs'] or key not in results:
+                raise ValueError('Recovery refused: missing prior retry evidence')
+            prior = results[key]
+            state = dict(status=prior['status'], attempts=prior['attempt'], value=prior.get('value', {}))
+            state.update(grants.get(key, {}))
+            apply(state, event)
+            grants[key] = {k: state[k] for k in ('repair_attempt', 'repair_round', 'retry_authorizations', 'retry_policy') if k in state}
         elif kind in {'repair_authorized', 'repair_round2_authorized', 'repair_round3_authorized', 'repair_round4_authorized'}:
             key, attempt = event['key'], event['attempt']
             prior = results.get(key)
@@ -138,7 +148,7 @@ def recover(queue, journal, manifest, output_csv, checkpoint_path, *, validate_o
                 latest[key] = dict(attempt=attempt, status=prior['status'],
                                    value=prior.get('value', {}), snapshot=True)
             continue
-        if kind in {'code_version', 'repair_authorized', 'repair_round2_authorized', 'repair_round3_authorized', 'repair_round4_authorized'}:
+        if kind in {'code_version', 'repair_authorized', 'repair_round2_authorized', 'repair_round3_authorized', 'repair_round4_authorized', 'retry_pass_authorized'}:
             continue
         if kind not in {'start', 'result'}:
             raise ValueError('Recovery refused: unsupported journal event')
