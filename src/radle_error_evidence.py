@@ -24,6 +24,17 @@ def evidence_record(key, state, max_output_tokens=32768):
     metadata = value.get('response_metadata') or {}
     diagnostic = value.get('diagnostic') or {}
     history = value.get('attempt_history') or {}
+    metadata_source = 'response_metadata'
+    receipt = value.get('response_receipt')
+    if receipt:
+        from radle_attempt_artifacts import read_verified, response_metadata
+        artifact = read_verified(receipt)
+        identity = artifact['identity']
+        if (identity.get('case') != case or identity.get('model') != model
+                or artifact['stage'] != 'response_received'):
+            raise ValueError('Response artifact identity mismatch')
+        metadata = response_metadata(artifact['payload'])
+        metadata_source = 'verified_response_artifact'
     response_evidence = bool(metadata)
     csv_evidence = bool(fields)
     def token(name, column):
@@ -40,7 +51,11 @@ def evidence_record(key, state, max_output_tokens=32768):
     observation = 'Failure cause not established from retained evidence.'
     classification = 'unknown'
     basis = 'insufficient_evidence'
-    if value.get('reason') == 'missing_readable_reasoning':
+    if value.get('execution_stage') in {'local_response_processing', 'local_validation_commit'}:
+        classification, observation, basis = 'local_processing_failure', 'A response was received, but local processing or persistence failed.', 'recorded_execution_stage'
+    elif value.get('execution_stage') == 'local_preparation':
+        classification, observation, basis = 'local_preparation_failure', 'Local preparation failed before entering the HTTP call.', 'recorded_execution_stage'
+    elif value.get('reason') == 'missing_readable_reasoning':
         classification, observation, basis = 'missing_readable_reasoning', 'Validation flag: missing readable reasoning.', 'response_validation'
     elif value.get('remote_outcome_unknown') or state['status'] == 'uncertain':
         classification, observation = 'remote_outcome_unknown', 'Remote outcome is unverified; this does not establish a model failure cause.'
@@ -70,12 +85,16 @@ def evidence_record(key, state, max_output_tokens=32768):
         cumulative_attempts=history.get('cumulative_attempt'),
         response_attempt=history.get('collection_attempt'),
         csv_response_timestamp=fields.get('Timestamp_UTC_' + model),
-        response_evidence_source='response_metadata' if response_evidence else 'csv_fields' if csv_evidence else 'unavailable',
+        response_evidence_source=metadata_source if response_evidence else 'csv_fields' if csv_evidence else 'unavailable',
         csv_may_describe_earlier_attempt=bool(http is not None and csv_evidence),
         http_status=http, provider_error_code=provider_code,
         error_type=code(value.get('error_type') or diagnostic.get('error_type')),
         response_id=code(metadata.get('response_id')), finish_reason=finish,
         native_finish_reason=code(metadata.get('native_finish_reason')),
+        response_status=code(metadata.get('response_status')), incomplete_reason=code(metadata.get('incomplete_reason')),
+        limit_source=code(value.get('limit_source')),
+        execution_stage=code(value.get('execution_stage')),
+        response_artifact_sha256=receipt.get('sha256') if receipt else None,
         completion_tokens=completion, reasoning_tokens=reasoning,
         prompt_tokens=token('prompt_tokens', 'Prompt_Tokens'),
         configured_output_cap=max_output_tokens, content_length=content_length,
@@ -87,3 +106,34 @@ def evidence_record(key, state, max_output_tokens=32768):
 def evidence_summary(key, state):
     record = evidence_record(key, state)
     return record['observation'] + f" Journal attempts: {record['journal_attempts']}."
+
+
+def retry_review(key, state, max_output_tokens=32768):
+    """Review suggestions never authorize a request or change benchmark settings."""
+    record = evidence_record(key, state, max_output_tokens)
+    classification = record['classification']
+    action = 'inspect_retained_evidence'
+    if classification == 'local_processing_failure':
+        action = 'reprocess_archived_response_without_inference'
+    elif classification == 'local_preparation_failure':
+        action = 'fix_local_preparation_before_authorizing_request'
+    elif classification == 'provider_policy_rejection':
+        action = 'retain_refusal_no_automatic_retry'
+    elif classification == 'image_input_error':
+        action = 'verify_original_image_and_transport'
+    elif classification == 'remote_outcome_unknown':
+        action = 'reconcile_remote_receipt_before_reissue'
+    elif record['http_status'] == 429:
+        action = 'cooldown_then_review_one_bounded_retry'
+    elif record['http_status'] == 402:
+        action = 'resolve_recorded_limit_source_before_retry'
+    elif classification == 'empty_final_answer':
+        action = ('retain_output_limit_failure_no_identical_retry'
+                  if record['completion_tokens'] is not None and record['completion_tokens'] >= max_output_tokens
+                  else 'inspect_original_envelope_and_extraction')
+    return dict(case=record['case'], model=record['model'], status=state['status'],
+                journal_attempts=record['journal_attempts'],
+                authorized_attempt_limit=record['authorized_attempt_limit'],
+                classification=classification, review_action=action,
+                new_request_authorized=False, reasoning_settings_changed=False,
+                output_limit_changed=False)

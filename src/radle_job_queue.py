@@ -93,12 +93,39 @@ def writer_lock(folder):
 
 
 def append(path, event):
+    if (event.get('type') == 'result' and event.get('value', {}).get('request_identity')
+            and 'response_receipt' in event['value']):
+        from radle_attempt_artifacts import persist
+        value = event['value']
+        receipt = persist(path.parent.parent / 'attempt_artifacts',
+                          value['request_identity'], 'journal_result', value)
+        event = dict(event, value_reference={'file': Path(receipt['path']).name,
+                                            'sha256': receipt['sha256']})
+        del event['value']
     # Encode before opening, so serialization failures do not damage the log.
     data = (encode(event) + "\n").encode("utf-8")
     with path.open("ab") as handle:
         handle.write(data)
         handle.flush()
         os.fsync(handle.fileno())
+
+
+def resolve_event(event, journal):
+    """Read compact results only from verified, private immutable run artifacts."""
+    if 'value_reference' not in event:
+        return event
+    from radle_attempt_artifacts import read_verified
+    ref = event['value_reference']
+    name = ref['file']
+    if event.get('type') != 'result' or 'value' in event or Path(name).name != name:
+        raise ValueError('Invalid immutable result reference')
+    artifact = read_verified({'path': str(Path(journal).parent.parent / 'attempt_artifacts' / name),
+                              'sha256': ref['sha256']})
+    ident = artifact['identity']
+    if (artifact['stage'] != 'journal_result' or encode([ident['case'], ident['model']]) != event['key']
+            or ident['journal_attempt'] != event['attempt']):
+        raise ValueError('Immutable result identity mismatch')
+    return dict(event, value=artifact['payload'])
 
 
 def identity(manifest):
@@ -120,7 +147,7 @@ def replay(path, manifest):
     data = path.read_bytes()
     if not data.endswith(b"\n"):
         raise ValueError("Incomplete journal tail; preserve and review before recovery")
-    records = [json.loads(line) for line in data.splitlines()]
+    records = [resolve_event(json.loads(line), path) for line in data.splitlines()]
     if not records or identity(records[0]) != identity(manifest):
         raise ValueError("Run identity changed; refuse to reuse journal")
     for index, event in enumerate(records[1:], 1):

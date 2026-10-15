@@ -499,21 +499,45 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
 
         def call(job, attempt):
             model = model_by_name[job.model]
-            content = rb.build_content_array(job.case, image_index, prompt=prompt)
-            params = rb.build_api_params(model, content, max_output_tokens, universal_temperature)
+            from radle_attempt_artifacts import new_identity, persist
+            artifacts = folder / 'attempt_artifacts'
+            try:
+                content = rb.build_content_array(job.case, image_index, prompt=prompt)
+                params = rb.build_api_params(model, content, max_output_tokens, universal_temperature)
+                identity = new_identity(job.case, job.model, attempt, params)
+                prepared = persist(artifacts, identity, 'prepared', {'api_surface': model.get('api_surface', 'chat_completions')})
+                dispatch = persist(artifacts, identity, 'dispatch_entered', {'prepared': prepared})
+            except Exception as exc:
+                return queue.Outcome('blocked', {'error_type': type(exc).__name__,
+                    'execution_stage': 'local_preparation', 'request_sent': False,
+                    'remote_outcome_unknown': False})
             previous = previous_attempts.get(json.dumps([job.case, job.model], separators=(',', ':')), 0)
             new_attempt = attempt - initial_attempts.get(job.key, 0)
             attempt_history = {'prior_attempts': previous, 'new_attempt': new_attempt, 'collection_attempt': attempt, 'cumulative_attempt': previous + new_attempt, 'is_replacement_retry': previous > 0, 'max_output_tokens': max_output_tokens}
             t0 = time.time()
             try:
                 if model.get('api_surface') == 'responses':
-                    response = rb.call_openrouter_responses(single_client, params, model)
+                    response = rb.call_openrouter_responses(single_client, params,
+                        dict(model, response_archive_dir=str(artifacts / 'responses')))
                 else:
                     response = single_client.chat.completions.create(**params)
             except Exception as exc:
                 funds = None
+                if getattr(exc, 'radle_response_receipt', None):
+                    from radle_attempt_artifacts import read_verified
+                    original = read_verified(exc.radle_response_receipt)
+                    received = persist(artifacts, identity, 'response_received', original['payload'])
+                    return queue.Outcome('blocked', {'error_type': type(exc).__name__,
+                        'execution_stage': 'local_response_processing', 'response_received': True,
+                        'remote_outcome_unknown': False, 'response_receipt': received,
+                        'request_identity': identity, 'dispatch_receipt': dispatch,
+                        'attempt_history': attempt_history})
                 status = getattr(exc, 'status_code', None)
                 message = str(exc).lower()
+                body = getattr(exc, 'body', None)
+                typed_error = body.get('error', body) if isinstance(body, dict) else {}
+                typed_metadata = typed_error.get('metadata') or {} if isinstance(typed_error, dict) else {}
+                limit_source = typed_metadata.get('limit_source') if isinstance(typed_metadata, dict) else None
                 case_failure = rb.case_rejection_diagnostic(getattr(exc, 'body', None))
                 if case_failure and status not in {401, 402}:
                     exc.radle_diagnostic = case_failure
@@ -521,6 +545,11 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                     kind = 'rejected'
                 elif (getattr(exc, 'radle_diagnostic', {}) or {}).get('category') == 'output_limit':
                     kind = 'retry'
+                elif status == 402 and limit_source == 'openrouter_in_flight_budget':
+                    kind = 'retry'
+                elif status == 402 and limit_source in {'openrouter_key_limit', 'openrouter_credits'}:
+                    funds = check_openrouter_funds(single_client)
+                    kind = 'quota'
                 elif status == 402 or (status == 403 and any(x in message for x in ('limit exceeded', 'quota', 'balance', 'budget'))):
                     funds = check_openrouter_funds(single_client)
                     kind = 'retry' if funds['status'] == 'available' else 'quota'
@@ -540,16 +569,46 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 delay = min(60, 2 ** min(attempt, 6))
                 if funds is not None and kind == 'retry':
                     delay = 30
-                if status == 429:
+                if status in {429, 503} or (status == 402 and limit_source == 'openrouter_in_flight_budget'):
                     headers = getattr(getattr(exc, 'response', None), 'headers', {}) or {}
                     delay = retry_delay(headers.get('retry-after'), attempt)
-                return queue.Outcome(kind, {'http_status': status, 'error_type': type(exc).__name__, 'diagnostic': diagnostic(exc), 'attempt_history': attempt_history, 'credit_check': funds},
+                headers = getattr(getattr(exc, 'response', None), 'headers', {}) or {}
+                body = getattr(exc, 'body', None)
+                error = body.get('error', body) if isinstance(body, dict) else {}
+                typed_metadata = error.get('metadata') or {} if isinstance(error, dict) else {}
+                from radle_error_evidence import code
+                error_evidence = {'http_status': status, 'error_type': type(exc).__name__,
+                    'provider_error_code': code(error.get('code')) if isinstance(error, dict) else None,
+                    'limit_source': code(typed_metadata.get('limit_source')) if isinstance(typed_metadata, dict) else None,
+                    'retry_after': str(headers.get('retry-after'))[:128] if headers.get('retry-after') is not None else None}
+                try:
+                    error_receipt = persist(artifacts, identity, 'request_error', error_evidence)
+                except Exception:
+                    error_receipt = None
+                return queue.Outcome(kind, {'http_status': status, 'error_type': type(exc).__name__, 'diagnostic': diagnostic(exc), 'attempt_history': attempt_history, 'credit_check': funds,
+                    'execution_stage': 'request_error', 'request_identity': identity, 'dispatch_receipt': dispatch,
+                    'error_receipt': error_receipt, 'limit_source': error_evidence['limit_source'],
+                    'retry_after_header': error_evidence['retry_after'],
+                    'provider_error_code': error_evidence['provider_error_code']},
                                      retry_after=delay if kind == 'retry' else 0)
-            fields = rb.extract_result(response, round(time.time() - t0, 1), params, False, model)
-            info = rb.classify_cell_for_audit(pd.Series(fields), job.model, attempts=0,
-                max_output_tokens=max_output_tokens,
-                require_token_usage=rb.requires_positive_token_usage(model),
-                require_readable_reasoning=model.get('require_readable_reasoning', False))
+            response_receipt = None
+            try:
+                response_receipt = persist(artifacts, identity, 'response_received',
+                    getattr(response, '_radle_original_response', response),
+                    sensitive_values=(getattr(single_client, 'api_key', None),))
+                from radle_attempt_artifacts import jsonable, response_metadata as observe_response
+                response_metadata = observe_response(jsonable(getattr(response, '_radle_original_response', response)))
+                fields = rb.extract_result(response, round(time.time() - t0, 1), params, False, model)
+                info = rb.classify_cell_for_audit(pd.Series(fields), job.model, attempts=0,
+                    max_output_tokens=max_output_tokens,
+                    require_token_usage=rb.requires_positive_token_usage(model),
+                    require_readable_reasoning=model.get('require_readable_reasoning', False))
+            except Exception as exc:
+                return queue.Outcome('blocked', {'error_type': type(exc).__name__,
+                    'execution_stage': 'local_response_processing', 'response_received': True,
+                    'remote_outcome_unknown': False, 'response_receipt': response_receipt,
+                    'request_identity': identity, 'dispatch_receipt': dispatch,
+                    'attempt_history': attempt_history})
             if info['bucket'] == 'accepted':
                 kind = 'success'
             elif not info.get('needs_api_repair'):
@@ -558,19 +617,25 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 kind = 'blocked'
             else:
                 kind = 'retry'
-            choice = response.choices[0] if getattr(response, 'choices', None) else None
-            response_metadata = {'response_id': getattr(response, 'id', None), 'finish_reason': getattr(choice, 'finish_reason', None), 'native_finish_reason': getattr(choice, 'native_finish_reason', None)}
-            message = getattr(choice, 'message', None)
-            content = getattr(message, 'content', None)
-            usage = getattr(response, 'usage', None)
-            response_metadata.update(content_type=type(content).__name__,
-                content_length=len(content) if isinstance(content, str) else None,
-                reasoning_length=len(str(getattr(message, 'reasoning', None) or '')),
-                refusal_present=bool(getattr(message, 'refusal', None)),
-                completion_tokens=getattr(usage, 'completion_tokens', None),
-                prompt_tokens=getattr(usage, 'prompt_tokens', None))
-            response_metadata['reasoning_tokens'] = fields.get('Reasoning_Tokens_' + job.model)
-            return queue.Outcome(kind, {'fields': rb.make_json_safe(fields), 'reason': info['reason'], 'response_metadata': response_metadata, 'attempt_history': attempt_history},
+            from radle_error_evidence import number
+            if (kind == 'retry' and response_metadata.get('content_length') == 0
+                    and response_metadata.get('finish_reason') == 'length'
+                    and (number(response_metadata.get('completion_tokens')) or 0) >= max_output_tokens):
+                # An identical immediate retry cannot repair a known budget stop.
+                kind = 'terminal'
+                info = dict(info, reason='output_cap_reached_without_final_answer')
+            try:
+                persist(artifacts, identity, 'validated', {'classification': kind,
+                    'reason': info['reason'], 'response_receipt': response_receipt})
+            except Exception as exc:
+                return queue.Outcome('blocked', {'error_type': type(exc).__name__,
+                    'execution_stage': 'local_validation_commit', 'response_received': True,
+                    'remote_outcome_unknown': False, 'response_receipt': response_receipt,
+                    'request_identity': identity, 'dispatch_receipt': dispatch,
+                    'attempt_history': attempt_history})
+            return queue.Outcome(kind, {'fields': rb.make_json_safe(fields), 'reason': info['reason'], 'response_metadata': response_metadata, 'attempt_history': attempt_history,
+                'execution_stage': 'validated', 'response_received': True,
+                'request_identity': identity, 'dispatch_receipt': dispatch, 'response_receipt': response_receipt},
                                  retry_after=2 if kind == 'retry' else 0)
 
         print(f'Concurrent collection: {len(jobs)} journal jobs, {concurrency} slots; ordinary limit {max_attempts} attempts/job. Additional explicit repair grants are retained separately in the journal.', flush=True)

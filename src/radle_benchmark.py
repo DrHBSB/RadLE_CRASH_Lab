@@ -1662,7 +1662,12 @@ def normalize_openrouter_responses_response(response, model):
         model_extra=usage_data,
     )
     return SimpleNamespace(
-        choices=[SimpleNamespace(message=message)],
+        id=data.get('id'),
+        response_status=data.get('status'),
+        incomplete_details=data.get('incomplete_details'),
+        _radle_original_response=data,
+        choices=[SimpleNamespace(message=message, finish_reason=data.get('finish_reason'),
+                                 native_finish_reason=data.get('native_finish_reason'))],
         usage=usage,
         model=data.get("model") or "",
         model_extra={"provider": data.get("provider") or "UNKNOWN"},
@@ -1859,13 +1864,25 @@ def call_openrouter_responses(api_client, api_params, model):
                 response.close()
     else:
         data = response.model_dump(mode="json") if hasattr(response, "model_dump") else make_json_safe(response)
+    # Preserve the original envelope before enrichment or normalization can fail.
+    if archive_path:
+        from radle_attempt_artifacts import persist
+        raw_receipt = persist(archive_path.parent,
+            {'attempt_id': archive_path.stem, 'api_surface': 'responses'}, 'response_received', data,
+            sensitive_values=(getattr(api_client, 'api_key', None),))
     # The Responses body may omit provider identity. Generation metadata is
     # read-only and must correspond to this exact returned response ID.
-    enrich_openrouter_provider(data, api_client)
-    if archive_path:
-        with archive_path.with_suffix(".response.json").open("x", encoding="utf-8") as saved:
-            json.dump(data, saved, ensure_ascii=False)
-    return normalize_openrouter_responses_response(data, model)
+    try:
+        enrich_openrouter_provider(data, api_client)
+        if archive_path:
+            with archive_path.with_suffix(".response.json").open("x", encoding="utf-8") as saved:
+                json.dump(data, saved, ensure_ascii=False)
+        return normalize_openrouter_responses_response(data, model)
+    except Exception as exc:
+        if archive_path:
+            exc.radle_response_receipt = raw_receipt
+        raise
+
 
 
 def call_model(
@@ -2004,7 +2021,8 @@ def extract_result(response, latency, api_params, grok_fallback_used, model):
         provider_used = "Google"
     else:
         msg = response.choices[0].message
-        raw_answer = msg.content.strip() if getattr(msg, "content", None) else ""
+        from radle_attempt_artifacts import chat_final_text
+        raw_answer = chat_final_text(getattr(msg, 'content', None))
 
         raw_reasoning_text = ""
         raw_reasoning = getattr(msg, "reasoning", None)
@@ -3578,9 +3596,13 @@ def audit_saved_collection(output_csv, models, expected_cases, max_output_tokens
         raise RuntimeError('Audit journal/checkpoint disagreement')
     unresolved = [dict(Master_Case_ID=json.loads(k)[0], model=json.loads(k)[1], status=s['status'], attempts=s['attempts'])
                   for k, s in states.items() if s['status'] not in {'success', 'flagged'}]
-    from radle_error_evidence import evidence_record
+    from radle_error_evidence import evidence_record, retry_review
     inventory = [evidence_record(key, state, max_output_tokens)
                  for key, state in states.items() if state['status'] not in {'success', 'flagged'}]
+    from radle_attempt_ledger import read_ledger
+    attempt_ledger = read_ledger(journal, manifest)
+    retry_review_table = [retry_review(key, state, max_output_tokens)
+                          for key, state in states.items() if state['status'] not in {'success', 'flagged'}]
     audit = audit_benchmark_output(source, models=models, expected_case_ids=range(1, expected_cases + 1), max_output_tokens=max_output_tokens)
     frame = pd.read_csv(source, dtype={'Master_Case_ID': str})
     if hashlib.sha256(source.read_bytes()).hexdigest() != before:
@@ -3593,6 +3615,8 @@ def audit_saved_collection(output_csv, models, expected_cases, max_output_tokens
                 final_source_csv=str(source), final_source_label='raw_audited_unpromoted',
                 source_sha256=before, inference_calls=0, unresolved_pairs=unresolved,
                 evidence_source=evidence_source,
+                attempt_ledger=pd.DataFrame(attempt_ledger),
+                retry_review=pd.DataFrame(retry_review_table),
                 failure_inventory=pd.DataFrame(inventory),
                 gate_receipt=pd.DataFrame(), final_manifest=None, public_release_files=None,
                 scorer_result=None, failed_pairs=[p for p in unresolved if p['status'] == 'failed'],

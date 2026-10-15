@@ -28,6 +28,8 @@ def repair_grants(original, manifest, journal, depth=0):
             event = json.loads(line)
         except (ValueError, UnicodeDecodeError):
             continue
+        from radle_job_queue import resolve_event
+        event = resolve_event(event, journal)
         kind = event.get('type')
         if kind == 'checkpoint_recovery':
             if number != 2:
@@ -113,6 +115,7 @@ def recover(queue, journal, manifest, output_csv, checkpoint_path, *, validate_o
         except (ValueError, UnicodeDecodeError):
             invalid.append(number)
             continue
+        event = queue.resolve_event(event, journal)
         kind = event.get('type')
         if kind == 'checkpoint_recovery':
             # A recovered log can itself suffer a later interrupted Drive write.
