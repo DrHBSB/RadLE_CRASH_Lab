@@ -204,7 +204,7 @@ class LiveProgress:
                     if status == 'flagged':
                         detail += f' · flag: {reason}'
                 else:
-                    action = {'retry': f'retry queued; {state["attempts"]}/{self.max_attempts} attempts used',
+                    action = {'retry': f'retry queued; {state["attempts"]}/{state.get("repair_attempt", self.max_attempts)} attempts used',
                               'uncertain': 'held for review; other jobs continue',
                               'quota': 'credit issue; dispatch paused',
                               'blocked': 'access/request issue; dispatch paused',
@@ -415,7 +415,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
         starts = {}
         live = LiveProgress(models, cases, jobs, jobs_by_case, concurrency, max_attempts, folder / 'checkpoint.json')
         live.active_models = active_model_names
-        live.repair_enabled = repair_once
+        live.repair_enabled = repair_once or retry_authorization is not None
         def log(message):
             print(f'[{LiveProgress.stamp()} IST] ' + message, flush=True)
 
@@ -431,7 +431,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 progress.last_console = time.monotonic()
             if event == 'started':
                 case, name = json.loads(key)
-                log(f"RUNNING  case {case} | {name.replace('_', ' ')} | attempt {states[key]['attempts']}/{max_attempts}")
+                log(f"RUNNING  case {case} | {name.replace('_', ' ')} | attempt {states[key]['attempts']}/{states[key].get('repair_attempt', max_attempts)}")
             elif event == 'saved':
                 state = states[key]
                 case, name = json.loads(key)
@@ -455,7 +455,7 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 elif state['status'] == 'uncertain':
                     log('HELD for targeted review; other jobs continue. This request will not be blindly resent.')
             if event in {'resumed', 'saved', 'heartbeat', 'stopped'}:
-                log(progress_summary(states, active, jobs_by_case, len(cases) * len(models), len(cases), repair_enabled=repair_once, max_attempts=max_attempts))
+                log(progress_summary(states, active, jobs_by_case, len(cases) * len(models), len(cases), repair_enabled=repair_once or retry_authorization is not None, max_attempts=max_attempts))
             if event == 'heartbeat' and active:
                 log('Still waiting: ' + '; '.join(
                     f"case {json.loads(k)[0]} / {json.loads(k)[1].replace('_', ' ')} ({time.monotonic() - starts.get(k, time.monotonic()):.0f}s)"
