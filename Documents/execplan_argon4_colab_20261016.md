@@ -8,7 +8,7 @@ Expand the current October16-model collection to17 through the existing four-cel
 
 ## Current State
 
-2026-10-16 root: user resolved the scope explicitly: add17th to16 now, then combine with previous main after promotion. The earlier isolated notebook186fabb is superseded and deleted in the current working tree. Corrected Morning notebook and src/radle_argon4.py are prepared on codex/radle-journal-recovery, parent186fabbea0e213261849c4c6dc2c016e4d32c88a. Seven focused correction tests passed before the latest explicit audit-order labels; rerun those, then stage only scoped files, commit/push and tag codex/radle-17-argon4-20261016. No live Argon inference started. Unrelated dirty plans/logs remain untouched.
+SUPERSEDED 2026-10-16 root: the user requires reusable roster-driven admissions, not a model-specific module. Active implementation and handoff are now Documents/execplan_collection_admission_20261016.md. Existing experimental data, runlabel and retryauthority stay preserved; only code/config organization changes. This document records the prior correction, not current execution instructions.
 
 ## Locked Facts
 
@@ -31,7 +31,7 @@ Expand the current October16-model collection to17 through the existing four-cel
 - [x] (2026-10-16 root) Read Octoberreadiness/Morning handoff, collection recovery/retry, and incremental-admission ExecPlans. Trace Mistral315be12cohort extension and historicalwide source headers.
 - [x] (2026-10-16 root) Correct notebook targeting and preserve16-modelwide source by validated admission; remove standalone notebook.
 - [x] (2026-10-16 root) Seven correction tests prove metadata drift holds,4-attempt replay bound, reasoning ladder, oldfield/evidence preservation, new-arm-onlydispatch, canonicalworkflowcombinedstatus and4-cellcompilation.
-- [ ] (2026-10-16 root) Rerun focused tests after explicit pre-repair audit labels; stage scoped changes, commit/push and immutable tag; verify remoteSHA and hand off canonicalColabURL.
+- [x] (2026-10-16 root) Rerun focused tests after explicit pre-repair audit labels; stage scoped changes, commit/push and immutable tag; verify remoteSHA and hand off canonicalColabURL.
 
 ## Surprises & Discoveries
 
@@ -62,3 +62,5 @@ From existing collection worktree run python -X utf8 -m unittest discover -s tes
 ## Idempotence and Recovery
 
 ParentCSV/journal/checkpoint/contract are hash-pinned and must stay unchanged onresume. Freshadmission fails if locks, incompatible sourcecontract, non200casecohort, incompleteinitialization or already-started supersededArgon-onlyoutput exists. Never silently discard suchdata. NewCSVbaseline preserves all oldcolumns; finalcombinedaudit compares every inheritedfield to frozenparent. SameRunlabel/policyID resumes onlyunusedArgonauthority. No lockreclamation or journalreset.
+
+Publication receipt2026-10-16root: canonicalColab https://colab.research.google.com/github/DrHBSB/RadLE_CRASH_Lab/blob/89d175fe58354b3dd5c2d4dfdbbe5af63d57133a/notebooks/RadLE_v1_5_Morning.ipynb . Status-only localplanupdate follows the immutablecode release.
