@@ -98,7 +98,9 @@ def preflight(config, models, key, request=request_json):
         if (endpoint.get('status') != 0
                 or int(endpoint.get('max_completion_tokens') or 0) < config['output_cap']
                 or not required <= set(endpoint.get('supported_parameters', []))):
-            raise RuntimeError(f'{model_id}: endpoint status, output cap or parameters changed')
+            raise RuntimeError(f"{model_id}: endpoint status={endpoint.get('status')}; "
+                               f"output cap={endpoint.get('max_completion_tokens')} required={config['output_cap']}; "
+                               f"missing parameters={sorted(required - set(endpoint.get('supported_parameters', [])))}")
         listed = any(row.get('model_id') == model_id and row.get('tag') == endpoint['tag']
                      and row.get('name') == endpoint['name'] for row in zdr)
         if routing.get('zdr') and not listed:
@@ -121,7 +123,6 @@ def prepare(rb, dataset_root, config, request=request_json, key=None):
     source_bytes = source_path.read_bytes()
     source = json.loads(source_bytes)
     new_models = added_models(config, source['models'])
-    routes = preflight(config, new_models, key, request)
     paths = rb.build_run_paths(dataset_root, run_label=config['run_label'], create_dirs=False)
     image_index = rb.build_image_index(paths['master_images_folder'])
     expected = {str(i) for i in range(1, config['expected_cases'] + 1)}
@@ -149,6 +150,7 @@ def prepare(rb, dataset_root, config, request=request_json, key=None):
         source_files['admission'] = parent_receipt
     def hashes():
         return {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in source_files.items()}
+    routes = None
     if target.exists():
         if json.loads(target.read_text()) != contract or not receipt_path.exists():
             raise RuntimeError('Existing expanded cohort contract/receipt differs; do not reset history')
@@ -158,6 +160,7 @@ def prepare(rb, dataset_root, config, request=request_json, key=None):
     else:
         if output.exists() or Path(str(output) + '.concurrent').exists() or receipt_path.exists():
             raise RuntimeError('Incomplete cohort admission; review before reinitializing')
+        routes = preflight(config, new_models, key, request)
         before = hashes()
         # This validates the CSV-bound journal/checkpoint without changing parent bytes.
         audit = rb.audit_saved_collection(source_csv, source['models'], config['expected_cases'], config['output_cap'])
@@ -189,10 +192,32 @@ def prepare(rb, dataset_root, config, request=request_json, key=None):
         receipt_path.write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
         with target.open('x', encoding='utf-8') as stream:
             stream.write(json.dumps(contract, indent=2) + '\n')
+    complete = saved_collection_complete(rb, paths, new_models, config)
+    if routes is None:
+        routes = ([dict(mode='saved_evidence_only', inference_calls=0)] if complete
+                  else preflight(config, new_models, key, request))
+    receipt = dict(receipt, saved_collection_complete=complete)
     from datetime import datetime, timezone
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     (target.parent / ('route_preflight_' + stamp + '.json')).write_text(json.dumps(routes, indent=2) + '\n')
     return paths, cohort, new_models, receipt
+
+
+def saved_collection_complete(rb, paths, models, config):
+    """Bypass live inference metadata only after a CSV-bound, read-only completion audit."""
+    output = Path(paths['raw_results_csv'])
+    checkpoint = Path(str(output) + '.concurrent') / 'checkpoint.json'
+    if not output.exists() or not checkpoint.exists():
+        return False
+    result = rb.audit_saved_collection(output, models, config['expected_cases'], config['output_cap'])
+    audit = result.get('final_audit')
+    if audit is None or result.get('unresolved_pairs'):
+        return False
+    flags = audit.get('analysis_flags', [])
+    return (rb.audit_repair_target_count(audit) == 0
+            and rb.audit_accepted_count(audit) + len(flags) == config['expected_cases'] * len(models)
+            and all(audit.get(k) is None or len(audit[k]) == 0
+                    for k in ('no_paid_cleanup', 'provider_content_blocks')))
 
 
 def combined_audit(rb, paths, cohort, receipt, config):

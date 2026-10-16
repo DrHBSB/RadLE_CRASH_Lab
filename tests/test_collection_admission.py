@@ -55,6 +55,26 @@ def request_for(data):
 
 
 class AdmissionTests(unittest.TestCase):
+    def test_saved_completion_requires_validated_evidence_and_keeps_flags(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / 'results.csv'
+            output.write_text('saved')
+            folder = Path(str(output) + '.concurrent')
+            folder.mkdir()
+            (folder / 'checkpoint.json').write_text('{}')
+            cfg = config([model('past')], [model('new')])
+            audit = dict(analysis_flags=['missing_readable_reasoning'])
+            result = dict(final_audit=audit, unresolved_pairs=[])
+            rb = SimpleNamespace(audit_saved_collection=lambda *a: result,
+                audit_repair_target_count=lambda a: 0, audit_accepted_count=lambda a: 2)
+            self.assertTrue(admission.saved_collection_complete(rb, {'raw_results_csv':output}, [model('new')], cfg))
+            result['unresolved_pairs'] = [{'status':'uncertain'}]
+            self.assertFalse(admission.saved_collection_complete(rb, {'raw_results_csv':output}, [model('new')], cfg))
+            result['unresolved_pairs'] = []
+            rb.audit_saved_collection = lambda *a: (_ for _ in ()).throw(RuntimeError('CSV hash mismatch'))
+            with self.assertRaisesRegex(RuntimeError, 'CSV hash mismatch'):
+                admission.saved_collection_complete(rb, {'raw_results_csv':output}, [model('new')], cfg)
+
     def test_current_roster_addition_is_configuration_only(self):
         import radle_openrouter_16
         cfg = admission.load_config(ROOT / 'configs/radle_collection.json')
