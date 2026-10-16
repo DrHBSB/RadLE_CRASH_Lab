@@ -195,7 +195,7 @@ class AdmissionTests(unittest.TestCase):
         import pandas as pd
         source = ''.join(json.loads((ROOT/'notebooks/RadLE_v1_5_Morning.ipynb').read_text(encoding='utf-8'))['cells'][3]['source'])
         calls = []
-        audit = {name: pd.DataFrame() for name in ('dataset_integrity', 'bucket_summary', 'status_summary')}
+        audit = {name: pd.DataFrame() for name in ('dataset_integrity', 'bucket_summary', 'status_summary', 'analysis_flags')}
         def workflow(**options):
             calls.append(options)
             return dict(final_df=pd.DataFrame({'Master_Case_ID':['1']}), final_source_csv='combined.csv',

@@ -3785,15 +3785,33 @@ def run_autonomous_openrouter_workflow(
         retry_authorization=retry_authorization,
         allow_partial_result=True,
     )
-    if full_df.attrs.get("unresolved_pairs") or full_df.attrs.get("failed_pairs"):
+    collection_audit = audit_benchmark_output(run_paths["raw_results_csv"], models=models,
+        expected_case_ids=range(1, expected_cases + 1), max_output_tokens=max_output_tokens)
+    analysis_flags = collection_audit.get("analysis_flags", pd.DataFrame())
+    # Collection completion and a clean publication gate are different outcomes.
+    # Saved flagged responses are not repair targets and must not trigger new paid calls.
+    completed_with_flags = (
+        not promote_private and not export_public
+        and analysis_flags is not None and len(analysis_flags) > 0
+        and audit_repair_target_count(collection_audit) == 0
+        and audit_accepted_count(collection_audit) + len(analysis_flags) == expected_cases * len(model_names)
+        and all(collection_audit.get(key) is None or len(collection_audit[key]) == 0
+                for key in ("no_paid_cleanup", "provider_content_blocks")))
+    if full_df.attrs.get("unresolved_pairs") or full_df.attrs.get("failed_pairs") or completed_with_flags:
         failed_pairs = full_df.attrs.get("failed_pairs", [])
-        print(f"Collection finished with {len(failed_pairs)} failed pairs; no clean-run gate or promotion was performed.")
+        if completed_with_flags and not full_df.attrs.get("unresolved_pairs") and not failed_pairs:
+            collection_status = "completed_with_flags"
+            source_label = "raw_with_flags"
+            print(f"Collection saved all responses with {len(analysis_flags)} analysis flags; no clean-run gate or promotion was performed.")
+        else:
+            collection_status = "completed_with_unresolved" if any(p['status'] != 'failed' for p in full_df.attrs.get('unresolved_pairs', [])) else "completed_with_failures"
+            source_label = "raw_with_failures"
+            print(f"Collection finished with {len(failed_pairs)} failed pairs; no clean-run gate or promotion was performed.")
         return {
-            "status": "completed_with_unresolved" if any(p['status'] != 'failed' for p in full_df.attrs.get('unresolved_pairs', [])) else "completed_with_failures", "smoke": smoke_result, "raw_df": full_df,
+            "status": collection_status, "smoke": smoke_result, "raw_df": full_df,
             "final_df": full_df, "final_source_csv": run_paths["raw_results_csv"],
-            "final_source_label": "raw_with_failures",
-            "final_audit": audit_benchmark_output(run_paths["raw_results_csv"], models=models,
-                expected_case_ids=range(1, expected_cases + 1), max_output_tokens=max_output_tokens),
+            "final_source_label": source_label,
+            "final_audit": collection_audit, "analysis_flags": analysis_flags,
             "gate_receipt": pd.DataFrame(), "final_manifest": None, "scorer_result": None,
             "public_release_files": None, "failed_pairs": failed_pairs,
             "failed_pairs_path": full_df.attrs.get("failed_pairs_path"),
@@ -3821,8 +3839,7 @@ def run_autonomous_openrouter_workflow(
     ) if concurrency is None else {
         "source_csv": run_paths["raw_results_csv"], "source_label": "raw",
         "repair_passes": 0,
-        "audit": audit_benchmark_output(run_paths["raw_results_csv"], models=models,
-            expected_case_ids=range(1, expected_cases + 1), max_output_tokens=max_output_tokens),
+        "audit": collection_audit,
     }
     assert_clean_benchmark_audit(full_cascade["audit"], expected_cases * len(model_names), "full", allow_missing_reasoning=allow_missing_reasoning)
     final_source_csv = full_cascade["source_csv"]

@@ -8,7 +8,7 @@ Keep one Morning notebook and one general Python admission workflow. Add future 
 
 ## Current State
 
-2026-10-16 root: generic implementation prepared in existing codex/radle-journal-recovery worktree, parent89d175fe58354b3dd5c2d4dfdbbe5af63d57133a. New src/radle_collection_admission.py and configs/radle_collection.json replace src/radle_argon4.py. Canonical four-cell notebooks/RadLE_v1_5_Morning.ipynb is model-neutral. Seven tests pass, including successive arbitrary roster additions and inherited failure lineage. Live metadata-only check passed for configured17entries/oneaddition, high->medium->low reasoning and ZDR. Twelve existing retry regressions also pass (19targetedtests total). Next commit/push only scoped files and tagcodex/radle-roster-admission-20261016. No paid inference or browser launch.
+2026-10-16root: user output confirms200/200newresponses saved,oneanalysisflag,no repairtargets,active0,finalbackup0025at08:40:53IST. Workflow incorrectly raisesfullauditnotclean199/200before returningreport. Fix genericcollection completion to returncompleted_with_flags with audit/flagtable and no cleanreceipt, promotion or extra paidrequests. Strictpromotion gates remain unchanged. CorrectedimmutableMorningrelease pendingtests/publication; no live browser changes needed while preparing.
 
 ## Locked Facts
 
@@ -64,3 +64,16 @@ Extend models in configs/radle_collection.json without altering old entries. Rec
 ## Idempotence and Recovery
 
 ParentCSV/journal/checkpoint/contract/admissionreceipt are hash-pinned; refuse changed parents, active locks, duplicate name/settings, unexpectedimages or partialinitialization. Superseded incompatible outputs are a config-level guard and require evidence reconciliation. Same contract/policyID resumes only unused authority. Each finalaudit compares every inheritedfield against the frozenparent. Errors stop instead of resetting history or silently repeating calls.
+
+Publication receipt2026-10-16root: https://colab.research.google.com/github/DrHBSB/RadLE_CRASH_Lab/blob/478f33f9cc779f662c54b81a8f6924b17f36f85d/notebooks/RadLE_v1_5_Morning.ipynb . This localstatusupdate follows the immutablecode release.
+
+2026-10-16 root lockinvestigation: current478setup/import/configcompleted successfully; collector failed beforeacquiringwriter. ManageSessions had current478,old186,f7f3d33and89d175fsessions. Didnotterminate anyruntime orremove anylock. Old89session actualprogressconfirmed, notinferredfromsessionage/PID. Openingitslinkreattachedexistingexecution; no additionalrequestsinitiatedbyagent.
+
+2026-10-16root lock-resolution update: userexplicitlystopped89d175frun; oldruntime reattachedidle (Cell4Runbutton,noexecution), so issuedONEprotected478f33fCell4retryinexistingtab171257137. Lockreleasednormally;collectorentered,200journaljobs,billingpassed01:34:37IST. Stillrestoringhistory/executing44s;actualresumedrequestnotyetverified. Nocode/lockretirement/resetwasneeded. Preserve userstoppedstateofoldrelease;donotrestartoldcode.
+
+2026-10-16root correctionmirror: userseesCOMPLETE200/200thenRuntimeErroraccepted199/200remainingrepair0. Missedverification: completeflaggedcollector->workflow->combinedauditintegration; earlierpartial tests coveredrejectedoutcomes only. Addactualcollectorintegrationandzero-callresume test plusstrictpromotionrejection regression. Source results/flagremainunchanged; no maxeffortchange, extraattempts or automaticpromotion.
+
+
+## Flagged completion verification (2026-10-16)
+
+The workflow now returns completed_with_flags when every response is saved and the audit has analysis flags but no repair targets. Flags remain visible; promotion/export still use the unchanged strict clean gate. The canonical notebook displays analysis_flags. No request authority, model effort, or collection contract changed. Two focused workflow tests pass, including repeated resume with no additional calls and strict promotion rejection. Seven admission tests and eleven surgical collection tests pass. Initial test discovery accidentally included imported legacy IntegrationTests and reproduced four baseline failures/four errors; importing the fixture module instead isolated the intended two regression tests, both passing. All four notebook cells compile and git diff --check passes. Published release tag: codex/radle-flagged-completion-20261016. Live Colab acceptance remains to be verified; user-reported final backup is 0025 with 200/200 saved and one flag.
