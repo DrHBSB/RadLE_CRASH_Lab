@@ -552,5 +552,6 @@
         "low"
       ]
     }
-  }
+  },
+  "finalize_private": true
 }

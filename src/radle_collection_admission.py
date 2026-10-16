@@ -155,6 +155,8 @@ def prepare(rb, dataset_root, config, request=request_json, key=None, preflight_
     def hashes():
         return {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in source_files.items()}
     routes = None
+    if config.get('finalize_private') and not target.exists():
+        raise RuntimeError('Private finalization requires an existing admitted run; collection is disabled')
     if target.exists():
         if json.loads(target.read_text()) != contract or not receipt_path.exists():
             raise RuntimeError('Existing expanded cohort contract/receipt differs; do not reset history')
@@ -198,7 +200,7 @@ def prepare(rb, dataset_root, config, request=request_json, key=None, preflight_
             stream.write(json.dumps(contract, indent=2) + '\n')
     complete = saved_collection_complete(rb, paths, new_models, config)
     if routes is None:
-        routes = ([dict(mode='saved_evidence_only', inference_calls=0)] if complete
+        routes = ([dict(mode='saved_evidence_only', inference_calls=0)] if complete or config.get('finalize_private')
                   else live_preflight())
     receipt = dict(receipt, saved_collection_complete=complete)
     from datetime import datetime, timezone
