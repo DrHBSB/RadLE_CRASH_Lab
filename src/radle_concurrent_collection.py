@@ -331,6 +331,11 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
     full_image_hashes = {case: [digest(p) for p in image_index[case]] for case in cases}
     # SDK retries would otherwise multiply the persisted scheduler budget.
     single_client = client.with_options(max_retries=0, timeout=600)
+    direct_transport = getattr(single_client, 'transport_name', None) == 'google_gemini_direct'
+    def spending_check():
+        if direct_transport:
+            return single_client.spending_preflight(models, max_output_tokens)
+        return check_openrouter_funds(single_client)
     active_model_names = {m['name'] for m in models}
     with queue.writer_lock(folder):
         journal = folder / 'queue' / 'events.jsonl'
@@ -505,6 +510,8 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                 model, reasoning_decision = ceiling_policy.choose(model, job.case, attempt, max_output_tokens)
                 content = rb.build_content_array(job.case, image_index, prompt=prompt)
                 params = rb.build_api_params(model, content, max_output_tokens, universal_temperature)
+                if direct_transport:
+                    model, params = single_client.prepare_request(model, params)
                 identity = new_identity(job.case, job.model, attempt, params)
                 prepared = persist(artifacts, identity, 'prepared', {
                     'api_surface': model.get('api_surface', 'chat_completions'),
@@ -551,13 +558,17 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                     kind = 'rejected'
                 elif (getattr(exc, 'radle_diagnostic', {}) or {}).get('category') == 'output_limit':
                     kind = 'retry'
+                elif direct_transport and (getattr(exc, 'radle_diagnostic', {}) or {}).get('category') == 'quota':
+                    kind = 'quota'
+                elif direct_transport and status in {402, 403}:
+                    kind = 'quota' if status == 402 else 'blocked'
                 elif status == 402 and limit_source == 'openrouter_in_flight_budget':
                     kind = 'retry'
                 elif status == 402 and limit_source in {'openrouter_key_limit', 'openrouter_credits'}:
-                    funds = check_openrouter_funds(single_client)
+                    funds = spending_check()
                     kind = 'quota'
                 elif status == 402 or (status == 403 and any(x in message for x in ('limit exceeded', 'quota', 'balance', 'budget'))):
-                    funds = check_openrouter_funds(single_client)
+                    funds = spending_check()
                     kind = 'retry' if funds['status'] == 'available' else 'quota'
                 elif status == 403:
                     # An unexplained request refusal is not proof the whole account is broken.
@@ -604,8 +615,13 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                     sensitive_values=(getattr(single_client, 'api_key', None),))
                 from radle_attempt_artifacts import jsonable, response_metadata as observe_response
                 response_metadata = observe_response(jsonable(getattr(response, '_radle_original_response', response)))
+                if direct_transport and getattr(response, '_radle_remote_unverified', False):
+                    raise RuntimeError('Direct Gemini outcome unverified; original response preserved')
                 ceiling_policy.received(job.case, job.model, attempt, max_output_tokens, response_metadata)
                 fields = rb.extract_result(response, round(time.time() - t0, 1), params, False, model)
+                if direct_transport:
+                    fields['Transport_' + job.model] = single_client.transport_name
+                    fields['Actual_Provider_Model_' + job.model] = response.model
                 fields['Reasoning_Effort_Requested_' + job.model] = reasoning_decision['selected_effort'] or 'provider_default'
                 fields['Reasoning_Retry_Metadata_' + job.model] = queue.encode(reasoning_decision)
                 info = rb.classify_cell_for_audit(pd.Series(fields), job.model, attempts=0,
@@ -618,7 +634,10 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
                     'remote_outcome_unknown': False, 'response_receipt': response_receipt,
                     'request_identity': identity, 'dispatch_receipt': dispatch,
                     'attempt_history': attempt_history})
-            if info['bucket'] == 'accepted':
+            if direct_transport and getattr(response, '_radle_policy_rejected', False):
+                kind = 'rejected'
+                info = dict(info, reason='provider_policy_rejection')
+            elif info['bucket'] == 'accepted':
                 kind = 'success'
             elif not info.get('needs_api_repair'):
                 kind = 'flagged'
@@ -654,11 +673,11 @@ def collect(rb, *, client, image_folder, output_csv, models, test_limit=None,
         if paused_models:
             log('Paused models this run (saved history retained): ' + ', '.join(paused_models))
         if resume_blocked:
-            funds = check_openrouter_funds(single_client)
+            funds = spending_check()
             atomic_json(folder / 'resume_credit_check.json', funds)
             if funds['status'] != 'available':
                 raise RuntimeError('Resume paused: billing check is exhausted or unavailable; see resume_credit_check.json.')
-            log('RESUME: billing check passed; original attempt limits retained.')
+            log('RESUME: direct Gemini metadata authentication passed; balance unverified; OpenRouter disabled.' if direct_transport else 'RESUME: billing check passed; original attempt limits retained.')
         from radle_reasoning_ceiling import CeilingPolicy
         history = []
         if journal.exists():

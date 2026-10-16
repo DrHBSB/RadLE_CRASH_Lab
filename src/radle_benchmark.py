@@ -3792,7 +3792,8 @@ def run_autonomous_openrouter_workflow(
     # Saved flagged responses are not repair targets and must not trigger new paid calls.
     completed_with_flags = (
         not promote_private and not export_public
-        and analysis_flags is not None and len(analysis_flags) > 0
+        and analysis_flags is not None
+        and (len(analysis_flags) > 0 or getattr(client, 'transport_name', None) == 'google_gemini_direct')
         and audit_repair_target_count(collection_audit) == 0
         and audit_accepted_count(collection_audit) + len(analysis_flags) == expected_cases * len(model_names)
         and all(collection_audit.get(key) is None or len(collection_audit[key]) == 0
@@ -3800,8 +3801,8 @@ def run_autonomous_openrouter_workflow(
     if full_df.attrs.get("unresolved_pairs") or full_df.attrs.get("failed_pairs") or completed_with_flags:
         failed_pairs = full_df.attrs.get("failed_pairs", [])
         if completed_with_flags and not full_df.attrs.get("unresolved_pairs") and not failed_pairs:
-            collection_status = "completed_with_flags"
-            source_label = "raw_with_flags"
+            collection_status = "completed_with_flags" if len(analysis_flags) else "completed_unpromoted"
+            source_label = "raw_with_flags" if len(analysis_flags) else "raw_unpromoted"
             print(f"Collection saved all responses with {len(analysis_flags)} analysis flags; no clean-run gate or promotion was performed.")
         else:
             collection_status = "completed_with_unresolved" if any(p['status'] != 'failed' for p in full_df.attrs.get('unresolved_pairs', [])) else "completed_with_failures"

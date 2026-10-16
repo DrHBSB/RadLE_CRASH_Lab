@@ -110,9 +110,13 @@ def preflight(config, models, key, request=request_json):
     return receipts
 
 
-def prepare(rb, dataset_root, config, request=request_json, key=None):
+def prepare(rb, dataset_root, config, request=request_json, key=None, preflight_transport=None):
     """Validate the parent, derive new work and seed one combined experiment version."""
     import shutil
+    def live_preflight():
+        if preflight_transport is not None:
+            return preflight_transport.preflight(config, new_models)
+        return preflight(config, new_models, key, request)
     dataset_root = Path(dataset_root)
     for label in config.get('incompatible_runs', []):
         obsolete = dataset_root / 'Runs' / label / 'raw/results.csv'
@@ -160,7 +164,7 @@ def prepare(rb, dataset_root, config, request=request_json, key=None):
     else:
         if output.exists() or Path(str(output) + '.concurrent').exists() or receipt_path.exists():
             raise RuntimeError('Incomplete cohort admission; review before reinitializing')
-        routes = preflight(config, new_models, key, request)
+        routes = live_preflight()
         before = hashes()
         # This validates the CSV-bound journal/checkpoint without changing parent bytes.
         audit = rb.audit_saved_collection(source_csv, source['models'], config['expected_cases'], config['output_cap'])
@@ -195,7 +199,7 @@ def prepare(rb, dataset_root, config, request=request_json, key=None):
     complete = saved_collection_complete(rb, paths, new_models, config)
     if routes is None:
         routes = ([dict(mode='saved_evidence_only', inference_calls=0)] if complete
-                  else preflight(config, new_models, key, request))
+                  else live_preflight())
     receipt = dict(receipt, saved_collection_complete=complete)
     from datetime import datetime, timezone
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
